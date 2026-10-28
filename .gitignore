@@ -1,0 +1,37 @@
+# ===== 秘密与密钥(永不入库)=====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 内部教材(永不入库)=====
+local doc/
+
+# ===== 运行时产物 =====
+data/uploaded_docs/
+data/stores/
+*.sqlite3
+*.db
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# ===== 工具缓存 =====
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
