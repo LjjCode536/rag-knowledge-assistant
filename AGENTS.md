@@ -4,6 +4,17 @@
 
 后端 FastAPI + 自建领域层(schema / 服务分层 / 状态机),框架层使用 LangChain 成熟组件作零件库;模型服务统一走硅基流动(OpenAI 兼容)。开发遵循"评估驱动迭代":每次迭代产出可复现的前后指标对比。内部教材位于 `local doc/`(已被 gitignore,永不入库)。
 
+## Commands
+
+```bash
+uv sync                                        # 安装依赖(含 dev)
+uv run pytest                                  # 全量测试(不读 .env、不触网)
+uv run ruff check .                            # lint
+uv run python -m uvicorn app.asgi:app --reload # 本地启动
+```
+
+真实上游连通性检查需密钥且会计费:`uv run python scripts/check_upstream.py`。
+
 ## Agent skills
 
 ### Issue tracker

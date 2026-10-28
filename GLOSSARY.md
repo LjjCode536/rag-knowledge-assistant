@@ -83,6 +83,26 @@ _Avoid_: 测试集、题库、benchmark
 **指标基线**:
 某次迭代改动前的指标快照,所有改进必须对照基线用数据说话。
 
+### 工程化
+
+**响应信封**:
+所有 HTTP 响应的统一形状:`code / message / data / details / trace_id / timestamp`,成功与失败同形。
+_Avoid_: 返回包装、response wrapper
+
+**错误码**:
+对调用方稳定的字符串错误标识(如 `UPSTREAM_TIMEOUT`),与 HTTP 状态码一一映射;改名视为破坏契约。
+
+**trace_id**:
+一次请求在全链路的唯一标识,经 `X-Request-ID` 透传或生成,并同时出现在响应头、响应体与全部日志中。
+_Avoid_: request id(可与网关层 ID 混用)、消息 ID
+
+**统一 LLM 客户端**:
+chat / embed / rerank 三类上游调用的唯一入口,统一超时、重试、错误映射与用量 / 延迟日志;更换供应商只改配置。
+_Avoid_: 模型封装、LLM service
+
+**上游错误**:
+模型服务调用失败经统一客户端映射后的 AppError 子类(未配置 / 鉴权 / 限流 / 超时 / 不可用 / 响应异常)。
+
 ### 流程
 
 **离线入库链路**:
