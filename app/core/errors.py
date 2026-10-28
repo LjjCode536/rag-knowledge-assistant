@@ -27,6 +27,9 @@ class ErrorCode(StrEnum):
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
     UPSTREAM_BAD_RESPONSE = "UPSTREAM_BAD_RESPONSE"
 
+    UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
+    DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
+
 
 class AppError(Exception):
     """所有可预期异常的基类。"""
@@ -120,3 +123,19 @@ class UpstreamBadResponseError(UpstreamError):
     code = ErrorCode.UPSTREAM_BAD_RESPONSE
     status_code = 502
     default_message = "上游模型服务响应格式异常"
+
+
+class UnsupportedFormatError(AppError):
+    """上传了系统不认识的文档格式,在上传入口直接拒绝。"""
+
+    code = ErrorCode.UNSUPPORTED_FORMAT
+    status_code = 415
+    default_message = "不支持的文档格式,支持 txt / md / html / docx / pdf"
+
+
+class DocumentParseError(AppError):
+    """文档解析失败;由入库服务捕获并落入 failed 状态,不直接外抛为 HTTP 响应。"""
+
+    code = ErrorCode.DOCUMENT_PARSE_FAILED
+    status_code = 500
+    default_message = "文档解析失败"

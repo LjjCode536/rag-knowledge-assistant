@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
     llm_retry_backoff_seconds: float = Field(default=0.5, ge=0)
+
+    # ===== 文档入库 =====
+    # 上传文件落盘目录(运行时产物,已被 gitignore;不落库)
+    upload_dir: Path = Path("data/uploaded_docs")
 
     @field_validator("siliconflow_api_key", mode="before")
     @classmethod

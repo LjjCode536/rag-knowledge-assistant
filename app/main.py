@@ -7,12 +7,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.routes.documents import router as documents_router
 from app.api.routes.health import router as health_router
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.tracing import TraceIdMiddleware
 from app.integrations.llm.client import UnifiedLLMClient
+from app.repositories.memory import InMemoryDocumentRepository
+from app.services.ingestion import IngestionService
+from app.services.storage import LocalDocumentStorage
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -20,6 +24,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(settings)
 
     llm_client = UnifiedLLMClient(settings)
+    ingestion_service = IngestionService(
+        repository=InMemoryDocumentRepository(),
+        storage=LocalDocumentStorage(settings.upload_dir),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -38,8 +46,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.llm_client = llm_client
+    app.state.ingestion_service = ingestion_service
 
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(documents_router)
     return app

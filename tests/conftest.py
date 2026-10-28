@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,14 +12,21 @@ from app.main import create_app
 
 
 @pytest.fixture
-def settings() -> Settings:
-    """测试配置:不读 .env、无密钥、JSON 日志。"""
+def upload_dir(tmp_path: Path) -> Path:
+    """上传落盘目录指向 pytest 临时目录,验证落盘位置可配置且不污染仓库。"""
+    return tmp_path / "uploaded_docs"
+
+
+@pytest.fixture
+def settings(upload_dir: Path) -> Settings:
+    """测试配置:不读 .env、无密钥、JSON 日志、上传落盘进临时目录。"""
     return Settings(
         _env_file=None,
         environment="test",
         siliconflow_api_key=None,
         log_format="json",
         log_level="INFO",
+        upload_dir=upload_dir,
     )
 
 
