@@ -29,6 +29,8 @@ class ErrorCode(StrEnum):
 
     UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
     DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
+    DOCUMENT_CHUNK_FAILED = "DOCUMENT_CHUNK_FAILED"
+    INVALID_DOCUMENT_STATE = "INVALID_DOCUMENT_STATE"
 
 
 class AppError(Exception):
@@ -139,3 +141,19 @@ class DocumentParseError(AppError):
     code = ErrorCode.DOCUMENT_PARSE_FAILED
     status_code = 500
     default_message = "文档解析失败"
+
+
+class DocumentChunkingError(AppError):
+    """文档切片失败;由切片服务捕获并落入 failed 状态,不直接外抛为 HTTP 响应。"""
+
+    code = ErrorCode.DOCUMENT_CHUNK_FAILED
+    status_code = 500
+    default_message = "文档切片失败"
+
+
+class InvalidDocumentStateError(AppError):
+    """文档当前状态不允许该操作(如对 failed 文档发起切片),返回 409。"""
+
+    code = ErrorCode.INVALID_DOCUMENT_STATE
+    status_code = 409
+    default_message = "文档当前状态不允许该操作"

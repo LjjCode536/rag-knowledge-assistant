@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
+from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord
 
 
@@ -23,4 +25,19 @@ class DocumentRepository(Protocol):
 
     def save(self, record: DocumentRecord) -> None:
         """保存档案(状态机流转后的落库)。"""
+        ...
+
+
+class ChunkRepository(Protocol):
+    """切片仓储的存取契约。
+
+    M2 提供进程内存实现;M3 换 PostgreSQL(六张表之一 chunks),契约不变。
+    """
+
+    def replace(self, document_id: str, chunks: Sequence[Chunk]) -> None:
+        """整组替换一个文档的切片(重切即换,旧切片整批作废)。"""
+        ...
+
+    def list_by_document(self, document_id: str) -> list[Chunk]:
+        """按文档取全部切片(含切片元数据),未切分返回空列表。"""
         ...

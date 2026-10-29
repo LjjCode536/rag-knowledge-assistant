@@ -13,6 +13,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from app.core.errors import UnsupportedFormatError
+from app.domain.chunks import ChunkQualityWarning
 
 
 class DocumentFormat(StrEnum):
@@ -70,20 +71,21 @@ class DocumentStatus(StrEnum):
     """知识库文档生命周期状态。
 
     M1 覆盖 uploaded → parsing → parsed / failed;
-    chunking / embedding / indexed 由后续里程碑(切分、向量化、入库)接入。
+    M2 切片落点为 chunked(见 ADR-0002);embedding / indexed 由 M3 接入。
     """
 
     UPLOADED = "uploaded"
     PARSING = "parsing"
     PARSED = "parsed"
     CHUNKING = "chunking"
+    CHUNKED = "chunked"
     EMBEDDING = "embedding"
     INDEXED = "indexed"
     FAILED = "failed"
 
 
 class DocumentRecord(BaseModel):
-    """知识库文档档案:状态机当前位置、失败原因与解析产物。"""
+    """知识库文档档案:状态机当前位置、失败原因、业务元数据与解析产物。"""
 
     id: str = Field(default_factory=lambda: uuid4().hex)
     file_name: str
@@ -91,9 +93,18 @@ class DocumentRecord(BaseModel):
     size_bytes: int
     status: DocumentStatus = DocumentStatus.UPLOADED
     error_message: str | None = None
+    # ===== 知识库文档元数据(切片时冗余进切片元数据)=====
+    tenant: str = "default"
+    department: str | None = None
+    doc_type: str | None = None
+    version: str = "v1"
     page_count: int | None = None
     element_count: int | None = None
     parsed: ParsedDocument | None = None
+    # ===== 切片产物摘要 =====
+    chunk_count: int | None = None
+    chunk_warnings: list[ChunkQualityWarning] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     parsed_at: datetime | None = None
+    chunked_at: datetime | None = None
     failed_at: datetime | None = None

@@ -9,6 +9,8 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.chunks import ChunkingStrategy
+
 
 class Settings(BaseSettings):
     """应用配置。
@@ -50,6 +52,14 @@ class Settings(BaseSettings):
     # ===== 文档入库 =====
     # 上传文件落盘目录(运行时产物,已被 gitignore;不落库)
     upload_dir: Path = Path("data/uploaded_docs")
+
+    # ===== 文档切片 =====
+    # 默认切分策略;每次切片请求可覆盖请求端参数,即时生效
+    chunk_strategy: ChunkingStrategy = ChunkingStrategy.TABLE_AWARE
+    chunk_size: int = Field(default=500, ge=1)
+    chunk_overlap: int = Field(default=50, ge=0)
+    # 质量告警阈值:短于该值的切片触发 CHUNK_TOO_SHORT;超过 chunk_size 触发 CHUNK_TOO_LONG
+    chunk_min_chars: int = Field(default=20, ge=1)
 
     @field_validator("siliconflow_api_key", mode="before")
     @classmethod

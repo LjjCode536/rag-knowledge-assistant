@@ -27,12 +27,29 @@ class IngestionService:
         self._repository = repository
         self._storage = storage
 
-    def ingest(self, *, file_name: str, content: bytes) -> DocumentRecord:
+    def ingest(
+        self,
+        *,
+        file_name: str,
+        content: bytes,
+        tenant: str = "default",
+        department: str | None = None,
+        doc_type: str | None = None,
+        version: str = "v1",
+    ) -> DocumentRecord:
         """处理一次上传:返回最终档案(parsed 或 failed)。"""
         file_name = _base_name(file_name)
         file_type = DocumentFormat.from_filename(file_name)
 
-        record = DocumentRecord(file_name=file_name, file_type=file_type, size_bytes=len(content))
+        record = DocumentRecord(
+            file_name=file_name,
+            file_type=file_type,
+            size_bytes=len(content),
+            tenant=tenant,
+            department=department,
+            doc_type=doc_type,
+            version=version,
+        )
         self._repository.add(record)
         self._transition(record, DocumentStatus.PARSING)
         self._storage.save(record.id, file_name=file_name, content=content)

@@ -15,9 +15,11 @@ class StateTransitionError(Exception):
 _ALLOWED: dict[DocumentStatus, frozenset[DocumentStatus]] = {
     DocumentStatus.UPLOADED: frozenset({DocumentStatus.PARSING}),
     DocumentStatus.PARSING: frozenset({DocumentStatus.PARSED, DocumentStatus.FAILED}),
-    # 以下迁移由后续里程碑接入(M2 切分 / M3 向量化与入库),先固定契约:
+    # M2 切片接入;chunking 完成落 chunked 落点、重切允许 chunked → chunking(见 ADR-0002)
     DocumentStatus.PARSED: frozenset({DocumentStatus.CHUNKING, DocumentStatus.FAILED}),
-    DocumentStatus.CHUNKING: frozenset({DocumentStatus.EMBEDDING, DocumentStatus.FAILED}),
+    DocumentStatus.CHUNKING: frozenset({DocumentStatus.CHUNKED, DocumentStatus.FAILED}),
+    DocumentStatus.CHUNKED: frozenset({DocumentStatus.CHUNKING, DocumentStatus.FAILED}),
+    # M3 向量化与入库接入(将追加 CHUNKED → EMBEDDING)
     DocumentStatus.EMBEDDING: frozenset({DocumentStatus.INDEXED, DocumentStatus.FAILED}),
     DocumentStatus.INDEXED: frozenset(),
     DocumentStatus.FAILED: frozenset(),
