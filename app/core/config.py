@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     # 质量告警阈值:短于该值的切片触发 CHUNK_TOO_SHORT;超过 chunk_size 触发 CHUNK_TOO_LONG
     chunk_min_chars: int = Field(default=20, ge=1)
 
+    # ===== 在线问答 =====
+    # 默认 top-k 与拒答阈值;最高分低于阈值即拒答(检索低分兜底)
+    qa_top_k: int = Field(default=3, ge=1, le=50)
+    qa_min_score: float = Field(default=0.35, ge=-1.0, le=1.0)
+
     @field_validator("siliconflow_api_key", mode="before")
     @classmethod
     def _blank_key_is_unset(cls, value: object) -> object:

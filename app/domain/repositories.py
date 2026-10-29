@@ -7,6 +7,7 @@ from typing import Protocol
 
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord
+from app.domain.qa import QueryLog
 
 
 class DocumentRepository(Protocol):
@@ -40,4 +41,27 @@ class ChunkRepository(Protocol):
 
     def list_by_document(self, document_id: str) -> list[Chunk]:
         """按文档取全部切片(含切片元数据),未切分返回空列表。"""
+        ...
+
+
+class QueryLogRepository(Protocol):
+    """查询日志的存取契约。
+
+    M3 提供进程内存实现;生产形态换 PostgreSQL(六张表之一 query_logs),契约不变。
+    """
+
+    def add(self, log: QueryLog) -> None:
+        """追加一条查询日志。"""
+        ...
+
+    def get(self, query_id: str) -> QueryLog | None:
+        """按 query_id 取日志,不存在返回 None。"""
+        ...
+
+    def list_recent(self, *, limit: int) -> list[QueryLog]:
+        """按时间倒序返回最近至多 limit 条日志。"""
+        ...
+
+    def count(self) -> int:
+        """返回当前日志总数。"""
         ...
