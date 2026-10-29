@@ -70,8 +70,8 @@ class ParsedDocument(BaseModel):
 class DocumentStatus(StrEnum):
     """知识库文档生命周期状态。
 
-    M1 覆盖 uploaded → parsing → parsed / failed;
-    M2 切片落点为 chunked(见 ADR-0002);embedding / indexed 由 M3 接入。
+    M1 覆盖 uploaded → parsing → parsed / failed;M2 切片落点为 chunked
+    (见 ADR-0002);M3 覆盖 chunked → embedding → indexed(见 ADR-0003)。
     """
 
     UPLOADED = "uploaded"
@@ -107,4 +107,5 @@ class DocumentRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     parsed_at: datetime | None = None
     chunked_at: datetime | None = None
+    indexed_at: datetime | None = None
     failed_at: datetime | None = None

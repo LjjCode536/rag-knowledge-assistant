@@ -35,6 +35,7 @@ class DocumentView(BaseModel):
     created_at: datetime
     parsed_at: datetime | None = None
     chunked_at: datetime | None = None
+    indexed_at: datetime | None = None
     failed_at: datetime | None = None
 
     @classmethod
@@ -56,6 +57,7 @@ class DocumentView(BaseModel):
             created_at=record.created_at,
             parsed_at=record.parsed_at,
             chunked_at=record.chunked_at,
+            indexed_at=record.indexed_at,
             failed_at=record.failed_at,
         )
 

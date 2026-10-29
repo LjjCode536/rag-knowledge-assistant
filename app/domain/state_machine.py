@@ -18,8 +18,11 @@ _ALLOWED: dict[DocumentStatus, frozenset[DocumentStatus]] = {
     # M2 切片接入;chunking 完成落 chunked 落点、重切允许 chunked → chunking(见 ADR-0002)
     DocumentStatus.PARSED: frozenset({DocumentStatus.CHUNKING, DocumentStatus.FAILED}),
     DocumentStatus.CHUNKING: frozenset({DocumentStatus.CHUNKED, DocumentStatus.FAILED}),
-    DocumentStatus.CHUNKED: frozenset({DocumentStatus.CHUNKING, DocumentStatus.FAILED}),
-    # M3 向量化与入库接入(将追加 CHUNKED → EMBEDDING)
+    # M3 向量化接入:向量化完成落 indexed 落点;重切仍走 chunked → chunking
+    DocumentStatus.CHUNKED: frozenset(
+        {DocumentStatus.CHUNKING, DocumentStatus.EMBEDDING, DocumentStatus.FAILED}
+    ),
+    # M7 异步 ingestion 将使用 embedding 瞬时态(见 ADR-0003)
     DocumentStatus.EMBEDDING: frozenset({DocumentStatus.INDEXED, DocumentStatus.FAILED}),
     DocumentStatus.INDEXED: frozenset(),
     DocumentStatus.FAILED: frozenset(),
