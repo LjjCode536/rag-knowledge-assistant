@@ -236,6 +236,8 @@ class EvaluationReport(BaseModel):
     embedder: str
     mode: str
     command: str
+    # T12 起记录向量库后端(memory / chroma);旧报告无此字段,缺省 None
+    vector_store: str | None = None
     # M4 起记录高级检索开关快照(混合 / MMR / 重排等),保证组合可追溯
     retrieval_config: dict[str, Any] | None = None
     cases_total: int = Field(ge=0)

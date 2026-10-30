@@ -174,7 +174,8 @@ def test_cli_chroma_backend_runs_and_records_backend(
     payload = json.loads(json_report.read_text(encoding="utf-8"))
     assert payload["summary"]["cases"] >= 20
     assert payload["mode"] == "in-process"
-    # 复现命令里已带 --vector-store,报告中留痕即可按命令复原这次口径
+    # 向量库后端在报告 JSON 里结构化留痕,复现命令带 --vector-store 可复原口径
+    assert payload["vector_store"] == "chroma"
     assert "--vector-store chroma" in payload["command"]
 
 

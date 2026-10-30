@@ -12,6 +12,7 @@
   "embedder": "deterministic-lexical-1024d",
   "mode": "in-process",
   "command": "uv run python scripts/evaluate.py --iteration 0004 --slug t12-vector-store-switch-memory --run-name T12 向量库切换 · 前(内存基线) --min-score 0.07",
+  "vector_store": "memory",
   "retrieval_config": {
     "use_query_rewrite": false,
     "use_multi_query": false,

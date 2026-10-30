@@ -16,6 +16,7 @@
 | 拒答阈值 min_score | 0.07 |
 | 切分策略 / 尺寸 / 重叠 | table_aware / 500 / 50 |
 | 向量来源 | `deterministic-lexical-1024d` |
+| 向量库后端 | `chroma` |
 | 运行模式 | `in-process` |
 | 回答生成器 | `rule_based` |
 | 复现命令 | `uv run python scripts/evaluate.py --iteration 0004 --slug t12-vector-store-switch-chroma --run-name T12 向量库切换 · 后(Chroma) --min-score 0.07 --vector-store chroma` |
@@ -259,7 +260,7 @@
 - 检索:
   1. `it_security.md#3` · 安全事件 · score=0.099015
   2. `employee_handbook.md#3` · 差旅报销 · score=0.089087
-  3. `finance_invoice.md#1` · 付款账期 · score=0.053606
+  3. `product_faq.md#0` · 试用期 · score=0.053606
 - 指标:Recall@3=0.0000 · MRR=0.0000 · NDCG@3=0.0000 · HitRate@3=0.0000
 - 生成:作答 · 忠实度=1.0000 · 引用准确率=0.5000
   回答:根据知识库资料,差旅报销需要提交发票、行程单和审批记录。
@@ -515,7 +516,7 @@
 - 检索:
   1. `product_faq.md#3` · 服务等级 · score=0.180907 ✅
   2. `after_sales.md#0` · 未发货退款 · score=0.099136
-  3. `finance_invoice.md#1` · 付款账期 · score=0.055989
+  3. `it_security.md#1` · 密码策略 · score=0.055989
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 生成:作答 · 忠实度=1.0000 · 引用准确率=0.5000
   回答:根据知识库资料,订单未发货时,用户可以申请取消订单并退款。

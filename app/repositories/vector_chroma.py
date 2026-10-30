@@ -132,7 +132,7 @@ class ChromaVectorStore:
                             )
                         )
             except Exception as exc:
-                if "dimension" not in str(exc).lower():
+                if not _is_dimension_mismatch(exc):
                     raise
                 # 维度不一致(如换向量模型后未重嵌):同内存基线按 0 分降级,
                 # 不参与有效相似度,检索接口不因此 5xx。
@@ -152,8 +152,6 @@ class ChromaVectorStore:
 
     def _fallback_zero_hits(self, where: dict[str, Any] | None, top_k: int) -> list[ScoredChunk]:
         """维度不一致时的降级候选:满足过滤条件的切片全部按 0 分返回。"""
-    def _fallback_zero_hits(self, where: dict[str, Any] | None, top_k: int) -> list[ScoredChunk]:
-        """维度不一致时的降级候选:满足过滤条件的切片全部按 0 分返回。"""
         result = self._collection.get(where=where, include=["metadatas"])
         metadatas = result.get("metadatas") or []
         record_ids = result.get("ids") or []
@@ -161,6 +159,15 @@ class ChromaVectorStore:
             ScoredChunk(chunk=_chunk_of(metadata, record_id), score=0.0)
             for metadata, record_id in zip(metadatas[:top_k], record_ids[:top_k], strict=False)
         ]
+
+
+def _is_dimension_mismatch(exc: Exception) -> bool:
+    """识别 Chroma 自家错误类型里的维度报错;其余异常一律原样上抛,不静默吞没。"""
+    import chromadb.errors
+
+    if not isinstance(exc, chromadb.errors.InvalidArgumentError):
+        return False
+    return "dimension" in str(exc).lower()
 
 
 def _metadata_of(chunk: Chunk) -> dict[str, Any]:

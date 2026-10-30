@@ -16,6 +16,7 @@
 | 拒答阈值 min_score | 0.07 |
 | 切分策略 / 尺寸 / 重叠 | table_aware / 500 / 50 |
 | 向量来源 | `deterministic-lexical-1024d` |
+| 向量库后端 | `memory` |
 | 运行模式 | `in-process` |
 | 回答生成器 | `rule_based` |
 | 复现命令 | `uv run python scripts/evaluate.py --iteration 0004 --slug t12-vector-store-switch-memory --run-name T12 向量库切换 · 前(内存基线) --min-score 0.07` |

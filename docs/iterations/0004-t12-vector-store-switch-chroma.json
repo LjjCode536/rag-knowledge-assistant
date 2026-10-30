@@ -12,6 +12,7 @@
   "embedder": "deterministic-lexical-1024d",
   "mode": "in-process",
   "command": "uv run python scripts/evaluate.py --iteration 0004 --slug t12-vector-store-switch-chroma --run-name T12 向量库切换 · 后(Chroma) --min-score 0.07 --vector-store chroma",
+  "vector_store": "chroma",
   "retrieval_config": {
     "use_query_rewrite": false,
     "use_multi_query": false,
@@ -790,10 +791,10 @@
           "score": 0.089087
         },
         {
-          "document": "finance_invoice.md",
-          "index": 1,
+          "document": "product_faq.md",
+          "index": 0,
           "rank": 3,
-          "title": "付款账期",
+          "title": "试用期",
           "score": 0.053606
         }
       ],
@@ -1774,10 +1775,10 @@
           "score": 0.099136
         },
         {
-          "document": "finance_invoice.md",
+          "document": "it_security.md",
           "index": 1,
           "rank": 3,
-          "title": "付款账期",
+          "title": "密码策略",
           "score": 0.055989
         }
       ],

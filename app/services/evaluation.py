@@ -73,6 +73,8 @@ class EvaluationConfig:
     embedder: str = DEFAULT_EMBEDDER_LABEL
     mode: str = "in-process"
     command: str = "uv run python scripts/evaluate.py"
+    # T12 向量库后端;外部模式由服务端配置决定,进程内显式记录(None = 旧报告口径)
+    vector_store: str | None = None
     run_name: str = DEFAULT_RUN_NAME
     # M4 高级检索开关快照(评估时点按名称记录,进入报告的「检索配置」行)
     retrieval_config: dict[str, Any] | None = None
@@ -163,6 +165,7 @@ class EvaluationService:
             chunk_overlap=index.chunk_overlap,
             embedder=self._config.embedder,
             mode=self._config.mode,
+            vector_store=self._config.vector_store,
             command=self._config.command,
             retrieval_config=self._config.retrieval_config,
             cases_total=len(results),
@@ -522,6 +525,7 @@ def render_markdown(
         f"| 切分策略 / 尺寸 / 重叠 | {report.chunk_strategy} / "
         f"{report.chunk_size} / {report.chunk_overlap} |",
         f"| 向量来源 | `{report.embedder}` |",
+        *( [f"| 向量库后端 | `{report.vector_store}` |"] if report.vector_store else [] ),
         f"| 运行模式 | `{report.mode}` |",
         f"| 回答生成器 | `{report.generator or '—'}` |",
         f"| 复现命令 | `{report.command}` |",
