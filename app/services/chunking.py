@@ -97,6 +97,7 @@ class ChunkingService:
         started = datetime.now(UTC)
         try:
             self._transition(record, DocumentStatus.CHUNKING)
+            self._documents.save(record)
             raw_chunks = get_chunker(effective_strategy).chunk(
                 record.parsed.elements,
                 chunk_size=effective_size,

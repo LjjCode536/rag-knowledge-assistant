@@ -125,7 +125,12 @@ def llm_indexed_client(settings: Settings) -> Iterator[tuple[TestClient, FakeTra
 
 def test_default_qa_generator_is_llm_and_surfaces_unified_error(upload_dir) -> None:
     """默认配置即真实 LLM:无密钥时 /chat 转 UPSTREAM_NOT_CONFIGURED 错误码。"""
-    settings = Settings(_env_file=None, environment="test", upload_dir=upload_dir)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        upload_dir=upload_dir,
+        ingestion_async=False,
+    )
     assert settings.qa_generator == "llm"
 
     app = create_app(settings, embedder=DeterministicEmbedder())

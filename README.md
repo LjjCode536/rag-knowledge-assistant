@@ -31,9 +31,9 @@ curl -H "X-Request-ID: demo-trace-0001" http://127.0.0.1:8000/health
 
 响应头 `X-Request-ID`、响应体 `trace_id` 与全部日志共享同一个值;调用方传入则透传,缺失或格式非法时服务生成。
 
-### 文档入库(M1)
+### 文档入库(M1 同步 → M7 异步)
 
-上传即同步解析,支持 txt / md / html / docx / pdf:
+上传立即返回任务句柄(文档档案),解析 / 切片 / 向量化默认转后台任务(M7·上,ADR-0012);进度由状态机可查:
 
 ```bash
 curl -F "file=@退费政策.pdf" http://127.0.0.1:8000/api/v1/documents
@@ -46,21 +46,22 @@ curl -F "file=@退费政策.pdf" http://127.0.0.1:8000/api/v1/documents
     "id": "9f0b…",
     "file_name": "退费政策.pdf",
     "file_type": "pdf",
-    "status": "parsed",
-    "element_count": 12,
-    "page_count": 3
+    "status": "uploaded"
   }
 }
 ```
 
-- `GET /api/v1/documents/{id}`:状态机位置全程可查(`uploaded → parsing → parsed`,任一步失败进入 `failed` 并带 `error_message`)。
+- `GET /api/v1/documents/{id}`:状态机位置全程可查
+  (`uploaded → parsing → parsed → chunking → chunked → embedding → indexed`,
+  任一步失败进入 `failed` 并带 `error_message`);到 `indexed` 即可检索与问答。
 - `GET /api/v1/documents/{id}/elements`:解析产物,元素带类型与页码 / 行号 / 标题层级等定位元数据。
-- 解析失败不静默吞错:档案照常建立,`status=failed`、原因可查;不认识的扩展名返回 `415 UNSUPPORTED_FORMAT`,不生成档案。
+- 解析 / 切片失败不静默吞错:档案照常建立,`status=failed`、原因可查,重传同标识文件即重试;上游向量化失败停在 `chunked`,经向量化端点重试;不认识的扩展名返回 `415 UNSUPPORTED_FORMAT`,不生成档案。
+- 切分参数排查 / 固定口径:设 `INGESTION_ASYNC=false` 回到请求内同步形态(与异步共用同一服务,行为一致)。
 - 落盘位置由 `UPLOAD_DIR` 配置(默认 `data/uploaded_docs`),运行时产物不入库。
 
 ### 向量化与检索(M3)
 
-切片之后批量向量化并写入内存向量库;检索支持 top-k 与**检索前**元数据过滤:
+上传后由后台管线自动切片与向量化;也可对停在 `parsed` / `chunked` 的文档手动触发(策略与参数即时生效)。检索支持 top-k 与**检索前**元数据过滤:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/documents/{id}/chunks \
@@ -191,12 +192,13 @@ uv run python scripts/evaluate.py
 uv run pytest                   # 全量测试,不触网
 uv run ruff check .             # lint
 uv run python scripts/evaluate.py         # 黄金数据集检索指标(默认无密钥)
+uv run python scripts/benchmark_ingestion.py # 入库形态上传阻塞时长(同步 vs 异步)
 uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会计费)
 ```
 
 测试从预先约定的接缝进入:
 
-- **HTTP API 层**:健康检查、错误映射、trace_id 一致性、堆栈不外泄;文档解析链路(五种格式、失败状态、落盘配置);向量化 / 检索;在线问答(有据回答 + 引用、低分拒答、查询日志),上游以确定性假向量与可注入生成器替身。
+- **HTTP API 层**:健康检查、错误映射、trace_id 一致性、堆栈不外泄;文档解析链路(五种格式、失败状态、落盘配置);异步入库管线(上传立即返回、状态机进度、失败重试);向量化 / 检索;在线问答(有据回答 + 引用、低分拒答、查询日志),上游以确定性假向量与可注入生成器替身。
 - **评估主缝**:黄金数据集经同一组 HTTP 端点入库并检索,断言逐用例可追溯、权限边界与拒答用例生效、报告可重复渲染;无密钥、不触网。
 - **统一 LLM 客户端的窄接缝**:假传输层注入超时 / 429 / 5xx,验证错误映射与用量解析。
 
@@ -217,6 +219,7 @@ app/
 evaluation/                  # 黄金数据集(v1 YAML)与评估语料
 tests/                       # 按接缝组织的测试
 scripts/evaluate.py          # 检索指标评估器(默认无密钥)
+scripts/benchmark_ingestion.py # 入库形态上传阻塞时长基准(同步 vs 异步)
 scripts/init_pg.py           # 幂等建表 / 迁移(pgvector 生产持久化)
 scripts/check_upstream.py    # 需要密钥的连通性脚本
 docker-compose.yml           # PostgreSQL 16 + pgvector 一键拉起
@@ -235,5 +238,6 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0005](docs/adr/0005-evaluation-foundation.md):评估基座:锚点定位、API 主缝与无密钥检索指标
 - [ADR-0009](docs/adr/0009-document-supersession-and-deletion.md):文档版本退位与删除:清理先行、状态机后置
 - [ADR-0011](docs/adr/0011-pgvector-production-persistence.md):生产持久化切 pgvector;六张生产表;无 Docker 回退口径
+- [ADR-0012](docs/adr/0012-async-ingestion-background-tasks.md):异步 ingestion:上传即时返回任务句柄;同步形态显式配置
 - [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)

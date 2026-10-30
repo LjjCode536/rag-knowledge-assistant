@@ -47,6 +47,7 @@ from app.services.generation import (
     SiliconFlowAnswerGenerator,
 )
 from app.services.ingestion import IngestionService
+from app.services.ingestion_pipeline import IngestionPipeline
 from app.services.lifecycle import DocumentLifecycleService
 from app.services.query_planning import SiliconFlowQueryPlanner
 from app.services.reranking import Reranker, SiliconFlowReranker
@@ -189,6 +190,11 @@ def create_app(
         embedder=effective_embedder,
         keyword_index=effective_keyword_index,
     )
+    ingestion_pipeline = IngestionPipeline(
+        ingestion_service=ingestion_service,
+        chunking_service=chunking_service,
+        embedding_service=embedding_service,
+    )
     retrieval_service = RetrievalService(
         vector_store=effective_vector_store,
         embedder=effective_embedder,
@@ -228,6 +234,7 @@ def create_app(
     app.state.ingestion_service = ingestion_service
     app.state.chunking_service = chunking_service
     app.state.embedding_service = embedding_service
+    app.state.ingestion_pipeline = ingestion_pipeline
     app.state.retrieval_service = retrieval_service
     app.state.keyword_index = effective_keyword_index
     app.state.answer_service = answer_service

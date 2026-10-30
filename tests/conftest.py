@@ -35,6 +35,10 @@ def test_pg_database() -> Iterator[PgTestDatabase]:
 def settings(upload_dir: Path) -> Settings:
     """测试配置:不读 .env、无密钥、JSON 日志、上传落盘进临时目录。
 
+    入库固定同步形态(M7 之前的主缝口径):既有 T02-T13 的契约测试与评估
+    以此保持不变;T14 异步管线的验收在 test_ingestion_async_api.py 单独
+    打开 ingestion_async=True 验证,生产默认值为 True(见 ADR-0012)。
+
     生成器固定规则版:离线基线口径;真实 LLM 生成在 test_generation_llm.py
     与 test_chat_llm_api.py 用 keyed 配置 + 假传输层单独验证。
     """
@@ -45,6 +49,7 @@ def settings(upload_dir: Path) -> Settings:
         log_format="json",
         log_level="INFO",
         upload_dir=upload_dir,
+        ingestion_async=False,
         qa_generator="rule",
     )
 

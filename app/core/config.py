@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # ===== 文档入库 =====
     # 上传文件落盘目录(运行时产物,已被 gitignore;不落库)
     upload_dir: Path = Path("data/uploaded_docs")
+    # 离线入库形态(见 ADR-0012):True = 上传只登记档案与落盘,解析 → 切片 →
+    # 向量化转后台任务(FastAPI BackgroundTasks 起步),上传立即返回任务句柄
+    # (状态机位置可查);False = 请求内同步完成解析(此前同步形态,
+    # 切分参数排查 / 评估器固定口径用)。两条形态共用同一服务,行为一致。
+    ingestion_async: bool = True
 
     # ===== 文档切片 =====
     # 默认切分策略;每次切片请求可覆盖请求端参数,即时生效

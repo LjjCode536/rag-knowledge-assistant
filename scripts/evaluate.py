@@ -439,6 +439,9 @@ async def _run(
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
         updates: dict[str, Any] = {
             "upload_dir": Path(temp_dir),
+            # 评估固定同步入库口径:语料切片参数由数据集逐文档显式指定,
+            # 异步管线的默认参数自动入库会打乱可比性(T14 起,见 ADR-0012)
+            "ingestion_async": False,
             **settings_updates,
             **_vector_store_updates(args, Path(temp_dir)),
         }
@@ -530,6 +533,9 @@ async def _run_combo(
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
         updates: dict[str, Any] = {
             "upload_dir": Path(temp_dir),
+            # 评估固定同步入库口径:语料切片参数由数据集逐文档显式指定,
+            # 异步管线的默认参数自动入库会打乱可比性(T14 起,见 ADR-0012)
+            "ingestion_async": False,
             **settings_updates,
             **_vector_store_updates(args, Path(temp_dir)),
         }

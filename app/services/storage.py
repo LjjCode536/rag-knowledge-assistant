@@ -18,6 +18,15 @@ class LocalDocumentStorage:
         target.write_bytes(content)
         return target
 
+    def load(self, document_id: str, *, file_name: str) -> bytes:
+        """读取已落盘的上传文件(后台管线的解析输入)。
+
+        命名规则须与 :meth:`save` 保持同一口径(suffix 来自 file_name);
+        文件缺失抛 FileNotFoundError,由调用方决定落点。
+        """
+        suffix = Path(file_name).suffix.lower()
+        return (self._root / f"{document_id}{suffix}").read_bytes()
+
     def delete(self, document_id: str, *, file_name: str) -> None:
         """删除已落盘的上传文件(文档删除的连带清理);文件不存在按幂等处理。
 

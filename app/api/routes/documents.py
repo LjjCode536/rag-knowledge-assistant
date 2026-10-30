@@ -1,11 +1,11 @@
-"""知识库文档端点:上传即解析(M1 同步),状态与解析产物全程可查。"""
+"""知识库文档端点:上传登记任务句柄,解析 → 切片 → 入库的进度由状态机可查(M7 异步 ingestion)。"""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, Request, UploadFile
 from pydantic import BaseModel
 
 from app.core.envelope import ApiEnvelope, success_envelope
@@ -96,25 +96,32 @@ def _blank_to_none(value: str | None) -> str | None:
     "",
     response_model=ApiEnvelope[DocumentView],
     status_code=201,
-    summary="上传知识库文档(同步解析)",
+    summary="上传知识库文档(登记,后台入库)",
 )
 def upload_document(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile,
     tenant: Annotated[str, Form()] = "default",
     department: Annotated[str | None, Form()] = None,
     doc_type: Annotated[str | None, Form()] = None,
     version: Annotated[str, Form()] = "v1",
 ) -> ApiEnvelope[DocumentView]:
-    """上传 txt / md / html / docx / pdf,请求内完成解析。
+    """上传 txt / md / html / docx / pdf,立即返回任务句柄(文档档案)。
+
+    默认(`ingestion_async=true`,见 ADR-0012):请求只登记档案与落盘,
+    解析 → 切片 → 向量化转后台任务,解析 / 切片失败落 `failed` 带
+    `error_message`,可重传重试;上游向量化失败停 `chunked`,可经
+    `POST /{id}/embeddings` 重试。进度经 `GET /{document_id}` 查询,
+    状态机位置全程可查,到 indexed 即可问答。
+    `ingestion_async=false` 时同一服务在请求内同步完成解析(行为一致口径)。
 
     元数据字段(租户 / 部门 / 文档类型 / 版本)进入文档档案并随切片冗余;
-    解析失败同样返回 201,`data.status` 为 `failed` 且 `error_message` 带原因;
     不支持的扩展名返回 415,不生成档案。
     """
     service: IngestionService = request.app.state.ingestion_service
     content = file.file.read()
-    record = service.ingest(
+    record = service.register(
         file_name=file.filename or "",
         content=content,
         tenant=tenant.strip() or "default",
@@ -122,6 +129,12 @@ def upload_document(
         doc_type=_blank_to_none(doc_type),
         version=version.strip() or "v1",
     )
+    if request.app.state.settings.ingestion_async:
+        pipeline = request.app.state.ingestion_pipeline
+        background_tasks.add_task(pipeline.run, record.id)
+    else:
+        # 同步形态:与异步管线共用同一 parse,落点与失败语义一致(ADR-0012)
+        record = service.parse(record.id)
     return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))
 
 
