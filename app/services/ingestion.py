@@ -112,10 +112,7 @@ class IngestionService:
                 file_name=record.file_name,
                 error=str(exc),
             )
-            record.error_message = str(exc)
-            record.failed_at = datetime.now(UTC)
-            self._transition(record, DocumentStatus.FAILED)
-            self._repository.save(record)
+            self._save_failed(record, str(exc))
             return record
 
         record.parsed = parsed
@@ -135,6 +132,13 @@ class IngestionService:
         )
         return record
 
+    def _save_failed(self, record: DocumentRecord, reason: str) -> None:
+        """failed 落点公共收口:原因入档案、failed_at 留痕、状态机迁移与落库。"""
+        record.error_message = reason
+        record.failed_at = datetime.now(UTC)
+        self._transition(record, DocumentStatus.FAILED)
+        self._repository.save(record)
+
     def fail_with_reason(self, document_id: str, reason: str) -> bool:
         """把进行中的档案落 failed 并记录原因(后台管线的兜底落点)。
 
@@ -150,10 +154,7 @@ class IngestionService:
                 status=record.status.value,
             )
             return False
-        record.error_message = reason
-        record.failed_at = datetime.now(UTC)
-        self._transition(record, DocumentStatus.FAILED)
-        self._repository.save(record)
+        self._save_failed(record, reason)
         return True
 
     def get(self, document_id: str) -> DocumentRecord:

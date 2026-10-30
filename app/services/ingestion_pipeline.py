@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 import structlog
 from starlette.concurrency import run_in_threadpool
 
-from app.core.errors import AppError
+from app.core.errors import AppError, UpstreamError
 from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.state_machine import StateTransitionError
 from app.services.chunking import ChunkingService
@@ -82,9 +82,18 @@ class IngestionPipeline:
         """向量化一次;上游失败按 ADR-0003 不落地,档案停在 chunked 可重试。"""
         try:
             await self._embedding.embed_document(record.id)
-        except AppError as exc:
+        except UpstreamError as exc:
             logger.warning(
                 "document_ingest_upstream_failed",
+                document_id=record.id,
+                file_name=record.file_name,
+                error_code=exc.code.value,
+            )
+        except AppError as exc:
+            # 阶段前置校验拒绝(如空文档没有可向量化切片):不是上游可重试失败,
+            # 手动端点回 409 的同一语义在管线内表现为停在 chunked、原因进日志
+            logger.warning(
+                "document_ingest_stage_refused",
                 document_id=record.id,
                 file_name=record.file_name,
                 error_code=exc.code.value,

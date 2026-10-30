@@ -24,5 +24,5 @@ M1–M5 的离线入库链路以"请求内同步"演进:上传即解析(T02)在�
 
 - `POST /api/v1/documents` 响应不再携带解析结果(element_count / page_count 等),由 `GET /{id}` 下发;依赖解析字段同步回包的调用方(评估器 `scripts/evaluate.py`)固定 `ingestion_async=false`。
 - `EMBEDDING` 状态保持请求内瞬时态(ADR-0003:上游失败落回 `chunked` 的可重试语义,先迁状态会破坏它),仍不可持续观察;`parsing` / `chunking` 进入即持久化,慢解析 / 慢切片期间的进度查询可见。
-- 新增管线结构化日志:`document_ingest_finished`(收口 + status)、`document_ingest_upstream_failed`(向量化上游失败)。`document_parse_failed` / `document_chunking_failed` / `document_embedded` 等沿用服务层事件。
+- 新增管线结构化日志(全部 snake_case):`document_ingest_finished`(收口 + status)、`document_ingest_upstream_failed`(向量化上游失败)、`document_ingest_stage_refused`(阶段前置校验拒绝,如空文档无切片)、`document_ingest_cancelled`(生命周期竞态让位)、`document_ingest_crashed` 与 `document_ingest_land_skipped` / `document_ingest_land_conflict`(兜底落点)。`document_parse_failed` / `document_chunking_failed` / `document_embedded` 等沿用服务层事件。
 - 测试口径分层:`conftest.settings` 固定 `ingestion_async=False` 保持 T02–T13 契约不变;T14 验收在 `tests/test_ingestion_async_api.py` 显式开启 True(异步形态的全量接缝测试)。

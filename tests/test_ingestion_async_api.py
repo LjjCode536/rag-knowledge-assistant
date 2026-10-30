@@ -158,7 +158,7 @@ def test_empty_document_parks_at_chunked_with_upstream_note(async_client, capsys
     note = [
         entry
         for entry in entries
-        if entry["event"] == "document_ingest_upstream_failed"
+        if entry["event"] == "document_ingest_stage_refused"
     ]
     assert len(note) == 1
     assert note[0]["error_code"] == "INVALID_DOCUMENT_STATE"

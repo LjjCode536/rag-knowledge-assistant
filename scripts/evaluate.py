@@ -82,6 +82,10 @@ DEFAULT_GATE_THRESHOLDS: dict[str, float] = {
     "permission_pass_rate": 1.0,
 }
 
+# 进程内评估固定同步入库口径(T14,ADR-0012):语料切片参数由数据集逐文档
+# 显式指定,异步管线的默认参数自动入库会打乱指标可比性。
+INGESTION_SYNC_UPDATES: dict[str, Any] = {"ingestion_async": False}
+
 # 消融矩阵:教材第 43 章生产替换清单的开关组合;E/F/G 行验证各能力的边际收益。
 ABLATION_COMBOS: list[tuple[str, dict[str, bool]]] = [
     ("A 全关(基线复现)", {}),
@@ -439,9 +443,7 @@ async def _run(
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
         updates: dict[str, Any] = {
             "upload_dir": Path(temp_dir),
-            # 评估固定同步入库口径:语料切片参数由数据集逐文档显式指定,
-            # 异步管线的默认参数自动入库会打乱可比性(T14 起,见 ADR-0012)
-            "ingestion_async": False,
+            **INGESTION_SYNC_UPDATES,
             **settings_updates,
             **_vector_store_updates(args, Path(temp_dir)),
         }
@@ -533,9 +535,7 @@ async def _run_combo(
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
         updates: dict[str, Any] = {
             "upload_dir": Path(temp_dir),
-            # 评估固定同步入库口径:语料切片参数由数据集逐文档显式指定,
-            # 异步管线的默认参数自动入库会打乱可比性(T14 起,见 ADR-0012)
-            "ingestion_async": False,
+            **INGESTION_SYNC_UPDATES,
             **settings_updates,
             **_vector_store_updates(args, Path(temp_dir)),
         }

@@ -29,10 +29,15 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import Settings
+from app.domain.documents import DocumentStatus
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 
-TERMINAL_INGEST_STATES = {"indexed", "failed", "chunked"}
+# 入库终点:管线不再推进的状态(indexed / failed,或按口径停在 chunked 可重试)
+TERMINAL_INGEST_STATES = {
+    status.value
+    for status in (DocumentStatus.INDEXED, DocumentStatus.FAILED, DocumentStatus.CHUNKED)
+}
 
 
 def _build_large_docx(paragraphs: int) -> bytes:
