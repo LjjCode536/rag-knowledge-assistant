@@ -16,6 +16,7 @@
 | 运行模式 | `in-process`(各组合独立进程内重建) |
 | 上游并发 | `serial`(逐用例串行) |
 | 复现命令 | `uv run python scripts/evaluate.py --iteration 0002 --slug t07-advanced-retrieval --run-name T07 高级检索 --ablate` |
+| 基线参照 | T06 检索指标基线(`uv run python scripts/evaluate.py`,向量来源 `deterministic-lexical-1024d`,K=3) |
 
 ## 消融对比
 
@@ -23,11 +24,11 @@
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | A 全关(基线复现) | query_rewrite=off、multi_query=off、hybrid=off、mmr=off、rerank=off、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 0.7917 | 0.7500 | 0.7609 | 0.7917 | +0.0000 | +0.0000 | 1.0000 | 1.0000 |
 | B 混合开 | query_rewrite=off、multi_query=off、hybrid=on、mmr=off、rerank=off、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 0.8333 | 0.8056 | 0.8125 | 0.8333 | +0.0417 | +0.0556 | 0.0000 | 1.0000 |
-| C 重排开(混合关) | query_rewrite=off、multi_query=off、hybrid=off、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 0.9722 | 0.9792 | 1.0000 | +0.2083 | +0.2222 | 1.0000 | 1.0000 |
-| D 混合+重排开 | query_rewrite=off、multi_query=off、hybrid=on、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 0.9792 | 0.9846 | 1.0000 | +0.2083 | +0.2292 | 1.0000 | 1.0000 |
+| C 重排开(混合关) | query_rewrite=off、multi_query=off、hybrid=off、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 0.9792 | 0.9846 | 1.0000 | +0.2083 | +0.2292 | 1.0000 | 1.0000 |
+| D 混合+重排开 | query_rewrite=off、multi_query=off、hybrid=on、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 0.9722 | 0.9792 | 1.0000 | +0.2083 | +0.2222 | 1.0000 | 1.0000 |
 | E 混合+重排+MMR | query_rewrite=off、multi_query=off、hybrid=on、mmr=on、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 0.9583 | 0.9583 | 0.9583 | 0.9583 | +0.1667 | +0.2083 | 1.0000 | 1.0000 |
 | F 混合+重排+查询改写 | query_rewrite=on、multi_query=off、hybrid=on、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | +0.2083 | +0.2500 | 1.0000 | 1.0000 |
-| G 混合+重排+多查询扩展 | query_rewrite=off、multi_query=on、hybrid=on、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | +0.2083 | +0.2500 | 1.0000 | 1.0000 |
+| G 混合+重排+多查询扩展 | query_rewrite=off、multi_query=on、hybrid=on、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 0.9792 | 0.9846 | 1.0000 | +0.2083 | +0.2292 | 1.0000 | 1.0000 |
 | H 重排+查询改写(混合关) | query_rewrite=on、multi_query=off、hybrid=off、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | +0.2083 | +0.2500 | 1.0000 | 1.0000 |
 
 **默认组合依据**:「H 重排+查询改写(混合关)」(k=3)在本数据集上Recall=1.0000 / MRR=1.0000;并列取最优时按上游开销较小的开关组合取舍,对应 query_rewrite=on、multi_query=off、hybrid=off、mmr=off、rerank=on、w_v=0.7、w_k=0.3、candidate_k=30、nq=3、lambda=0.7 为当前默认值。
@@ -56,9 +57,9 @@
 - 过滤:tenant=acme
 - 预期:`after_sales.md` · 未发货退款「订单尚未发货时」 → `after_sales.md#0`
 - 检索:
-  1. `after_sales.md#0` · 未发货退款 · score=0.996609 ✅
-  2. `after_sales.md#1` · 已发货退款 · score=0.932571
-  3. `after_sales.md#2` · 物流异常 · score=0.010328
+  1. `after_sales.md#0` · 未发货退款 · score=0.990613 ✅
+  2. `after_sales.md#1` · 已发货退款 · score=0.877992
+  3. `employee_handbook.md#5` · 离职交接 · score=0.026056
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:教材样例 case_refund_001:口语化退款问题
 - 结论:✅ 完全命中
@@ -69,9 +70,9 @@
 - 过滤:tenant=acme
 - 预期:`after_sales.md` · 已发货退款「订单已经发货后」 → `after_sales.md#1`
 - 检索:
-  1. `after_sales.md#1` · 已发货退款 · score=0.988717 ✅
-  2. `after_sales.md#0` · 未发货退款 · score=0.835518
-  3. `employee_handbook.md#3` · 差旅报销 · score=0.012831
+  1. `after_sales.md#1` · 已发货退款 · score=0.988835 ✅
+  2. `after_sales.md#0` · 未发货退款 · score=0.834517
+  3. `employee_handbook.md#3` · 差旅报销 · score=0.012731
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:教材样例 case_refund_002:已发货退款规则
 - 结论:✅ 完全命中
@@ -82,8 +83,8 @@
 - 过滤:tenant=acme
 - 预期:`after_sales.md` · 物流异常「超过七天没有更新」 → `after_sales.md#2`
 - 检索:
-  1. `after_sales.md#2` · 物流异常 · score=0.985632 ✅
-  2. `after_sales.md#0` · 未发货退款 · score=0.024777
+  1. `after_sales.md#2` · 物流异常 · score=0.985771 ✅
+  2. `after_sales.md#0` · 未发货退款 · score=0.025580
   3. `after_sales.md#1` · 已发货退款 · score=0.007006
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:教材样例 case_logistics_001:物流异常
@@ -95,8 +96,8 @@
 - 过滤:tenant=acme
 - 预期:`finance_invoice.md` · 企业发票「公司名称、纳税人识别号」 → `finance_invoice.md#0`
 - 检索:
-  1. `finance_invoice.md#0` · 企业发票 · score=0.994320 ✅
-  2. `it_security.md#2` · 设备管理 · score=0.079605
+  1. `finance_invoice.md#0` · 企业发票 · score=0.994377 ✅
+  2. `it_security.md#2` · 设备管理 · score=0.078380
   3. `it_security.md#1` · 密码策略 · score=0.005334
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:教材样例 case_invoice_001:发票规则
@@ -108,9 +109,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 年假制度「入职满一年」 → `employee_handbook.md#0`
 - 检索:
-  1. `employee_handbook.md#0` · 年假制度 · score=0.905530 ✅
-  2. `employee_handbook.md#2` · 加班调休 · score=0.009679
-  3. `employee_handbook.md#1` · 病假申请 · score=0.002021
+  1. `employee_handbook.md#0` · 年假制度 · score=0.954811 ✅
+  2. `employee_handbook.md#2` · 加班调休 · score=0.033309
+  3. `employee_handbook.md#1` · 病假申请 · score=0.011227
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:教材样例 case_leave_001:HR 年假制度
 - 结论:✅ 完全命中
@@ -135,9 +136,9 @@
 - 预期:`employee_handbook.md` · 差旅报销「发票、行程单和审批记录」 → `employee_handbook.md#3`
 - 预期:`employee_handbook.md` · 差旅报销「十五个工作日内」 → `employee_handbook.md#3`
 - 检索:
-  1. `employee_handbook.md#3` · 差旅报销 · score=0.992547 ✅
-  2. `finance_invoice.md#0` · 企业发票 · score=0.032416
-  3. `employee_handbook.md#1` · 病假申请 · score=0.023536
+  1. `employee_handbook.md#3` · 差旅报销 · score=0.990349 ✅
+  2. `finance_invoice.md#0` · 企业发票 · score=0.022598
+  3. `employee_handbook.md#5` · 离职交接 · score=0.011573
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:同文档多切片用例:同时覆盖材料与提交时限
 - 结论:✅ 完全命中
@@ -148,10 +149,10 @@
 - 过滤:tenant=acme
 - 预期:无(应拒答)
 - 检索:
-  1. `employee_handbook.md#0` · 年假制度 · score=0.000105
-  2. `product_faq.md#2` · 单点登录 · score=0.000097
-  3. `product_faq.md#0` · 试用期 · score=0.000069
-- 指标:拒答正确(最高分 0.000105 < 阈值 0.35)
+  1. `product_faq.md#0` · 试用期 · score=0.000277
+  2. `product_faq.md#2` · 单点登录 · score=0.000277
+  3. `employee_handbook.md#0` · 年假制度 · score=0.000271
+- 指标:拒答正确(最高分 0.000277 < 阈值 0.35)
 - 备注:教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底
 - 结论:✅ 正确拒答
 
@@ -161,9 +162,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 病假申请「当天上午十点前」 → `employee_handbook.md#1`
 - 检索:
-  1. `employee_handbook.md#1` · 病假申请 · score=0.279752 ✅
-  2. `employee_handbook.md#5` · 离职交接 · score=0.009918
-  3. `employee_handbook.md#0` · 年假制度 · score=0.003767
+  1. `employee_handbook.md#1` · 病假申请 · score=0.277394 ✅
+  2. `employee_handbook.md#5` · 离职交接 · score=0.010003
+  3. `employee_handbook.md#0` · 年假制度 · score=0.003689
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:病假报备时限
 - 结论:✅ 完全命中
@@ -174,9 +175,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 加班调休「三个月内」 → `employee_handbook.md#2`
 - 检索:
-  1. `employee_handbook.md#2` · 加班调休 · score=0.658083 ✅
+  1. `employee_handbook.md#2` · 加班调休 · score=0.652920 ✅
   2. `employee_handbook.md#0` · 年假制度 · score=0.048657
-  3. `employee_handbook.md#1` · 病假申请 · score=0.017104
+  3. `employee_handbook.md#1` · 病假申请 · score=0.016808
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:调休有效期
 - 结论:✅ 完全命中
@@ -187,9 +188,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 离职交接「提前三十天」 → `employee_handbook.md#5`
 - 检索:
-  1. `employee_handbook.md#5` · 离职交接 · score=0.897369 ✅
-  2. `it_security.md#4` · 账号回收 · score=0.026381
-  3. `employee_handbook.md#0` · 年假制度 · score=0.002889
+  1. `employee_handbook.md#5` · 离职交接 · score=0.919110 ✅
+  2. `it_security.md#4` · 账号回收 · score=0.006257
+  3. `employee_handbook.md#1` · 病假申请 · score=0.002820
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:离职通知期
 - 结论:✅ 完全命中
@@ -214,9 +215,9 @@
 - 预期:`employee_handbook.md` · 离职交接「提前三十天」 → `employee_handbook.md#5`
 - 预期:`it_security.md` · 账号回收「两个工作日内」 → `it_security.md#4`
 - 检索:
-  1. `it_security.md#4` · 账号回收 · score=0.995071 ✅
-  2. `employee_handbook.md#5` · 离职交接 · score=0.986098 ✅
-  3. `employee_handbook.md#0` · 年假制度 · score=0.025522
+  1. `it_security.md#4` · 账号回收 · score=0.996636 ✅
+  2. `employee_handbook.md#5` · 离职交接 · score=0.990107 ✅
+  3. `employee_handbook.md#0` · 年假制度 · score=0.078513
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:跨文档多切片用例:同时覆盖离职通知期与账号回收
 - 结论:✅ 完全命中
@@ -227,9 +228,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 差旅报销「十五个工作日内」 → `employee_handbook.md#3`
 - 检索:
-  1. `employee_handbook.md#3` · 差旅报销 · score=0.609892 ✅
-  2. `employee_handbook.md#5` · 离职交接 · score=0.052087
-  3. `finance_invoice.md#1` · 付款账期 · score=0.015621
+  1. `employee_handbook.md#3` · 差旅报销 · score=0.609855 ✅
+  2. `employee_handbook.md#5` · 离职交接 · score=0.052777
+  3. `finance_invoice.md#1` · 付款账期 · score=0.015223
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:报销提交时限
 - 结论:✅ 完全命中
@@ -240,9 +241,9 @@
 - 过滤:tenant=acme
 - 预期:`finance_invoice.md` · 付款账期「验收合格后的三十天」 → `finance_invoice.md#1`
 - 检索:
-  1. `finance_invoice.md#1` · 付款账期 · score=0.911982 ✅
-  2. `after_sales.md#2` · 物流异常 · score=0.002646
-  3. `employee_handbook.md#5` · 离职交接 · score=0.002198
+  1. `finance_invoice.md#1` · 付款账期 · score=0.848699 ✅
+  2. `after_sales.md#2` · 物流异常 · score=0.004421
+  3. `after_sales.md#0` · 未发货退款 · score=0.003426
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:供应商付款账期
 - 结论:✅ 完全命中
@@ -253,9 +254,9 @@
 - 过滤:tenant=acme
 - 预期:`it_security.md` · VPN 使用「公司 VPN」 → `it_security.md#0`
 - 检索:
-  1. `it_security.md#0` · VPN 使用 · score=0.739370 ✅
-  2. `product_faq.md#2` · 单点登录 · score=0.008920
-  3. `it_security.md#2` · 设备管理 · score=0.007405
+  1. `it_security.md#0` · VPN 使用 · score=0.668204 ✅
+  2. `it_security.md#2` · 设备管理 · score=0.008188
+  3. `product_faq.md#2` · 单点登录 · score=0.007660
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:远程接入方式
 - 结论:✅ 完全命中
@@ -279,9 +280,9 @@
 - 过滤:tenant=acme
 - 预期:`it_security.md` · 设备管理「不得安装未经审批的软件」 → `it_security.md#2`
 - 检索:
-  1. `it_security.md#2` · 设备管理 · score=0.903690 ✅
-  2. `product_faq.md#2` · 单点登录 · score=0.100909
-  3. `employee_handbook.md#4` · 培训预算 · score=0.020867
+  1. `it_security.md#2` · 设备管理 · score=0.902611 ✅
+  2. `product_faq.md#2` · 单点登录 · score=0.102074
+  3. `employee_handbook.md#4` · 培训预算 · score=0.020013
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:终端软件管理
 - 结论:✅ 完全命中
@@ -292,9 +293,9 @@
 - 过滤:tenant=acme
 - 预期:`it_security.md` · 安全事件「立即断开网络」 → `it_security.md#3`
 - 检索:
-  1. `it_security.md#3` · 安全事件 · score=0.498970 ✅
-  2. `it_security.md#4` · 账号回收 · score=0.101133
-  3. `it_security.md#2` · 设备管理 · score=0.052955
+  1. `it_security.md#3` · 安全事件 · score=0.509888 ✅
+  2. `it_security.md#4` · 账号回收 · score=0.039310
+  3. `it_security.md#2` · 设备管理 · score=0.009043
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:安全事件响应
 - 结论:✅ 完全命中
@@ -305,9 +306,9 @@
 - 过滤:tenant=acme
 - 预期:`it_security.md` · 账号回收「两个工作日内」 → `it_security.md#4`
 - 检索:
-  1. `it_security.md#4` · 账号回收 · score=0.934971 ✅
-  2. `employee_handbook.md#5` · 离职交接 · score=0.058603
-  3. `it_security.md#2` · 设备管理 · score=0.011558
+  1. `it_security.md#4` · 账号回收 · score=0.892518 ✅
+  2. `employee_handbook.md#5` · 离职交接 · score=0.073304
+  3. `it_security.md#2` · 设备管理 · score=0.038804
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:离职账号回收
 - 结论:✅ 完全命中
@@ -318,9 +319,9 @@
 - 过滤:tenant=acme
 - 预期:`product_faq.md` · 试用期「三十天免费试用」 → `product_faq.md#0`
 - 检索:
-  1. `product_faq.md#0` · 试用期 · score=0.980812 ✅
-  2. `product_faq.md#2` · 单点登录 · score=0.024002
-  3. `product_faq.md#3` · 服务等级 · score=0.003366
+  1. `product_faq.md#0` · 试用期 · score=0.987571 ✅
+  2. `product_faq.md#2` · 单点登录 · score=0.024702
+  3. `product_faq.md#3` · 服务等级 · score=0.009027
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:企业版试用期
 - 结论:✅ 完全命中
@@ -331,9 +332,9 @@
 - 过滤:tenant=acme
 - 预期:`product_faq.md` · 数据导出「控制台导出」 → `product_faq.md#1`
 - 检索:
-  1. `product_faq.md#1` · 数据导出 · score=0.451818 ✅
-  2. `product_faq.md#2` · 单点登录 · score=0.009543
-  3. `it_security.md#2` · 设备管理 · score=0.004175
+  1. `product_faq.md#1` · 数据导出 · score=0.452510 ✅
+  2. `product_faq.md#2` · 单点登录 · score=0.009376
+  3. `it_security.md#2` · 设备管理 · score=0.004340
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:数据导出方式
 - 结论:✅ 完全命中
@@ -344,9 +345,9 @@
 - 过滤:tenant=acme
 - 预期:`product_faq.md` · 单点登录「SAML 2.0」 → `product_faq.md#2`
 - 检索:
-  1. `product_faq.md#2` · 单点登录 · score=0.919754 ✅
-  2. `it_security.md#0` · VPN 使用 · score=0.204145
-  3. `it_security.md#4` · 账号回收 · score=0.055077
+  1. `product_faq.md#2` · 单点登录 · score=0.934301 ✅
+  2. `it_security.md#0` · VPN 使用 · score=0.244699
+  3. `it_security.md#4` · 账号回收 · score=0.055753
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:SSO 支持
 - 结论:✅ 完全命中
@@ -357,9 +358,9 @@
 - 过滤:tenant=acme
 - 预期:`product_faq.md` · 服务等级「百分之九十九点九」 → `product_faq.md#3`
 - 检索:
-  1. `product_faq.md#3` · 服务等级 · score=0.488451 ✅
-  2. `it_security.md#2` · 设备管理 · score=0.003328
-  3. `product_faq.md#0` · 试用期 · score=0.003309
+  1. `product_faq.md#3` · 服务等级 · score=0.484813 ✅
+  2. `it_security.md#2` · 设备管理 · score=0.003372
+  3. `product_faq.md#0` · 试用期 · score=0.003349
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 备注:服务等级
 - 结论:✅ 完全命中
@@ -370,9 +371,9 @@
 - 过滤:tenant=acme
 - 预期:`employee_handbook.md` · 年假制度「入职满一年」 → `employee_handbook.md#0`
 - 检索:
-  1. `employee_handbook.md#0` · 年假制度 · score=0.982833 ✅
-  2. `employee_handbook.md#2` · 加班调休 · score=0.002559
-  3. `employee_handbook.md#5` · 离职交接 · score=0.001470
+  1. `employee_handbook.md#0` · 年假制度 · score=0.993309 ✅
+  2. `employee_handbook.md#5` · 离职交接 · score=0.022769
+  3. `employee_handbook.md#2` · 加班调休 · score=0.007520
 - 指标:Recall@3=1.0000 · MRR=1.0000 · NDCG@3=1.0000 · HitRate@3=1.0000
 - 权限边界:通过;无过滤对照中禁读文档最高排名 1
 - 备注:globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档
@@ -384,10 +385,10 @@
 - 过滤:tenant=acme
 - 预期:无(应拒答)
 - 检索:
-  1. `employee_handbook.md#0` · 年假制度 · score=0.000364
-  2. `product_faq.md#0` · 试用期 · score=0.000205
-  3. `product_faq.md#2` · 单点登录 · score=0.000200
-- 指标:拒答正确(最高分 0.000364 < 阈值 0.35)
+  1. `employee_handbook.md#0` · 年假制度 · score=0.000263
+  2. `product_faq.md#0` · 试用期 · score=0.000133
+  3. `product_faq.md#2` · 单点登录 · score=0.000109
+- 指标:拒答正确(最高分 0.000263 < 阈值 0.35)
 - 备注:知识库不存在的问题,验证低分兜底
 - 结论:✅ 正确拒答
 

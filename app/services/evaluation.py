@@ -608,18 +608,25 @@ def render_ablation_markdown(
         f"| 运行模式 | `{config.mode}`(各组合独立进程内重建) |",
         "| 上游并发 | `serial`(逐用例串行) |",
         ablation_repro_line(config.command),
-        "",
-        "## 消融对比",
-        "",
-        f"| 组合 | 检索配置 | Recall@{k} | MRR | NDCG@{k} | HitRate@{k} |"
-        " ΔRecall vs 基线 | ΔMRR vs 基线 | 拒答正确率 | 权限通过率 |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if baseline is not None:
+        lines.append(
+            f"| 基线参照 | {baseline.run_name}(`{baseline.command}`,"
+            f"向量来源 `{baseline.embedder}`,K={baseline.k}) |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 消融对比",
+            "",
+            f"| 组合 | 检索配置 | Recall@{k} | MRR | NDCG@{k} | HitRate@{k} |"
+            " ΔRecall vs 基线 | ΔMRR vs 基线 | 拒答正确率 | 权限通过率 |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     base_recall, base_mrr = _baseline_point(baseline)
     for label, report in runs:
-        state = format_retrieval_config(
-            report.retrieval_config or {"use_hybrid": None, "use_rerank": None}
-        )
+        state = format_retrieval_config(report.retrieval_config or {})
         delta_recall = _delta_text(report.summary.recall_at_k, base_recall)
         delta_mrr = _delta_text(report.summary.mrr, base_mrr)
         lines.append(
@@ -683,9 +690,7 @@ def _default_choice_lines(runs: list[tuple[str, EvaluationReport]]) -> str:
     if not runs:
         return "无成功运行的组合,默认组合暂不调整。"
     label, report = _primary(runs)
-    state = format_retrieval_config(
-        report.retrieval_config or {"use_hybrid": None, "use_rerank": None}
-    )
+    state = format_retrieval_config(report.retrieval_config or {})
     return (
         f"**默认组合依据**:「{label}」(k={report.k})在本数据集上"
         f"Recall={report.summary.recall_at_k:.4f} / MRR={report.summary.mrr:.4f};"

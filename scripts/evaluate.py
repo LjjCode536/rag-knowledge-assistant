@@ -171,19 +171,34 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="T06 基线 JSON 路径,用于差值表(缺省指向仓库基线报告)",
     )
     downstream = parser.add_argument_group("高级检索开关(BooleanOptionalAction)")
-    downstream.add_argument("--rewrite", action=argparse.BooleanOptionalAction, default=None)
-    downstream.add_argument(
-        "--multi-query", action=argparse.BooleanOptionalAction, default=None
-    )
-    downstream.add_argument("--hybrid", action=argparse.BooleanOptionalAction, default=None)
-    downstream.add_argument("--mmr", action=argparse.BooleanOptionalAction, default=None)
-    downstream.add_argument("--rerank", action=argparse.BooleanOptionalAction, default=None)
+    for _field, spec in _TOGGLE_SPECS.items():
+        downstream.add_argument(spec["flag"], action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument(
         "--use-app-defaults",
         action="store_true",
         help="检索开关默认沿用应用配置(需密钥的组合会做前置校验);缺省全关,T06 基线口径",
     )
     return parser.parse_args(argv)
+
+
+_TOGGLE_SPECS: dict[str, dict[str, str]] = {
+    # Settings 开关字段 → CLI 属性名与开关;快照、覆盖与组合复现命令共用,
+    # 避免清单在多处漂移。
+    "use_query_rewrite": {"attr": "rewrite", "flag": "--rewrite"},
+    "use_multi_query": {"attr": "multi_query", "flag": "--multi-query"},
+    "use_hybrid": {"attr": "hybrid", "flag": "--hybrid"},
+    "use_mmr": {"attr": "mmr", "flag": "--mmr"},
+    "use_rerank": {"attr": "rerank", "flag": "--rerank"},
+}
+_RETRIEVAL_PARAM_FIELDS = (
+    "retrieval_vector_weight",
+    "retrieval_keyword_weight",
+    "retrieval_candidate_k",
+    "retrieval_multi_query_count",
+    "retrieval_mmr_lambda",
+)
+# 需要真实上游的开关:无密钥时不得进评估(会变成静默降级数据)
+_UPSTREAM_KEYED_FIELDS = ("use_query_rewrite", "use_multi_query", "use_rerank")
 
 
 def _effective_search_toggles(
@@ -198,33 +213,17 @@ def _effective_search_toggles(
     else:
         base = {field: False for field in _TOGGLE_FIELDS}
     base.update(explicit)
-    params = {
-        key: getattr(settings, key)
-        for key in (
-            "retrieval_vector_weight",
-            "retrieval_keyword_weight",
-            "retrieval_candidate_k",
-            "retrieval_multi_query_count",
-            "retrieval_mmr_lambda",
-        )
-    }
+    params = {key: getattr(settings, key) for key in _RETRIEVAL_PARAM_FIELDS}
     snapshot = {**base, **params}
     return base, snapshot
 
 
 def _settings_updates(args: argparse.Namespace) -> dict[str, Any]:
     """显式开关 → 应用配置覆盖;None 表示沿用默认组合。"""
-    mapping = {
-        "rewrite": "use_query_rewrite",
-        "multi_query": "use_multi_query",
-        "hybrid": "use_hybrid",
-        "mmr": "use_mmr",
-        "rerank": "use_rerank",
-    }
     return {
-        field: getattr(args, name)
-        for name, field in mapping.items()
-        if getattr(args, name) is not None
+        field: getattr(args, spec["attr"])
+        for field, spec in _TOGGLE_SPECS.items()
+        if getattr(args, spec["attr"]) is not None
     }
 
 
@@ -233,13 +232,7 @@ def _retrieval_snapshot(settings: Settings, overrides: dict[str, Any]) -> dict[s
     snapshot: dict[str, Any] = {
         field: getattr(settings, field) for field in _TOGGLE_FIELDS
     }
-    for key in (
-        "retrieval_vector_weight",
-        "retrieval_keyword_weight",
-        "retrieval_candidate_k",
-        "retrieval_multi_query_count",
-        "retrieval_mmr_lambda",
-    ):
+    for key in _RETRIEVAL_PARAM_FIELDS:
         snapshot[key] = getattr(settings, key)
     snapshot.update(overrides)
     return snapshot
@@ -254,28 +247,6 @@ def _load_baseline(path: Path, *, warn: bool = True) -> EvaluationReport | None:
         if warn:
             print(f"基线报告不可读({path}):{exc}", file=sys.stderr)
         return None
-
-
-def _upstream_report_combo(
-    label: str, overrides: dict[str, bool], settings: Settings, args: argparse.Namespace
-) -> tuple[bool, str | None]:
-    """组合是否需要真实上游(LLM 重排);无密钥时注明跳过而不是悄悄降级。"""
-    if not overrides.get("use_rerank"):
-        return True, None
-    if settings.upstream_configured:
-        return True, None
-    return False, f"{label}(跳过:重排需真实上游密钥,不与其余组合静默降级混比)"
-
-
-def _upstream_report_combo(
-    label: str, overrides: dict[str, bool], settings: Settings, args: argparse.Namespace
-) -> tuple[bool, str | None]:
-    """组合是否需要真实上游(LLM 重排);无密钥时注明跳过而不是悄悄降级。"""
-    if not overrides.get("use_rerank"):
-        return True, None
-    if settings.upstream_configured:
-        return True, None
-    return False, f"{label}(跳过:重排需真实上游密钥,不与其余组合静默降级混比)"
 
 
 async def _run(
@@ -323,50 +294,49 @@ async def _run(
 async def _run_ablation(
     args: argparse.Namespace,
     dataset,
-    global_updates: dict[str, Any],
     embedder_label: str,
     combo_commands: dict[str, str],
 ) -> tuple[list[tuple[str, EvaluationReport]], list[str]]:
+    """消融矩阵 runner:每行固定全关基线 + 该行的显式开关,互不泄漏。"""
     base = get_settings()
     toggle_zero_base = {field: False for field in _TOGGLE_FIELDS}
     runs: list[tuple[str, EvaluationReport]] = []
     skipped: list[str] = []
     dataset_dir = args.dataset.resolve().parent
     for label, overrides in ABLATION_COMBOS:
-        effective = base.model_copy(update=toggle_zero_base)
-        if not overrides.get("use_rerank") or effective.upstream_configured:
-            combo_updates = {**toggle_zero_base, **overrides}
-            settings = base.model_copy(update=combo_updates)
-            combo_config = EvaluationConfig(
-                k=args.k,
-                top_k=args.top_k,
-                min_score=(
-                    args.min_score if args.min_score is not None else settings.qa_min_score
-                ),
-                chunk_strategy=ChunkingStrategy(args.strategy) if args.strategy else None,
-                chunk_size=args.chunk_size,
-                chunk_overlap=args.chunk_overlap,
-                embedder=embedder_label,
-                mode="in-process",
-                command=combo_commands[label],
-                run_name=f"{args.run_name} · {label}",
-                retrieval_config=_retrieval_snapshot(settings, overrides),
-            )
-            report = await _run_combo(
-                dataset,
-                dataset_dir=dataset_dir,
-                settings_updates=combo_updates,
-                config=combo_config,
-            )
-            runs.append((label, report))
-            print(
-                f"[{label}] Recall@{report.k}={report.summary.recall_at_k:.4f} "
-                f"MRR={report.summary.mrr:.4f}"
-            )
-        else:
+        if overrides.get("use_rerank") and not base.upstream_configured:
             skipped.append(
                 f"{label}(跳过:重排需真实上游密钥,不与替身时序静默降级混比)"
             )
+            continue
+        combo_updates = {**toggle_zero_base, **overrides}
+        settings = base.model_copy(update=combo_updates)
+        combo_config = EvaluationConfig(
+            k=args.k,
+            top_k=args.top_k,
+            min_score=(
+                args.min_score if args.min_score is not None else settings.qa_min_score
+            ),
+            chunk_strategy=ChunkingStrategy(args.strategy) if args.strategy else None,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            embedder=embedder_label,
+            mode="in-process",
+            command=combo_commands[label],
+            run_name=f"{args.run_name} · {label}",
+            retrieval_config=_retrieval_snapshot(settings, overrides),
+        )
+        report = await _run_combo(
+            dataset,
+            dataset_dir=dataset_dir,
+            settings_updates=combo_updates,
+            config=combo_config,
+        )
+        runs.append((label, report))
+        print(
+            f"[{label}] Recall@{report.k}={report.summary.recall_at_k:.4f} "
+            f"MRR={report.summary.mrr:.4f}"
+        )
     return runs, skipped
 
 
@@ -431,15 +401,11 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     effective_toggles, snapshot = _effective_search_toggles(settings, args)
     # 涉及真实上游的重排 / LLM 规划开关,无密钥时不得进入评估(替换成静默降级数据)
-    keyed_fields = {
-        ("use_rerank", "--rerank"),
-        ("use_query_rewrite", "--rewrite"),
-        ("use_multi_query", "--multi-query"),
-    }
-    for field, label in sorted(keyed_fields):
+    for field in _UPSTREAM_KEYED_FIELDS:
         if effective_toggles[field] and not settings.upstream_configured:
+            flag = _TOGGLE_SPECS[field]["flag"]
             print(
-                f"有效检索配置包含 {field}(经 {label} 或 --use-app-defaults),"
+                f"有效检索配置包含 {field}(经 {flag} 或 --use-app-defaults),"
                 "需要真实上游密钥;先设置 SILICONFLOW_API_KEY,不带病出报告",
                 file=sys.stderr,
             )
@@ -501,9 +467,8 @@ def main(argv: list[str] | None = None) -> int:
                 label: _combo_command(raw_args, overrides)
                 for label, overrides in ABLATION_COMBOS
             }
-            args.combo_commands = combo_commands
             runs, skipped = asyncio.run(
-                _run_ablation(args, dataset, global_updates, embedder, combo_commands)
+                _run_ablation(args, dataset, embedder, combo_commands)
             )
             if not runs:
                 print("消融没有任何组合成功运行", file=sys.stderr)
@@ -561,14 +526,8 @@ def _combo_command(raw_args: list[str], overrides: dict[str, bool]) -> str:
             skip_next = arg == "--baseline-report"
             continue
         parts.append(arg)
-    mapping = {
-        "use_query_rewrite": "--rewrite",
-        "use_multi_query": "--multi-query",
-        "use_hybrid": "--hybrid",
-        "use_mmr": "--mmr",
-        "use_rerank": "--rerank",
-    }
-    for field, flag in mapping.items():
+    for field, spec in _TOGGLE_SPECS.items():
+        flag = spec["flag"]
         if overrides.get(field):
             parts.append(flag)
         else:

@@ -10,12 +10,13 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 import structlog
 
 from app.core.config import Settings
+from app.domain.chunks import Chunk
 from app.domain.retrieval import (
     ChunkFilter,
     KeywordIndex,
@@ -28,6 +29,15 @@ from app.domain.retrieval import (
 from app.services.embedding import Embedder
 
 logger = structlog.get_logger("retrieval")
+
+
+@dataclass(slots=True)
+class _FusionEntry:
+    """融合累加:单切片在双通道下的加权分与固定分母权重。"""
+
+    chunk: Chunk
+    weighted: float = 0.0
+    weights: float = 0.0
 
 
 def _minmax(scores: list[float]) -> list[float]:
@@ -161,7 +171,9 @@ class RetrievalService:
                 query, variant_count=settings.retrieval_multi_query_count
             )
 
-        primary = plan.rewritten or plan.original
+        # 开关可用性独立:改写只在 use_query_rewrite 打开时消费,
+        # 多查询关闭时变体不参与 embed——一次 chat 产出不等于一次全量生效。
+        primary = (plan.rewritten if settings.use_query_rewrite else None) or plan.original
         queries = [primary]
         if settings.use_multi_query:
             queries.extend(plan.variants)
@@ -222,15 +234,15 @@ class RetrievalService:
         keyword_weight = settings.retrieval_keyword_weight if settings.use_hybrid else 0.0
         active_weight_total = vector_weight + keyword_weight
 
-        fused: dict[str, tuple[Any, float, float]] = {}  # chunk_id -> (chunk, 加权和, 常量权重和)
+        fused: dict[str, _FusionEntry] = {}
         if vector_weight > 0.0 and vector_hits:
             ordered = sorted(vector_hits.values(), key=lambda hit: hit.score, reverse=True)
             vector_ns = _minmax([hit.score for hit in ordered])
             for hit, ns in zip(ordered, vector_ns, strict=True):
-                fused[hit.chunk.chunk_id] = (
-                    hit.chunk,
-                    vector_weight * ns,
-                    active_weight_total,
+                fused[hit.chunk.chunk_id] = _FusionEntry(
+                    chunk=hit.chunk,
+                    weighted=vector_weight * ns,
+                    weights=active_weight_total,
                 )
 
         if keyword_weight > 0.0 and self._keyword_index is not None:
@@ -243,25 +255,19 @@ class RetrievalService:
                     entry = fused.get(hit.chunk.chunk_id)
                     if entry is None:
                         # 缺失通道按 0 分计入:分母恒为双通道权重和,权重稳定可比。
-                        fused[hit.chunk.chunk_id] = (
-                            hit.chunk,
-                            keyword_weight * ns,
-                            active_weight_total,
+                        entry = _FusionEntry(
+                            chunk=hit.chunk, weights=active_weight_total
                         )
-                    else:
-                        _, weighted, _ = entry
-                        fused[hit.chunk.chunk_id] = (
-                            entry[0],
-                            weighted + keyword_weight * ns,
-                            active_weight_total,
-                        )
+                        fused[hit.chunk.chunk_id] = entry
+                    entry.weighted += keyword_weight * ns
+                    entry.weights = active_weight_total
 
         candidates = [
             ScoredChunk(
-                chunk=chunk,
-                score=(weighted / weights) if weights > 0.0 else 0.0,
+                chunk=entry.chunk,
+                score=(entry.weighted / entry.weights) if entry.weights > 0.0 else 0.0,
             )
-            for chunk, weighted, weights in fused.values()
+            for entry in fused.values()
         ]
         candidates.sort(key=lambda hit: hit.score, reverse=True)
         return candidates
@@ -277,12 +283,16 @@ class RetrievalService:
         """最大边缘相关:重排 / 融合分作相关性项,候选间相似度作多样性惩罚。"""
         selected: list[ScoredChunk] = []
         remaining = list(candidates)
+        candidate_vectors: dict[str, list[float] | None] = {}
         selected_vectors: list[list[float] | None] = []
         while remaining and len(selected) < top_k:
             best_hit = None
             best_score = -math.inf
             for hit in remaining:
-                chunk_vector = self._vectors.vector_of(hit.chunk.chunk_id)
+                chunk_vector = candidate_vectors.setdefault(
+                    hit.chunk.chunk_id,
+                    self._vectors.vector_of(hit.chunk.chunk_id),
+                )
                 diversity_penalty = max(
                     (
                         _cosine_between(chunk_vector, selected_vector)
@@ -296,7 +306,7 @@ class RetrievalService:
             assert best_hit is not None
             selected.append(best_hit)
             remaining.remove(best_hit)
-            selected_vectors.append(self._vectors.vector_of(best_hit.chunk.chunk_id))
+            selected_vectors.append(candidate_vectors[best_hit.chunk.chunk_id])
         return selected
 
     def _log_completed(

@@ -11,7 +11,7 @@ import threading
 from collections.abc import Sequence
 
 from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, ScoredChunk
+from app.domain.retrieval import ChunkFilter, ScoredChunk, matches_chunk_filter
 
 
 class InMemoryVectorStore:
@@ -55,7 +55,7 @@ class InMemoryVectorStore:
                 (chunk, stored)
                 for entries in self._entries.values()
                 for chunk, stored in entries
-                if _matches(chunk, constraints)
+                if matches_chunk_filter(chunk, constraints)
             ]
         scored = [
             ScoredChunk(chunk=chunk, score=_cosine(vector, stored))
@@ -72,10 +72,6 @@ class InMemoryVectorStore:
                     if chunk.chunk_id == chunk_id:
                         return list(stored)
         return None
-
-
-def _matches(chunk: Chunk, constraints: dict[str, str]) -> bool:
-    return all(getattr(chunk, field) == value for field, value in constraints.items())
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:

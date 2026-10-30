@@ -2832,8 +2832,8 @@
         "cases_total": 26,
         "summary": {
           "recall_at_k": 1.0,
-          "mrr": 0.972222,
-          "ndcg_at_k": 0.979167,
+          "mrr": 0.979167,
+          "ndcg_at_k": 0.984622,
           "hit_rate": 1.0,
           "cases": 24
         },
@@ -2903,8 +2903,8 @@
           },
           "security": {
             "recall_at_k": 1.0,
-            "mrr": 0.777778,
-            "ndcg_at_k": 0.833333,
+            "mrr": 0.833333,
+            "ndcg_at_k": 0.876977,
             "hit_rate": 1.0,
             "cases": 3
           }
@@ -2997,21 +2997,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "已发货退款",
-                "score": 0.979702
+                "score": 0.979548
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.522215
+                "score": 0.520186
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 0.006252
+                "score": 0.006063
               }
             ],
             "recall_at_k": 1.0,
@@ -3046,21 +3046,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "物流异常",
-                "score": 0.895163
+                "score": 0.89639
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.032972
+                "score": 0.034078
               },
               {
                 "document": "after_sales.md",
                 "index": 1,
                 "rank": 3,
                 "title": "已发货退款",
-                "score": 0.014891
+                "score": 0.014939
               }
             ],
             "recall_at_k": 1.0,
@@ -3095,7 +3095,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "企业发票",
-                "score": 0.994152
+                "score": 0.994078
               },
               {
                 "document": "employee_handbook.md",
@@ -3109,7 +3109,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.004238
+                "score": 0.004362
               }
             ],
             "recall_at_k": 1.0,
@@ -3339,21 +3339,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "病假申请",
-                "score": 0.155092
+                "score": 0.15084
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.003004
+                "score": 0.002944
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.001608
+                "score": 0.001607
               }
             ],
             "recall_at_k": 1.0,
@@ -3388,21 +3388,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "加班调休",
-                "score": 0.664953
+                "score": 0.663979
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 2,
                 "title": "年假制度",
-                "score": 0.03004
+                "score": 0.029669
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.00498
+                "score": 0.005023
               }
             ],
             "recall_at_k": 1.0,
@@ -3437,7 +3437,7 @@
                 "index": 5,
                 "rank": 1,
                 "title": "离职交接",
-                "score": 0.896202
+                "score": 0.896014
               },
               {
                 "document": "it_security.md",
@@ -3451,7 +3451,7 @@
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.000787
+                "score": 0.000786
               }
             ],
             "recall_at_k": 1.0,
@@ -3486,7 +3486,7 @@
                 "index": 4,
                 "rank": 1,
                 "title": "培训预算",
-                "score": 0.055829
+                "score": 0.055617
               },
               {
                 "document": "product_faq.md",
@@ -3500,7 +3500,7 @@
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.000443
+                "score": 0.000457
               }
             ],
             "recall_at_k": 1.0,
@@ -3590,14 +3590,14 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.305263
+                "score": 0.301865
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.026443
+                "score": 0.025553
               },
               {
                 "document": "finance_invoice.md",
@@ -3639,7 +3639,7 @@
                 "index": 1,
                 "rank": 1,
                 "title": "付款账期",
-                "score": 0.785094
+                "score": 0.78404
               },
               {
                 "document": "after_sales.md",
@@ -3688,21 +3688,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "VPN 使用",
-                "score": 0.521319
+                "score": 0.51922
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.040529
+                "score": 0.040452
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 0.035845
+                "score": 0.035706
               }
             ],
             "recall_at_k": 1.0,
@@ -3737,26 +3737,26 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.002659
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 2,
-                "title": "试用期",
-                "score": 0.002193
+                "score": 0.002598
               },
               {
                 "document": "it_security.md",
                 "index": 1,
-                "rank": 3,
+                "rank": 2,
                 "title": "密码策略",
-                "score": 0.00209
+                "score": 0.002193
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 3,
+                "title": "试用期",
+                "score": 0.002131
               }
             ],
             "recall_at_k": 1.0,
-            "mrr": 0.333333,
-            "ndcg_at_k": 0.5,
+            "mrr": 0.5,
+            "ndcg_at_k": 0.63093,
             "hit_rate": 1.0,
             "refusal_ok": null,
             "permission_ok": null,
@@ -3786,21 +3786,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "设备管理",
-                "score": 0.909665
+                "score": 0.910641
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.048314
+                "score": 0.048411
               },
               {
                 "document": "product_faq.md",
                 "index": 1,
                 "rank": 3,
                 "title": "数据导出",
-                "score": 0.028827
+                "score": 0.028159
               }
             ],
             "recall_at_k": 1.0,
@@ -3884,14 +3884,14 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.332977
+                "score": 0.328865
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.002203
+                "score": 0.002201
               },
               {
                 "document": "product_faq.md",
@@ -3982,21 +3982,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.52975
+                "score": 0.524125
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.000958
+                "score": 0.000968
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.000876
+                "score": 0.000905
               }
             ],
             "recall_at_k": 1.0,
@@ -4031,21 +4031,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.940693
+                "score": 0.941525
               },
               {
                 "document": "it_security.md",
                 "index": 0,
                 "rank": 2,
                 "title": "VPN 使用",
-                "score": 0.275883
+                "score": 0.276752
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.118632
+                "score": 0.116825
               }
             ],
             "recall_at_k": 1.0,
@@ -4087,7 +4087,7 @@
                 "index": 0,
                 "rank": 2,
                 "title": "试用期",
-                "score": 0.002582
+                "score": 0.002559
               },
               {
                 "document": "it_security.md",
@@ -4129,7 +4129,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.98662
+                "score": 0.986373
               },
               {
                 "document": "employee_handbook.md",
@@ -4231,8 +4231,8 @@
         "cases_total": 26,
         "summary": {
           "recall_at_k": 1.0,
-          "mrr": 0.979167,
-          "ndcg_at_k": 0.984622,
+          "mrr": 0.972222,
+          "ndcg_at_k": 0.979167,
           "hit_rate": 1.0,
           "cases": 24
         },
@@ -4302,8 +4302,8 @@
           },
           "security": {
             "recall_at_k": 1.0,
-            "mrr": 0.833333,
-            "ndcg_at_k": 0.876977,
+            "mrr": 0.777778,
+            "ndcg_at_k": 0.833333,
             "hit_rate": 1.0,
             "cases": 3
           }
@@ -4347,21 +4347,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "未发货退款",
-                "score": 0.965452
+                "score": 0.965242
               },
               {
                 "document": "after_sales.md",
                 "index": 1,
                 "rank": 2,
                 "title": "已发货退款",
-                "score": 0.685726
+                "score": 0.685632
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 0.013174
+                "score": 0.013341
               }
             ],
             "recall_at_k": 1.0,
@@ -4396,21 +4396,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "已发货退款",
-                "score": 0.979548
+                "score": 0.979628
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.520186
+                "score": 0.523175
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 0.006063
+                "score": 0.006351
               }
             ],
             "recall_at_k": 1.0,
@@ -4445,21 +4445,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "物流异常",
-                "score": 0.89639
+                "score": 0.894847
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.033431
+                "score": 0.032972
               },
               {
                 "document": "after_sales.md",
                 "index": 1,
                 "rank": 3,
                 "title": "已发货退款",
-                "score": 0.015039
+                "score": 0.014891
               }
             ],
             "recall_at_k": 1.0,
@@ -4494,21 +4494,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "企业发票",
-                "score": 0.994119
+                "score": 0.994039
               },
               {
                 "document": "employee_handbook.md",
                 "index": 3,
                 "rank": 2,
                 "title": "差旅报销",
-                "score": 0.007313
+                "score": 0.007329
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.004362
+                "score": 0.004299
               }
             ],
             "recall_at_k": 1.0,
@@ -4557,7 +4557,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "加班调休",
-                "score": 0.046561
+                "score": 0.046373
               }
             ],
             "recall_at_k": 1.0,
@@ -4592,21 +4592,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.995462
+                "score": 0.995381
               },
               {
                 "document": "finance_invoice.md",
                 "index": 0,
                 "rank": 2,
                 "title": "企业发票",
-                "score": 0.061893
+                "score": 0.060917
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.057145
+                "score": 0.053703
               }
             ],
             "recall_at_k": 1.0,
@@ -4689,14 +4689,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.000314
+                "score": 0.000307
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 2,
                 "title": "年假制度",
-                "score": 0.000152
+                "score": 0.000151
               },
               {
                 "document": "product_faq.md",
@@ -4745,7 +4745,7 @@
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.002944
+                "score": 0.003004
               },
               {
                 "document": "employee_handbook.md",
@@ -4787,21 +4787,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "加班调休",
-                "score": 0.665643
+                "score": 0.664953
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 2,
                 "title": "年假制度",
-                "score": 0.030239
+                "score": 0.030711
               },
               {
                 "document": "employee_handbook.md",
-                "index": 5,
+                "index": 1,
                 "rank": 3,
-                "title": "离职交接",
-                "score": 0.004907
+                "title": "病假申请",
+                "score": 0.00514
               }
             ],
             "recall_at_k": 1.0,
@@ -4836,21 +4836,21 @@
                 "index": 5,
                 "rank": 1,
                 "title": "离职交接",
-                "score": 0.896355
+                "score": 0.896202
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.001233
+                "score": 0.001259
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.00082
+                "score": 0.000787
               }
             ],
             "recall_at_k": 1.0,
@@ -4892,14 +4892,14 @@
                 "index": 0,
                 "rank": 2,
                 "title": "试用期",
-                "score": 0.000518
+                "score": 0.000532
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.000443
+                "score": 0.000448
               }
             ],
             "recall_at_k": 1.0,
@@ -4940,21 +4940,21 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.976486
+                "score": 0.976622
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.961981
+                "score": 0.962261
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.011725
+                "score": 0.011699
               }
             ],
             "recall_at_k": 1.0,
@@ -5003,7 +5003,7 @@
                 "index": 1,
                 "rank": 3,
                 "title": "付款账期",
-                "score": 0.023798
+                "score": 0.023388
               }
             ],
             "recall_at_k": 1.0,
@@ -5038,7 +5038,7 @@
                 "index": 1,
                 "rank": 1,
                 "title": "付款账期",
-                "score": 0.78404
+                "score": 0.784037
               },
               {
                 "document": "after_sales.md",
@@ -5052,7 +5052,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "物流异常",
-                "score": 0.002809
+                "score": 0.002836
               }
             ],
             "recall_at_k": 1.0,
@@ -5136,26 +5136,26 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.002598
-              },
-              {
-                "document": "it_security.md",
-                "index": 1,
-                "rank": 2,
-                "title": "密码策略",
-                "score": 0.002228
+                "score": 0.002659
               },
               {
                 "document": "product_faq.md",
                 "index": 0,
-                "rank": 3,
+                "rank": 2,
                 "title": "试用期",
-                "score": 0.002131
+                "score": 0.002193
+              },
+              {
+                "document": "it_security.md",
+                "index": 1,
+                "rank": 3,
+                "title": "密码策略",
+                "score": 0.00209
               }
             ],
             "recall_at_k": 1.0,
-            "mrr": 0.5,
-            "ndcg_at_k": 0.63093,
+            "mrr": 0.333333,
+            "ndcg_at_k": 0.5,
             "hit_rate": 1.0,
             "refusal_ok": null,
             "permission_ok": null,
@@ -5185,14 +5185,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "设备管理",
-                "score": 0.910641
+                "score": 0.911109
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.048411
+                "score": 0.048207
               },
               {
                 "document": "product_faq.md",
@@ -5234,21 +5234,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "安全事件",
-                "score": 0.231727
+                "score": 0.234482
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.013935
+                "score": 0.014104
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.005306
+                "score": 0.005027
               }
             ],
             "recall_at_k": 1.0,
@@ -5283,14 +5283,14 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.326958
+                "score": 0.328865
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.002203
+                "score": 0.002163
               },
               {
                 "document": "product_faq.md",
@@ -5332,21 +5332,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "试用期",
-                "score": 0.967269
+                "score": 0.966749
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.014324
+                "score": 0.014091
               },
               {
                 "document": "product_faq.md",
                 "index": 3,
                 "rank": 3,
                 "title": "服务等级",
-                "score": 0.009807
+                "score": 0.009795
               }
             ],
             "recall_at_k": 1.0,
@@ -5381,21 +5381,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.52578
+                "score": 0.52537
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.000968
+                "score": 0.000993
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.00089
+                "score": 0.000885
               }
             ],
             "recall_at_k": 1.0,
@@ -5430,21 +5430,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.94158
+                "score": 0.941525
               },
               {
                 "document": "it_security.md",
                 "index": 0,
                 "rank": 2,
                 "title": "VPN 使用",
-                "score": 0.273254
+                "score": 0.276752
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.119153
+                "score": 0.116825
               }
             ],
             "recall_at_k": 1.0,
@@ -5479,7 +5479,7 @@
                 "index": 3,
                 "rank": 1,
                 "title": "服务等级",
-                "score": 0.511572
+                "score": 0.515108
               },
               {
                 "document": "product_faq.md",
@@ -5493,7 +5493,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.002397
+                "score": 0.002469
               }
             ],
             "recall_at_k": 1.0,
@@ -5577,14 +5577,14 @@
                 "index": 0,
                 "rank": 2,
                 "title": "试用期",
-                "score": 0.000302
+                "score": 0.00031
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 0.000222
+                "score": 0.000217
               }
             ],
             "recall_at_k": null,
@@ -5746,14 +5746,14 @@
                 "index": 0,
                 "rank": 1,
                 "title": "未发货退款",
-                "score": 0.965242
+                "score": 0.965594
               },
               {
                 "document": "after_sales.md",
                 "index": 1,
                 "rank": 2,
                 "title": "已发货退款",
-                "score": 0.685632
+                "score": 0.684328
               },
               {
                 "document": "finance_invoice.md",
@@ -5795,21 +5795,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "已发货退款",
-                "score": 0.979593
+                "score": 0.979548
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.518352
+                "score": 0.520186
               },
               {
                 "document": "finance_invoice.md",
                 "index": 1,
                 "rank": 3,
                 "title": "付款账期",
-                "score": 0.003317
+                "score": 0.003341
               }
             ],
             "recall_at_k": 1.0,
@@ -5844,21 +5844,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "物流异常",
-                "score": 0.895719
+                "score": 0.89639
               },
               {
                 "document": "product_faq.md",
                 "index": 3,
                 "rank": 2,
                 "title": "服务等级",
-                "score": 0.001592
+                "score": 0.001591
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 0.000621
+                "score": 0.000626
               }
             ],
             "recall_at_k": 1.0,
@@ -5893,7 +5893,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "企业发票",
-                "score": 0.994152
+                "score": 0.994078
               },
               {
                 "document": "it_security.md",
@@ -5942,7 +5942,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.993597
+                "score": 0.99345
               },
               {
                 "document": "employee_handbook.md",
@@ -5956,7 +5956,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "加班调休",
-                "score": 0.04678
+                "score": 0.046818
               }
             ],
             "recall_at_k": 1.0,
@@ -5991,7 +5991,7 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.995381
+                "score": 0.995362
               },
               {
                 "document": "it_security.md",
@@ -6005,7 +6005,7 @@
                 "index": 0,
                 "rank": 3,
                 "title": "企业发票",
-                "score": 0.060917
+                "score": 0.061365
               }
             ],
             "recall_at_k": 1.0,
@@ -6046,21 +6046,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.975739
+                "score": 0.976155
               },
               {
                 "document": "it_security.md",
                 "index": 1,
                 "rank": 2,
                 "title": "密码策略",
-                "score": 0.000141
+                "score": 0.000144
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 4.6e-05
+                "score": 4.7e-05
               }
             ],
             "recall_at_k": 1.0,
@@ -6088,14 +6088,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.000309
+                "score": 0.000312
               },
               {
                 "document": "after_sales.md",
                 "index": 2,
                 "rank": 2,
                 "title": "物流异常",
-                "score": 3.1e-05
+                "score": 3.2e-05
               },
               {
                 "document": "finance_invoice.md",
@@ -6137,14 +6137,14 @@
                 "index": 1,
                 "rank": 1,
                 "title": "病假申请",
-                "score": 0.15084
+                "score": 0.153942
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.000117
+                "score": 0.000115
               },
               {
                 "document": "after_sales.md",
@@ -6186,14 +6186,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "加班调休",
-                "score": 0.663979
+                "score": 0.664953
               },
               {
                 "document": "it_security.md",
                 "index": 1,
                 "rank": 2,
                 "title": "密码策略",
-                "score": 0.000264
+                "score": 0.00026
               },
               {
                 "document": "finance_invoice.md",
@@ -6235,14 +6235,14 @@
                 "index": 5,
                 "rank": 1,
                 "title": "离职交接",
-                "score": 0.896014
+                "score": 0.896202
               },
               {
                 "document": "product_faq.md",
                 "index": 1,
                 "rank": 2,
                 "title": "数据导出",
-                "score": 0.000142
+                "score": 0.000145
               },
               {
                 "document": "it_security.md",
@@ -6284,7 +6284,7 @@
                 "index": 4,
                 "rank": 1,
                 "title": "培训预算",
-                "score": 0.055829
+                "score": 0.054907
               },
               {
                 "document": "product_faq.md",
@@ -6353,7 +6353,7 @@
                 "index": 1,
                 "rank": 3,
                 "title": "数据导出",
-                "score": 0.000566
+                "score": 0.000582
               }
             ],
             "recall_at_k": 1.0,
@@ -6388,14 +6388,14 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.301879
+                "score": 0.305263
               },
               {
                 "document": "finance_invoice.md",
                 "index": 1,
                 "rank": 2,
                 "title": "付款账期",
-                "score": 0.023798
+                "score": 0.023388
               },
               {
                 "document": "product_faq.md",
@@ -6437,14 +6437,14 @@
                 "index": 1,
                 "rank": 1,
                 "title": "付款账期",
-                "score": 0.784037
+                "score": 0.780626
               },
               {
                 "document": "after_sales.md",
                 "index": 2,
                 "rank": 2,
                 "title": "物流异常",
-                "score": 0.002836
+                "score": 0.002821
               },
               {
                 "document": "product_faq.md",
@@ -6486,21 +6486,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "VPN 使用",
-                "score": 0.521839
+                "score": 0.518446
               },
               {
                 "document": "product_faq.md",
                 "index": 1,
                 "rank": 2,
                 "title": "数据导出",
-                "score": 0.005319
+                "score": 0.005315
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 6.6e-05
+                "score": 6.7e-05
               }
             ],
             "recall_at_k": 1.0,
@@ -6584,7 +6584,7 @@
                 "index": 2,
                 "rank": 1,
                 "title": "设备管理",
-                "score": 0.911109
+                "score": 0.910641
               },
               {
                 "document": "product_faq.md",
@@ -6598,7 +6598,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 0.048207
+                "score": 0.048411
               }
             ],
             "recall_at_k": 1.0,
@@ -6633,21 +6633,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "安全事件",
-                "score": 0.231727
+                "score": 0.234482
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.013935
+                "score": 0.014104
               },
               {
                 "document": "product_faq.md",
                 "index": 1,
                 "rank": 3,
                 "title": "数据导出",
-                "score": 0.000136
+                "score": 0.000134
               }
             ],
             "recall_at_k": 1.0,
@@ -6682,7 +6682,7 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.328865
+                "score": 0.323914
               },
               {
                 "document": "product_faq.md",
@@ -6696,7 +6696,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.002163
+                "score": 0.002203
               }
             ],
             "recall_at_k": 1.0,
@@ -6731,7 +6731,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "试用期",
-                "score": 0.967415
+                "score": 0.967269
               },
               {
                 "document": "it_security.md",
@@ -6745,7 +6745,7 @@
                 "index": 2,
                 "rank": 3,
                 "title": "物流异常",
-                "score": 5.4e-05
+                "score": 5e-05
               }
             ],
             "recall_at_k": 1.0,
@@ -6787,7 +6787,7 @@
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.000993
+                "score": 0.000968
               },
               {
                 "document": "it_security.md",
@@ -6829,21 +6829,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.941525
+                "score": 0.940092
               },
               {
                 "document": "it_security.md",
                 "index": 0,
                 "rank": 2,
                 "title": "VPN 使用",
-                "score": 0.276752
+                "score": 0.277713
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.116825
+                "score": 0.117443
               }
             ],
             "recall_at_k": 1.0,
@@ -6885,7 +6885,7 @@
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.000689
+                "score": 0.000671
               },
               {
                 "document": "after_sales.md",
@@ -6927,14 +6927,14 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.986221
+                "score": 0.986373
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 2,
                 "title": "病假申请",
-                "score": 0.003406
+                "score": 0.003501
               },
               {
                 "document": "finance_invoice.md",
@@ -6969,7 +6969,7 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.000329
+                "score": 0.000339
               },
               {
                 "document": "employee_handbook.md",
@@ -7208,7 +7208,7 @@
                 "index": 3,
                 "rank": 3,
                 "title": "差旅报销",
-                "score": 0.012831
+                "score": 0.012731
               }
             ],
             "recall_at_k": 1.0,
@@ -7243,14 +7243,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "物流异常",
-                "score": 0.985771
+                "score": 0.985507
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.024546
+                "score": 0.02558
               },
               {
                 "document": "after_sales.md",
@@ -7292,14 +7292,14 @@
                 "index": 0,
                 "rank": 1,
                 "title": "企业发票",
-                "score": 0.994341
+                "score": 0.994271
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.079092
+                "score": 0.078006
               },
               {
                 "document": "it_security.md",
@@ -7341,21 +7341,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.989538
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.07028
+                "score": 0.905363
               },
               {
                 "document": "employee_handbook.md",
                 "index": 2,
-                "rank": 3,
+                "rank": 2,
                 "title": "加班调休",
-                "score": 0.049427
+                "score": 0.009679
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 3,
+                "title": "病假申请",
+                "score": 0.002021
               }
             ],
             "recall_at_k": 1.0,
@@ -7390,21 +7390,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.984812
+                "score": 0.993903
               },
               {
                 "document": "finance_invoice.md",
                 "index": 0,
                 "rank": 2,
                 "title": "企业发票",
-                "score": 0.037985
+                "score": 0.04858
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.005399
+                "score": 0.01681
               }
             ],
             "recall_at_k": 1.0,
@@ -7445,21 +7445,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.992498
+                "score": 0.99262
               },
               {
                 "document": "finance_invoice.md",
                 "index": 0,
                 "rank": 2,
                 "title": "企业发票",
-                "score": 0.033565
+                "score": 0.032733
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.023054
+                "score": 0.023722
               }
             ],
             "recall_at_k": 1.0,
@@ -7484,24 +7484,24 @@
             "retrieved": [
               {
                 "document": "product_faq.md",
-                "index": 2,
+                "index": 0,
                 "rank": 1,
+                "title": "试用期",
+                "score": 0.000277
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 2,
                 "title": "单点登录",
                 "score": 0.000277
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
-                "rank": 2,
+                "rank": 3,
                 "title": "年假制度",
                 "score": 0.000271
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 3,
-                "title": "试用期",
-                "score": 0.000268
               }
             ],
             "recall_at_k": null,
@@ -7536,21 +7536,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "病假申请",
-                "score": 0.276008
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.010419
+                "score": 0.087176
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
-                "rank": 3,
+                "rank": 2,
                 "title": "年假制度",
-                "score": 0.003689
+                "score": 0.006136
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 3,
+                "title": "离职交接",
+                "score": 0.002441
               }
             ],
             "recall_at_k": 1.0,
@@ -7585,21 +7585,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "加班调休",
-                "score": 0.65792
+                "score": 0.537693
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 2,
                 "title": "年假制度",
-                "score": 0.048528
+                "score": 0.071587
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.01696
+                "score": 0.014547
               }
             ],
             "recall_at_k": 1.0,
@@ -7634,21 +7634,21 @@
                 "index": 5,
                 "rank": 1,
                 "title": "离职交接",
-                "score": 0.896526
+                "score": 0.88907
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.026381
+                "score": 0.019621
               },
               {
                 "document": "employee_handbook.md",
-                "index": 0,
+                "index": 1,
                 "rank": 3,
-                "title": "年假制度",
-                "score": 0.002889
+                "title": "病假申请",
+                "score": 0.002081
               }
             ],
             "recall_at_k": 1.0,
@@ -7683,7 +7683,7 @@
                 "index": 4,
                 "rank": 1,
                 "title": "培训预算",
-                "score": 0.043049
+                "score": 0.04263
               },
               {
                 "document": "product_faq.md",
@@ -7691,1405 +7691,6 @@
                 "rank": 2,
                 "title": "试用期",
                 "score": 0.001055
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 3,
-                "title": "年假制度",
-                "score": 0.000223
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "培训预算额度"
-          },
-          {
-            "case_id": "offboarding_cross_doc",
-            "question": "离职要提前多久申请,账号什么时候回收？",
-            "category": "hr",
-            "difficulty": "hard",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "anchor": "提前三十天",
-                "title": "离职交接"
-              },
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "anchor": "两个工作日内",
-                "title": "账号回收"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 1,
-                "title": "账号回收",
-                "score": 0.995634
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.990497
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 3,
-                "title": "年假制度",
-                "score": 0.071222
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "跨文档多切片用例:同时覆盖离职通知期与账号回收"
-          },
-          {
-            "case_id": "reimbursement_deadline",
-            "question": "报销单最晚什么时候交？",
-            "category": "reimbursement",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "anchor": "十五个工作日内",
-                "title": "差旅报销"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "rank": 1,
-                "title": "差旅报销",
-                "score": 0.609892
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.052087
-              },
-              {
-                "document": "finance_invoice.md",
-                "index": 1,
-                "rank": 3,
-                "title": "付款账期",
-                "score": 0.015621
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "报销提交时限"
-          },
-          {
-            "case_id": "invoice_payment_terms",
-            "question": "给供应商打款要等多少天？",
-            "category": "invoice",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "finance_invoice.md",
-                "index": 1,
-                "anchor": "验收合格后的三十天",
-                "title": "付款账期"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "finance_invoice.md",
-                "index": 1,
-                "rank": 1,
-                "title": "付款账期",
-                "score": 0.911982
-              },
-              {
-                "document": "after_sales.md",
-                "index": 2,
-                "rank": 2,
-                "title": "物流异常",
-                "score": 0.002646
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 3,
-                "title": "离职交接",
-                "score": 0.002198
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "供应商付款账期"
-          },
-          {
-            "case_id": "it_vpn_access",
-            "question": "在家办公怎么连公司系统？",
-            "category": "it",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "it_security.md",
-                "index": 0,
-                "anchor": "公司 VPN",
-                "title": "VPN 使用"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 0,
-                "rank": 1,
-                "title": "VPN 使用",
-                "score": 0.736661
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 2,
-                "title": "单点登录",
-                "score": 0.00899
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 3,
-                "title": "设备管理",
-                "score": 0.007267
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "远程接入方式"
-          },
-          {
-            "case_id": "security_password_rotation",
-            "question": "登录口令有有效期吗？",
-            "category": "security",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "it_security.md",
-                "index": 1,
-                "anchor": "每九十天",
-                "title": "密码策略"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 1,
-                "rank": 1,
-                "title": "密码策略",
-                "score": 0.062277
-              },
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 2,
-                "title": "账号回收",
-                "score": 0.012617
-              },
-              {
-                "document": "product_faq.md",
-                "index": 1,
-                "rank": 3,
-                "title": "数据导出",
-                "score": 0.009039
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "密码轮换周期"
-          },
-          {
-            "case_id": "security_device_software",
-            "question": "公司电脑能自己装软件吗？",
-            "category": "security",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "anchor": "不得安装未经审批的软件",
-                "title": "设备管理"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 1,
-                "title": "设备管理",
-                "score": 0.90369
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 2,
-                "title": "单点登录",
-                "score": 0.103691
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 4,
-                "rank": 3,
-                "title": "培训预算",
-                "score": 0.020867
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "终端软件管理"
-          },
-          {
-            "case_id": "security_incident_report",
-            "question": "怀疑邮箱被盗了第一步做什么？",
-            "category": "security",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "it_security.md",
-                "index": 3,
-                "anchor": "立即断开网络",
-                "title": "安全事件"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 3,
-                "rank": 1,
-                "title": "安全事件",
-                "score": 0.425068
-              },
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 2,
-                "title": "账号回收",
-                "score": 0.026366
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 3,
-                "title": "设备管理",
-                "score": 0.004404
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "安全事件响应"
-          },
-          {
-            "case_id": "it_account_recovery",
-            "question": "人走了系统权限什么时候停？",
-            "category": "it",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "anchor": "两个工作日内",
-                "title": "账号回收"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 1,
-                "title": "账号回收",
-                "score": 0.902802
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.038259
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 3,
-                "title": "设备管理",
-                "score": 0.019509
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "离职账号回收"
-          },
-          {
-            "case_id": "product_trial",
-            "question": "企业版能免费用多久？",
-            "category": "product",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "anchor": "三十天免费试用",
-                "title": "试用期"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 1,
-                "title": "试用期",
-                "score": 0.980812
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 2,
-                "title": "单点登录",
-                "score": 0.024002
-              },
-              {
-                "document": "product_faq.md",
-                "index": 3,
-                "rank": 3,
-                "title": "服务等级",
-                "score": 0.003366
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "企业版试用期"
-          },
-          {
-            "case_id": "product_data_export",
-            "question": "怎么把知识库里的东西备份下来？",
-            "category": "product",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "product_faq.md",
-                "index": 1,
-                "anchor": "控制台导出",
-                "title": "数据导出"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "product_faq.md",
-                "index": 1,
-                "rank": 1,
-                "title": "数据导出",
-                "score": 0.457054
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 2,
-                "title": "单点登录",
-                "score": 0.009376
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 3,
-                "title": "设备管理",
-                "score": 0.00434
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "数据导出方式"
-          },
-          {
-            "case_id": "product_sso",
-            "question": "能用公司账号登录系统吗？",
-            "category": "product",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "anchor": "SAML 2.0",
-                "title": "单点登录"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 1,
-                "title": "单点登录",
-                "score": 0.93463
-              },
-              {
-                "document": "it_security.md",
-                "index": 0,
-                "rank": 2,
-                "title": "VPN 使用",
-                "score": 0.244699
-              },
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 3,
-                "title": "账号回收",
-                "score": 0.055753
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "SSO 支持"
-          },
-          {
-            "case_id": "product_sla",
-            "question": "标准版会不会经常宕机？",
-            "category": "product",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "product_faq.md",
-                "index": 3,
-                "anchor": "百分之九十九点九",
-                "title": "服务等级"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "product_faq.md",
-                "index": 3,
-                "rank": 1,
-                "title": "服务等级",
-                "score": 0.486521
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 2,
-                "title": "设备管理",
-                "score": 0.003376
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 3,
-                "title": "试用期",
-                "score": 0.003309
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "服务等级"
-          },
-          {
-            "case_id": "permission_tenant_isolation",
-            "question": "入职多久可以申请年假,满半年还是满一年？",
-            "category": "permission",
-            "difficulty": "hard",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "anchor": "入职满一年",
-                "title": "年假制度"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 1,
-                "title": "年假制度",
-                "score": 0.982892
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 2,
-                "rank": 2,
-                "title": "加班调休",
-                "score": 0.002601
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 3,
-                "title": "离职交接",
-                "score": 0.00142
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": true,
-            "forbidden_best_rank": 1,
-            "notes": "globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档"
-          },
-          {
-            "case_id": "unknown_gym",
-            "question": "公司健身房开放到几点？",
-            "category": "unknown",
-            "difficulty": "medium",
-            "should_refuse": true,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 1,
-                "title": "年假制度",
-                "score": 0.000257
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 2,
-                "title": "试用期",
-                "score": 0.000133
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 3,
-                "title": "单点登录",
-                "score": 0.000106
-              }
-            ],
-            "recall_at_k": null,
-            "mrr": null,
-            "ndcg_at_k": null,
-            "hit_rate": null,
-            "refusal_ok": true,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "知识库不存在的问题,验证低分兜底"
-          }
-        ]
-      }
-    },
-    {
-      "label": "G 混合+重排+多查询扩展",
-      "report": {
-        "schema_version": 1,
-        "run_name": "T07 高级检索 · G 混合+重排+多查询扩展",
-        "dataset_name": "enterprise-kb-retrieval",
-        "dataset_version": 1,
-        "k": 3,
-        "top_k": 3,
-        "min_score": 0.35,
-        "chunk_strategy": "table_aware",
-        "chunk_size": 500,
-        "chunk_overlap": 50,
-        "embedder": "deterministic-lexical-1024d",
-        "mode": "in-process",
-        "command": "uv run python scripts/evaluate.py --iteration 0002 --slug t07-advanced-retrieval --run-name T07 高级检索 --no-rewrite --multi-query --hybrid --no-mmr --rerank",
-        "retrieval_config": {
-          "use_query_rewrite": false,
-          "use_multi_query": true,
-          "use_hybrid": true,
-          "use_mmr": false,
-          "use_rerank": true,
-          "retrieval_vector_weight": 0.7,
-          "retrieval_keyword_weight": 0.3,
-          "retrieval_candidate_k": 30,
-          "retrieval_multi_query_count": 3,
-          "retrieval_mmr_lambda": 0.7
-        },
-        "cases_total": 26,
-        "summary": {
-          "recall_at_k": 1.0,
-          "mrr": 1.0,
-          "ndcg_at_k": 1.0,
-          "hit_rate": 1.0,
-          "cases": 24
-        },
-        "categories": {
-          "hr": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 3
-          },
-          "invoice": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 2
-          },
-          "it": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 2
-          },
-          "leave": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 3
-          },
-          "logistics": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 1
-          },
-          "permission": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 1
-          },
-          "product": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 4
-          },
-          "refund": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 2
-          },
-          "reimbursement": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 3
-          },
-          "security": {
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "cases": 3
-          }
-        },
-        "category_case_counts": {
-          "refund": 2,
-          "logistics": 1,
-          "invoice": 2,
-          "leave": 3,
-          "reimbursement": 3,
-          "unknown": 2,
-          "hr": 3,
-          "it": 2,
-          "security": 3,
-          "product": 4,
-          "permission": 1
-        },
-        "refusal_accuracy": 1.0,
-        "permission_pass_rate": 1.0,
-        "case_results": [
-          {
-            "case_id": "refund_unshipped",
-            "question": "没发货可以退钱吗？",
-            "category": "refund",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "after_sales.md",
-                "index": 0,
-                "anchor": "订单尚未发货时",
-                "title": "未发货退款"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "after_sales.md",
-                "index": 0,
-                "rank": 1,
-                "title": "未发货退款",
-                "score": 0.990406
-              },
-              {
-                "document": "after_sales.md",
-                "index": 1,
-                "rank": 2,
-                "title": "已发货退款",
-                "score": 0.875731
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 3,
-                "title": "离职交接",
-                "score": 0.026938
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_refund_001:口语化退款问题"
-          },
-          {
-            "case_id": "refund_shipped",
-            "question": "已经发货了还能直接退款吗？",
-            "category": "refund",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "after_sales.md",
-                "index": 1,
-                "anchor": "订单已经发货后",
-                "title": "已发货退款"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "after_sales.md",
-                "index": 1,
-                "rank": 1,
-                "title": "已发货退款",
-                "score": 0.988904
-              },
-              {
-                "document": "after_sales.md",
-                "index": 0,
-                "rank": 2,
-                "title": "未发货退款",
-                "score": 0.832854
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "rank": 3,
-                "title": "差旅报销",
-                "score": 0.012831
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_refund_002:已发货退款规则"
-          },
-          {
-            "case_id": "logistics_delay",
-            "question": "快递超过七天没动怎么办？",
-            "category": "logistics",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "after_sales.md",
-                "index": 2,
-                "anchor": "超过七天没有更新",
-                "title": "物流异常"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "after_sales.md",
-                "index": 2,
-                "rank": 1,
-                "title": "物流异常",
-                "score": 0.985771
-              },
-              {
-                "document": "after_sales.md",
-                "index": 0,
-                "rank": 2,
-                "title": "未发货退款",
-                "score": 0.02475
-              },
-              {
-                "document": "after_sales.md",
-                "index": 1,
-                "rank": 3,
-                "title": "已发货退款",
-                "score": 0.007006
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_logistics_001:物流异常"
-          },
-          {
-            "case_id": "invoice_enterprise",
-            "question": "企业发票需要填写什么？",
-            "category": "invoice",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "finance_invoice.md",
-                "index": 0,
-                "anchor": "公司名称、纳税人识别号",
-                "title": "企业发票"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "finance_invoice.md",
-                "index": 0,
-                "rank": 1,
-                "title": "企业发票",
-                "score": 0.994314
-              },
-              {
-                "document": "it_security.md",
-                "index": 2,
-                "rank": 2,
-                "title": "设备管理",
-                "score": 0.079347
-              },
-              {
-                "document": "it_security.md",
-                "index": 1,
-                "rank": 3,
-                "title": "密码策略",
-                "score": 0.005436
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_invoice_001:发票规则"
-          },
-          {
-            "case_id": "leave_annual_tenure",
-            "question": "入职多久可以申请年假？",
-            "category": "leave",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "anchor": "入职满一年",
-                "title": "年假制度"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 1,
-                "title": "年假制度",
-                "score": 0.905189
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 2,
-                "rank": 2,
-                "title": "加班调休",
-                "score": 0.009696
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "rank": 3,
-                "title": "病假申请",
-                "score": 0.002018
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_leave_001:HR 年假制度"
-          },
-          {
-            "case_id": "reimbursement_materials",
-            "question": "差旅报销要提交哪些材料？",
-            "category": "reimbursement",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "anchor": "发票、行程单和审批记录",
-                "title": "差旅报销"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "rank": 1,
-                "title": "差旅报销",
-                "score": 0.993832
-              },
-              {
-                "document": "finance_invoice.md",
-                "index": 0,
-                "rank": 2,
-                "title": "企业发票",
-                "score": 0.04723
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "rank": 3,
-                "title": "病假申请",
-                "score": 0.01646
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_reimbursement_001:财务报销制度"
-          },
-          {
-            "case_id": "reimbursement_full_process",
-            "question": "差旅报销要交哪些材料,最晚什么时候交？",
-            "category": "reimbursement",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "anchor": "发票、行程单和审批记录",
-                "title": "差旅报销"
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "anchor": "十五个工作日内",
-                "title": "差旅报销"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 3,
-                "rank": 1,
-                "title": "差旅报销",
-                "score": 0.992547
-              },
-              {
-                "document": "finance_invoice.md",
-                "index": 0,
-                "rank": 2,
-                "title": "企业发票",
-                "score": 0.032416
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "rank": 3,
-                "title": "病假申请",
-                "score": 0.023533
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "同文档多切片用例:同时覆盖材料与提交时限"
-          },
-          {
-            "case_id": "unknown_shuttle",
-            "question": "公司班车路线是什么？",
-            "category": "unknown",
-            "difficulty": "medium",
-            "should_refuse": true,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [],
-            "retrieved": [
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 1,
-                "title": "单点登录",
-                "score": 0.000277
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 2,
-                "title": "年假制度",
-                "score": 0.000271
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 3,
-                "title": "试用期",
-                "score": 0.000267
-              }
-            ],
-            "recall_at_k": null,
-            "mrr": null,
-            "ndcg_at_k": null,
-            "hit_rate": null,
-            "refusal_ok": true,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底"
-          },
-          {
-            "case_id": "leave_sick_report",
-            "question": "身体不舒服请假要提前通知谁？",
-            "category": "leave",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "anchor": "当天上午十点前",
-                "title": "病假申请"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "rank": 1,
-                "title": "病假申请",
-                "score": 0.281449
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.010419
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 3,
-                "title": "年假制度",
-                "score": 0.00392
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "病假报备时限"
-          },
-          {
-            "case_id": "leave_overtime_comp",
-            "question": "调休有效期是几个月？",
-            "category": "leave",
-            "difficulty": "medium",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 2,
-                "anchor": "三个月内",
-                "title": "加班调休"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 2,
-                "rank": 1,
-                "title": "加班调休",
-                "score": 0.65792
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 2,
-                "title": "年假制度",
-                "score": 0.048528
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 1,
-                "rank": 3,
-                "title": "病假申请",
-                "score": 0.01696
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "调休有效期"
-          },
-          {
-            "case_id": "hr_resignation_notice",
-            "question": "辞职要提前几天说？",
-            "category": "hr",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "anchor": "提前三十天",
-                "title": "离职交接"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 1,
-                "title": "离职交接",
-                "score": 0.896526
-              },
-              {
-                "document": "it_security.md",
-                "index": 4,
-                "rank": 2,
-                "title": "账号回收",
-                "score": 0.02627
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 0,
-                "rank": 3,
-                "title": "年假制度",
-                "score": 0.002889
-              }
-            ],
-            "recall_at_k": 1.0,
-            "mrr": 1.0,
-            "ndcg_at_k": 1.0,
-            "hit_rate": 1.0,
-            "refusal_ok": null,
-            "permission_ok": null,
-            "forbidden_best_rank": null,
-            "notes": "离职通知期"
-          },
-          {
-            "case_id": "hr_training_budget",
-            "question": "公司给个人学习经费吗？额度多少？",
-            "category": "hr",
-            "difficulty": "easy",
-            "should_refuse": false,
-            "filters": {
-              "tenant": "acme"
-            },
-            "expected": [
-              {
-                "document": "employee_handbook.md",
-                "index": 4,
-                "anchor": "五千元",
-                "title": "培训预算"
-              }
-            ],
-            "retrieved": [
-              {
-                "document": "employee_handbook.md",
-                "index": 4,
-                "rank": 1,
-                "title": "培训预算",
-                "score": 0.042626
-              },
-              {
-                "document": "product_faq.md",
-                "index": 0,
-                "rank": 2,
-                "title": "试用期",
-                "score": 0.001059
               },
               {
                 "document": "employee_handbook.md",
@@ -9186,21 +7787,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.468314
+                "score": 0.609892
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.048411
+                "score": 0.052087
               },
               {
-                "document": "employee_handbook.md",
+                "document": "finance_invoice.md",
                 "index": 1,
                 "rank": 3,
-                "title": "病假申请",
-                "score": 0.012964
+                "title": "付款账期",
+                "score": 0.015223
               }
             ],
             "recall_at_k": 1.0,
@@ -9242,14 +7843,14 @@
                 "index": 2,
                 "rank": 2,
                 "title": "物流异常",
-                "score": 0.002669
+                "score": 0.002685
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 3,
                 "title": "离职交接",
-                "score": 0.00222
+                "score": 0.002198
               }
             ],
             "recall_at_k": 1.0,
@@ -9291,7 +7892,7 @@
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.00892
+                "score": 0.008913
               },
               {
                 "document": "it_security.md",
@@ -9333,21 +7934,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "密码策略",
-                "score": 0.063241
+                "score": 0.031625
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.012562
+                "score": 0.02898
               },
               {
                 "document": "product_faq.md",
-                "index": 1,
+                "index": 2,
                 "rank": 3,
-                "title": "数据导出",
-                "score": 0.009233
+                "title": "单点登录",
+                "score": 0.009672
               }
             ],
             "recall_at_k": 1.0,
@@ -9382,21 +7983,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "设备管理",
-                "score": 0.902611
+                "score": 0.90369
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.102074
+                "score": 0.103691
               },
               {
                 "document": "employee_handbook.md",
                 "index": 4,
                 "rank": 3,
                 "title": "培训预算",
-                "score": 0.020013
+                "score": 0.020867
               }
             ],
             "recall_at_k": 1.0,
@@ -9431,21 +8032,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "安全事件",
-                "score": 0.771205
+                "score": 0.770295
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.01781
+                "score": 0.017827
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.005595
+                "score": 0.00548
               }
             ],
             "recall_at_k": 1.0,
@@ -9480,21 +8081,21 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.902218
+                "score": 0.900585
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.038504
+                "score": 0.03291
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.019509
+                "score": 0.022376
               }
             ],
             "recall_at_k": 1.0,
@@ -9543,7 +8144,7 @@
                 "index": 3,
                 "rank": 3,
                 "title": "服务等级",
-                "score": 0.003218
+                "score": 0.003306
               }
             ],
             "recall_at_k": 1.0,
@@ -9578,14 +8179,14 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.445492
+                "score": 0.451818
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.008937
+                "score": 0.009543
               },
               {
                 "document": "it_security.md",
@@ -9641,7 +8242,7 @@
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.055077
+                "score": 0.05494
               }
             ],
             "recall_at_k": 1.0,
@@ -9676,21 +8277,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "服务等级",
-                "score": 0.772133
+                "score": 0.48104
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.002492
+                "score": 0.003367
               },
               {
                 "document": "product_faq.md",
                 "index": 0,
                 "rank": 3,
                 "title": "试用期",
-                "score": 0.000897
+                "score": 0.003323
               }
             ],
             "recall_at_k": 1.0,
@@ -9725,21 +8326,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.995686
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 5,
-                "rank": 2,
-                "title": "离职交接",
-                "score": 0.004032
+                "score": 0.98777
               },
               {
                 "document": "employee_handbook.md",
                 "index": 2,
-                "rank": 3,
+                "rank": 2,
                 "title": "加班调休",
-                "score": 0.002853
+                "score": 0.003029
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 3,
+                "title": "离职交接",
+                "score": 0.002672
               }
             ],
             "recall_at_k": 1.0,
@@ -9767,21 +8368,1420 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.000357
+                "score": 0.000257
               },
               {
                 "document": "product_faq.md",
                 "index": 0,
                 "rank": 2,
                 "title": "试用期",
-                "score": 0.000205
+                "score": 0.000133
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 0.000202
+                "score": 0.000106
+              }
+            ],
+            "recall_at_k": null,
+            "mrr": null,
+            "ndcg_at_k": null,
+            "hit_rate": null,
+            "refusal_ok": true,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "知识库不存在的问题,验证低分兜底"
+          }
+        ]
+      }
+    },
+    {
+      "label": "G 混合+重排+多查询扩展",
+      "report": {
+        "schema_version": 1,
+        "run_name": "T07 高级检索 · G 混合+重排+多查询扩展",
+        "dataset_name": "enterprise-kb-retrieval",
+        "dataset_version": 1,
+        "k": 3,
+        "top_k": 3,
+        "min_score": 0.35,
+        "chunk_strategy": "table_aware",
+        "chunk_size": 500,
+        "chunk_overlap": 50,
+        "embedder": "deterministic-lexical-1024d",
+        "mode": "in-process",
+        "command": "uv run python scripts/evaluate.py --iteration 0002 --slug t07-advanced-retrieval --run-name T07 高级检索 --no-rewrite --multi-query --hybrid --no-mmr --rerank",
+        "retrieval_config": {
+          "use_query_rewrite": false,
+          "use_multi_query": true,
+          "use_hybrid": true,
+          "use_mmr": false,
+          "use_rerank": true,
+          "retrieval_vector_weight": 0.7,
+          "retrieval_keyword_weight": 0.3,
+          "retrieval_candidate_k": 30,
+          "retrieval_multi_query_count": 3,
+          "retrieval_mmr_lambda": 0.7
+        },
+        "cases_total": 26,
+        "summary": {
+          "recall_at_k": 1.0,
+          "mrr": 0.979167,
+          "ndcg_at_k": 0.984622,
+          "hit_rate": 1.0,
+          "cases": 24
+        },
+        "categories": {
+          "hr": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 3
+          },
+          "invoice": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 2
+          },
+          "it": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 2
+          },
+          "leave": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 3
+          },
+          "logistics": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 1
+          },
+          "permission": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 1
+          },
+          "product": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 4
+          },
+          "refund": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 2
+          },
+          "reimbursement": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "cases": 3
+          },
+          "security": {
+            "recall_at_k": 1.0,
+            "mrr": 0.833333,
+            "ndcg_at_k": 0.876977,
+            "hit_rate": 1.0,
+            "cases": 3
+          }
+        },
+        "category_case_counts": {
+          "refund": 2,
+          "logistics": 1,
+          "invoice": 2,
+          "leave": 3,
+          "reimbursement": 3,
+          "unknown": 2,
+          "hr": 3,
+          "it": 2,
+          "security": 3,
+          "product": 4,
+          "permission": 1
+        },
+        "refusal_accuracy": 1.0,
+        "permission_pass_rate": 1.0,
+        "case_results": [
+          {
+            "case_id": "refund_unshipped",
+            "question": "没发货可以退钱吗？",
+            "category": "refund",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "after_sales.md",
+                "index": 0,
+                "anchor": "订单尚未发货时",
+                "title": "未发货退款"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "after_sales.md",
+                "index": 0,
+                "rank": 1,
+                "title": "未发货退款",
+                "score": 0.966867
+              },
+              {
+                "document": "after_sales.md",
+                "index": 1,
+                "rank": 2,
+                "title": "已发货退款",
+                "score": 0.685726
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 3,
+                "title": "离职交接",
+                "score": 0.013341
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_refund_001:口语化退款问题"
+          },
+          {
+            "case_id": "refund_shipped",
+            "question": "已经发货了还能直接退款吗？",
+            "category": "refund",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "after_sales.md",
+                "index": 1,
+                "anchor": "订单已经发货后",
+                "title": "已发货退款"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "after_sales.md",
+                "index": 1,
+                "rank": 1,
+                "title": "已发货退款",
+                "score": 0.979593
+              },
+              {
+                "document": "after_sales.md",
+                "index": 0,
+                "rank": 2,
+                "title": "未发货退款",
+                "score": 0.518352
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 3,
+                "title": "离职交接",
+                "score": 0.006349
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_refund_002:已发货退款规则"
+          },
+          {
+            "case_id": "logistics_delay",
+            "question": "快递超过七天没动怎么办？",
+            "category": "logistics",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "after_sales.md",
+                "index": 2,
+                "anchor": "超过七天没有更新",
+                "title": "物流异常"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "after_sales.md",
+                "index": 2,
+                "rank": 1,
+                "title": "物流异常",
+                "score": 0.894847
+              },
+              {
+                "document": "after_sales.md",
+                "index": 0,
+                "rank": 2,
+                "title": "未发货退款",
+                "score": 0.032972
+              },
+              {
+                "document": "after_sales.md",
+                "index": 1,
+                "rank": 3,
+                "title": "已发货退款",
+                "score": 0.014891
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_logistics_001:物流异常"
+          },
+          {
+            "case_id": "invoice_enterprise",
+            "question": "企业发票需要填写什么？",
+            "category": "invoice",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "finance_invoice.md",
+                "index": 0,
+                "anchor": "公司名称、纳税人识别号",
+                "title": "企业发票"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "finance_invoice.md",
+                "index": 0,
+                "rank": 1,
+                "title": "企业发票",
+                "score": 0.994152
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "rank": 2,
+                "title": "差旅报销",
+                "score": 0.00742
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 3,
+                "title": "设备管理",
+                "score": 0.004299
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_invoice_001:发票规则"
+          },
+          {
+            "case_id": "leave_annual_tenure",
+            "question": "入职多久可以申请年假？",
+            "category": "leave",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "anchor": "入职满一年",
+                "title": "年假制度"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 1,
+                "title": "年假制度",
+                "score": 0.993597
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 2,
+                "title": "病假申请",
+                "score": 0.05241
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 2,
+                "rank": 3,
+                "title": "加班调休",
+                "score": 0.04678
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_leave_001:HR 年假制度"
+          },
+          {
+            "case_id": "reimbursement_materials",
+            "question": "差旅报销要提交哪些材料？",
+            "category": "reimbursement",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "anchor": "发票、行程单和审批记录",
+                "title": "差旅报销"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "rank": 1,
+                "title": "差旅报销",
+                "score": 0.995405
+              },
+              {
+                "document": "finance_invoice.md",
+                "index": 0,
+                "rank": 2,
+                "title": "企业发票",
+                "score": 0.060716
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 3,
+                "title": "病假申请",
+                "score": 0.057145
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_reimbursement_001:财务报销制度"
+          },
+          {
+            "case_id": "reimbursement_full_process",
+            "question": "差旅报销要交哪些材料,最晚什么时候交？",
+            "category": "reimbursement",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "anchor": "发票、行程单和审批记录",
+                "title": "差旅报销"
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "anchor": "十五个工作日内",
+                "title": "差旅报销"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "rank": 1,
+                "title": "差旅报销",
+                "score": 0.976188
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 2,
+                "title": "病假申请",
+                "score": 0.018731
+              },
+              {
+                "document": "finance_invoice.md",
+                "index": 0,
+                "rank": 3,
+                "title": "企业发票",
+                "score": 0.016148
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "同文档多切片用例:同时覆盖材料与提交时限"
+          },
+          {
+            "case_id": "unknown_shuttle",
+            "question": "公司班车路线是什么？",
+            "category": "unknown",
+            "difficulty": "medium",
+            "should_refuse": true,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 1,
+                "title": "单点登录",
+                "score": 0.000307
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 2,
+                "title": "年假制度",
+                "score": 0.000151
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 3,
+                "title": "试用期",
+                "score": 0.000141
+              }
+            ],
+            "recall_at_k": null,
+            "mrr": null,
+            "ndcg_at_k": null,
+            "hit_rate": null,
+            "refusal_ok": true,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底"
+          },
+          {
+            "case_id": "leave_sick_report",
+            "question": "身体不舒服请假要提前通知谁？",
+            "category": "leave",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "anchor": "当天上午十点前",
+                "title": "病假申请"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 1,
+                "title": "病假申请",
+                "score": 0.153556
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 2,
+                "title": "离职交接",
+                "score": 0.002944
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 3,
+                "title": "年假制度",
+                "score": 0.001587
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "病假报备时限"
+          },
+          {
+            "case_id": "leave_overtime_comp",
+            "question": "调休有效期是几个月？",
+            "category": "leave",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 2,
+                "anchor": "三个月内",
+                "title": "加班调休"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 2,
+                "rank": 1,
+                "title": "加班调休",
+                "score": 0.663979
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 2,
+                "title": "年假制度",
+                "score": 0.030239
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 3,
+                "title": "离职交接",
+                "score": 0.004907
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "调休有效期"
+          },
+          {
+            "case_id": "hr_resignation_notice",
+            "question": "辞职要提前几天说？",
+            "category": "hr",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "anchor": "提前三十天",
+                "title": "离职交接"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 1,
+                "title": "离职交接",
+                "score": 0.896202
+              },
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 2,
+                "title": "账号回收",
+                "score": 0.001257
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 1,
+                "rank": 3,
+                "title": "病假申请",
+                "score": 0.000786
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "离职通知期"
+          },
+          {
+            "case_id": "hr_training_budget",
+            "question": "公司给个人学习经费吗？额度多少？",
+            "category": "hr",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 4,
+                "anchor": "五千元",
+                "title": "培训预算"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 4,
+                "rank": 1,
+                "title": "培训预算",
+                "score": 0.055829
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 2,
+                "title": "试用期",
+                "score": 0.000549
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 3,
+                "title": "年假制度",
+                "score": 0.000443
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "培训预算额度"
+          },
+          {
+            "case_id": "offboarding_cross_doc",
+            "question": "离职要提前多久申请,账号什么时候回收？",
+            "category": "hr",
+            "difficulty": "hard",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "anchor": "提前三十天",
+                "title": "离职交接"
+              },
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "anchor": "两个工作日内",
+                "title": "账号回收"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 1,
+                "title": "账号回收",
+                "score": 0.976531
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 2,
+                "title": "离职交接",
+                "score": 0.961773
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 3,
+                "title": "年假制度",
+                "score": 0.011579
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "跨文档多切片用例:同时覆盖离职通知期与账号回收"
+          },
+          {
+            "case_id": "reimbursement_deadline",
+            "question": "报销单最晚什么时候交？",
+            "category": "reimbursement",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "anchor": "十五个工作日内",
+                "title": "差旅报销"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 3,
+                "rank": 1,
+                "title": "差旅报销",
+                "score": 0.305263
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 2,
+                "title": "离职交接",
+                "score": 0.026569
+              },
+              {
+                "document": "finance_invoice.md",
+                "index": 1,
+                "rank": 3,
+                "title": "付款账期",
+                "score": 0.023388
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "报销提交时限"
+          },
+          {
+            "case_id": "invoice_payment_terms",
+            "question": "给供应商打款要等多少天？",
+            "category": "invoice",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "finance_invoice.md",
+                "index": 1,
+                "anchor": "验收合格后的三十天",
+                "title": "付款账期"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "finance_invoice.md",
+                "index": 1,
+                "rank": 1,
+                "title": "付款账期",
+                "score": 0.785094
+              },
+              {
+                "document": "after_sales.md",
+                "index": 0,
+                "rank": 2,
+                "title": "未发货退款",
+                "score": 0.002881
+              },
+              {
+                "document": "after_sales.md",
+                "index": 2,
+                "rank": 3,
+                "title": "物流异常",
+                "score": 0.002809
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "供应商付款账期"
+          },
+          {
+            "case_id": "it_vpn_access",
+            "question": "在家办公怎么连公司系统？",
+            "category": "it",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "it_security.md",
+                "index": 0,
+                "anchor": "公司 VPN",
+                "title": "VPN 使用"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "it_security.md",
+                "index": 0,
+                "rank": 1,
+                "title": "VPN 使用",
+                "score": 0.521839
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 2,
+                "title": "设备管理",
+                "score": 0.040529
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 3,
+                "title": "单点登录",
+                "score": 0.035845
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "远程接入方式"
+          },
+          {
+            "case_id": "security_password_rotation",
+            "question": "登录口令有有效期吗？",
+            "category": "security",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "it_security.md",
+                "index": 1,
+                "anchor": "每九十天",
+                "title": "密码策略"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 1,
+                "rank": 1,
+                "title": "数据导出",
+                "score": 0.002619
+              },
+              {
+                "document": "it_security.md",
+                "index": 1,
+                "rank": 2,
+                "title": "密码策略",
+                "score": 0.002195
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 3,
+                "title": "试用期",
+                "score": 0.002145
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 0.5,
+            "ndcg_at_k": 0.63093,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "密码轮换周期"
+          },
+          {
+            "case_id": "security_device_software",
+            "question": "公司电脑能自己装软件吗？",
+            "category": "security",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "anchor": "不得安装未经审批的软件",
+                "title": "设备管理"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 1,
+                "title": "设备管理",
+                "score": 0.910641
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 2,
+                "title": "单点登录",
+                "score": 0.048411
+              },
+              {
+                "document": "product_faq.md",
+                "index": 1,
+                "rank": 3,
+                "title": "数据导出",
+                "score": 0.028827
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "终端软件管理"
+          },
+          {
+            "case_id": "security_incident_report",
+            "question": "怀疑邮箱被盗了第一步做什么？",
+            "category": "security",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "it_security.md",
+                "index": 3,
+                "anchor": "立即断开网络",
+                "title": "安全事件"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "it_security.md",
+                "index": 3,
+                "rank": 1,
+                "title": "安全事件",
+                "score": 0.231727
+              },
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 2,
+                "title": "账号回收",
+                "score": 0.013935
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 3,
+                "title": "设备管理",
+                "score": 0.005264
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "安全事件响应"
+          },
+          {
+            "case_id": "it_account_recovery",
+            "question": "人走了系统权限什么时候停？",
+            "category": "it",
+            "difficulty": "medium",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "anchor": "两个工作日内",
+                "title": "账号回收"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 1,
+                "title": "账号回收",
+                "score": 0.326958
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 2,
+                "title": "设备管理",
+                "score": 0.002163
+              },
+              {
+                "document": "product_faq.md",
+                "index": 1,
+                "rank": 3,
+                "title": "数据导出",
+                "score": 0.001436
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "离职账号回收"
+          },
+          {
+            "case_id": "product_trial",
+            "question": "企业版能免费用多久？",
+            "category": "product",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "anchor": "三十天免费试用",
+                "title": "试用期"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 1,
+                "title": "试用期",
+                "score": 0.967269
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 2,
+                "title": "单点登录",
+                "score": 0.014324
+              },
+              {
+                "document": "product_faq.md",
+                "index": 3,
+                "rank": 3,
+                "title": "服务等级",
+                "score": 0.009744
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "企业版试用期"
+          },
+          {
+            "case_id": "product_data_export",
+            "question": "怎么把知识库里的东西备份下来？",
+            "category": "product",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "product_faq.md",
+                "index": 1,
+                "anchor": "控制台导出",
+                "title": "数据导出"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 1,
+                "rank": 1,
+                "title": "数据导出",
+                "score": 0.52537
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 2,
+                "title": "设备管理",
+                "score": 0.000993
+              },
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 3,
+                "title": "账号回收",
+                "score": 0.000897
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "数据导出方式"
+          },
+          {
+            "case_id": "product_sso",
+            "question": "能用公司账号登录系统吗？",
+            "category": "product",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "anchor": "SAML 2.0",
+                "title": "单点登录"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 1,
+                "title": "单点登录",
+                "score": 0.941525
+              },
+              {
+                "document": "it_security.md",
+                "index": 0,
+                "rank": 2,
+                "title": "VPN 使用",
+                "score": 0.276752
+              },
+              {
+                "document": "it_security.md",
+                "index": 4,
+                "rank": 3,
+                "title": "账号回收",
+                "score": 0.116825
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "SSO 支持"
+          },
+          {
+            "case_id": "product_sla",
+            "question": "标准版会不会经常宕机？",
+            "category": "product",
+            "difficulty": "easy",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "product_faq.md",
+                "index": 3,
+                "anchor": "百分之九十九点九",
+                "title": "服务等级"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "product_faq.md",
+                "index": 3,
+                "rank": 1,
+                "title": "服务等级",
+                "score": 0.515108
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 2,
+                "title": "试用期",
+                "score": 0.002559
+              },
+              {
+                "document": "it_security.md",
+                "index": 2,
+                "rank": 3,
+                "title": "设备管理",
+                "score": 0.002524
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": null,
+            "forbidden_best_rank": null,
+            "notes": "服务等级"
+          },
+          {
+            "case_id": "permission_tenant_isolation",
+            "question": "入职多久可以申请年假,满半年还是满一年？",
+            "category": "permission",
+            "difficulty": "hard",
+            "should_refuse": false,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "anchor": "入职满一年",
+                "title": "年假制度"
+              }
+            ],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 1,
+                "title": "年假制度",
+                "score": 0.9865
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 5,
+                "rank": 2,
+                "title": "离职交接",
+                "score": 0.011578
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 2,
+                "rank": 3,
+                "title": "加班调休",
+                "score": 0.005175
+              }
+            ],
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "hit_rate": 1.0,
+            "refusal_ok": null,
+            "permission_ok": true,
+            "forbidden_best_rank": 1,
+            "notes": "globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档"
+          },
+          {
+            "case_id": "unknown_gym",
+            "question": "公司健身房开放到几点？",
+            "category": "unknown",
+            "difficulty": "medium",
+            "should_refuse": true,
+            "filters": {
+              "tenant": "acme"
+            },
+            "expected": [],
+            "retrieved": [
+              {
+                "document": "employee_handbook.md",
+                "index": 0,
+                "rank": 1,
+                "title": "年假制度",
+                "score": 0.000339
+              },
+              {
+                "document": "product_faq.md",
+                "index": 0,
+                "rank": 2,
+                "title": "试用期",
+                "score": 0.000302
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 3,
+                "title": "单点登录",
+                "score": 0.000226
               }
             ],
             "recall_at_k": null,
@@ -9943,21 +9943,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "未发货退款",
-                "score": 0.996609
+                "score": 0.990613
               },
               {
                 "document": "after_sales.md",
                 "index": 1,
                 "rank": 2,
                 "title": "已发货退款",
-                "score": 0.932571
+                "score": 0.877992
               },
               {
-                "document": "after_sales.md",
-                "index": 2,
+                "document": "employee_handbook.md",
+                "index": 5,
                 "rank": 3,
-                "title": "物流异常",
-                "score": 0.010328
+                "title": "离职交接",
+                "score": 0.026056
               }
             ],
             "recall_at_k": 1.0,
@@ -9992,21 +9992,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "已发货退款",
-                "score": 0.988717
+                "score": 0.988835
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.835518
+                "score": 0.834517
               },
               {
                 "document": "employee_handbook.md",
                 "index": 3,
                 "rank": 3,
                 "title": "差旅报销",
-                "score": 0.012831
+                "score": 0.012731
               }
             ],
             "recall_at_k": 1.0,
@@ -10041,14 +10041,14 @@
                 "index": 2,
                 "rank": 1,
                 "title": "物流异常",
-                "score": 0.985632
+                "score": 0.985771
               },
               {
                 "document": "after_sales.md",
                 "index": 0,
                 "rank": 2,
                 "title": "未发货退款",
-                "score": 0.024777
+                "score": 0.02558
               },
               {
                 "document": "after_sales.md",
@@ -10090,14 +10090,14 @@
                 "index": 0,
                 "rank": 1,
                 "title": "企业发票",
-                "score": 0.99432
+                "score": 0.994377
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.079605
+                "score": 0.07838
               },
               {
                 "document": "it_security.md",
@@ -10139,21 +10139,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.90553
+                "score": 0.954811
               },
               {
                 "document": "employee_handbook.md",
                 "index": 2,
                 "rank": 2,
                 "title": "加班调休",
-                "score": 0.009679
+                "score": 0.033309
               },
               {
                 "document": "employee_handbook.md",
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.002021
+                "score": 0.011227
               }
             ],
             "recall_at_k": 1.0,
@@ -10243,21 +10243,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.992547
+                "score": 0.990349
               },
               {
                 "document": "finance_invoice.md",
                 "index": 0,
                 "rank": 2,
                 "title": "企业发票",
-                "score": 0.032416
+                "score": 0.022598
               },
               {
                 "document": "employee_handbook.md",
-                "index": 1,
+                "index": 5,
                 "rank": 3,
-                "title": "病假申请",
-                "score": 0.023536
+                "title": "离职交接",
+                "score": 0.011573
               }
             ],
             "recall_at_k": 1.0,
@@ -10281,25 +10281,25 @@
             "expected": [],
             "retrieved": [
               {
-                "document": "employee_handbook.md",
+                "document": "product_faq.md",
                 "index": 0,
                 "rank": 1,
-                "title": "年假制度",
-                "score": 0.000105
+                "title": "试用期",
+                "score": 0.000277
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 9.7e-05
+                "score": 0.000277
               },
               {
-                "document": "product_faq.md",
+                "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
-                "title": "试用期",
-                "score": 6.9e-05
+                "title": "年假制度",
+                "score": 0.000271
               }
             ],
             "recall_at_k": null,
@@ -10334,21 +10334,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "病假申请",
-                "score": 0.279752
+                "score": 0.277394
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.009918
+                "score": 0.010003
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.003767
+                "score": 0.003689
               }
             ],
             "recall_at_k": 1.0,
@@ -10383,7 +10383,7 @@
                 "index": 2,
                 "rank": 1,
                 "title": "加班调休",
-                "score": 0.658083
+                "score": 0.65292
               },
               {
                 "document": "employee_handbook.md",
@@ -10397,7 +10397,7 @@
                 "index": 1,
                 "rank": 3,
                 "title": "病假申请",
-                "score": 0.017104
+                "score": 0.016808
               }
             ],
             "recall_at_k": 1.0,
@@ -10432,21 +10432,21 @@
                 "index": 5,
                 "rank": 1,
                 "title": "离职交接",
-                "score": 0.897369
+                "score": 0.91911
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.026381
+                "score": 0.006257
               },
               {
                 "document": "employee_handbook.md",
-                "index": 0,
+                "index": 1,
                 "rank": 3,
-                "title": "年假制度",
-                "score": 0.002889
+                "title": "病假申请",
+                "score": 0.00282
               }
             ],
             "recall_at_k": 1.0,
@@ -10536,21 +10536,21 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.995071
+                "score": 0.996636
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.986098
+                "score": 0.990107
               },
               {
                 "document": "employee_handbook.md",
                 "index": 0,
                 "rank": 3,
                 "title": "年假制度",
-                "score": 0.025522
+                "score": 0.078513
               }
             ],
             "recall_at_k": 1.0,
@@ -10585,21 +10585,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "差旅报销",
-                "score": 0.609892
+                "score": 0.609855
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.052087
+                "score": 0.052777
               },
               {
                 "document": "finance_invoice.md",
                 "index": 1,
                 "rank": 3,
                 "title": "付款账期",
-                "score": 0.015621
+                "score": 0.015223
               }
             ],
             "recall_at_k": 1.0,
@@ -10634,21 +10634,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "付款账期",
-                "score": 0.911982
+                "score": 0.848699
               },
               {
                 "document": "after_sales.md",
                 "index": 2,
                 "rank": 2,
                 "title": "物流异常",
-                "score": 0.002646
+                "score": 0.004421
               },
               {
-                "document": "employee_handbook.md",
-                "index": 5,
+                "document": "after_sales.md",
+                "index": 0,
                 "rank": 3,
-                "title": "离职交接",
-                "score": 0.002198
+                "title": "未发货退款",
+                "score": 0.003426
               }
             ],
             "recall_at_k": 1.0,
@@ -10683,21 +10683,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "VPN 使用",
-                "score": 0.73937
-              },
-              {
-                "document": "product_faq.md",
-                "index": 2,
-                "rank": 2,
-                "title": "单点登录",
-                "score": 0.00892
+                "score": 0.668204
               },
               {
                 "document": "it_security.md",
                 "index": 2,
-                "rank": 3,
+                "rank": 2,
                 "title": "设备管理",
-                "score": 0.007405
+                "score": 0.008188
+              },
+              {
+                "document": "product_faq.md",
+                "index": 2,
+                "rank": 3,
+                "title": "单点登录",
+                "score": 0.00766
               }
             ],
             "recall_at_k": 1.0,
@@ -10781,21 +10781,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "设备管理",
-                "score": 0.90369
+                "score": 0.902611
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.100909
+                "score": 0.102074
               },
               {
                 "document": "employee_handbook.md",
                 "index": 4,
                 "rank": 3,
                 "title": "培训预算",
-                "score": 0.020867
+                "score": 0.020013
               }
             ],
             "recall_at_k": 1.0,
@@ -10830,21 +10830,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "安全事件",
-                "score": 0.49897
+                "score": 0.509888
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 2,
                 "title": "账号回收",
-                "score": 0.101133
+                "score": 0.03931
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.052955
+                "score": 0.009043
               }
             ],
             "recall_at_k": 1.0,
@@ -10879,21 +10879,21 @@
                 "index": 4,
                 "rank": 1,
                 "title": "账号回收",
-                "score": 0.934971
+                "score": 0.892518
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
                 "rank": 2,
                 "title": "离职交接",
-                "score": 0.058603
+                "score": 0.073304
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.011558
+                "score": 0.038804
               }
             ],
             "recall_at_k": 1.0,
@@ -10928,21 +10928,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "试用期",
-                "score": 0.980812
+                "score": 0.987571
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.024002
+                "score": 0.024702
               },
               {
                 "document": "product_faq.md",
                 "index": 3,
                 "rank": 3,
                 "title": "服务等级",
-                "score": 0.003366
+                "score": 0.009027
               }
             ],
             "recall_at_k": 1.0,
@@ -10977,21 +10977,21 @@
                 "index": 1,
                 "rank": 1,
                 "title": "数据导出",
-                "score": 0.451818
+                "score": 0.45251
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 2,
                 "title": "单点登录",
-                "score": 0.009543
+                "score": 0.009376
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 3,
                 "title": "设备管理",
-                "score": 0.004175
+                "score": 0.00434
               }
             ],
             "recall_at_k": 1.0,
@@ -11026,21 +11026,21 @@
                 "index": 2,
                 "rank": 1,
                 "title": "单点登录",
-                "score": 0.919754
+                "score": 0.934301
               },
               {
                 "document": "it_security.md",
                 "index": 0,
                 "rank": 2,
                 "title": "VPN 使用",
-                "score": 0.204145
+                "score": 0.244699
               },
               {
                 "document": "it_security.md",
                 "index": 4,
                 "rank": 3,
                 "title": "账号回收",
-                "score": 0.055077
+                "score": 0.055753
               }
             ],
             "recall_at_k": 1.0,
@@ -11075,21 +11075,21 @@
                 "index": 3,
                 "rank": 1,
                 "title": "服务等级",
-                "score": 0.488451
+                "score": 0.484813
               },
               {
                 "document": "it_security.md",
                 "index": 2,
                 "rank": 2,
                 "title": "设备管理",
-                "score": 0.003328
+                "score": 0.003372
               },
               {
                 "document": "product_faq.md",
                 "index": 0,
                 "rank": 3,
                 "title": "试用期",
-                "score": 0.003309
+                "score": 0.003349
               }
             ],
             "recall_at_k": 1.0,
@@ -11124,21 +11124,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.982833
-              },
-              {
-                "document": "employee_handbook.md",
-                "index": 2,
-                "rank": 2,
-                "title": "加班调休",
-                "score": 0.002559
+                "score": 0.993309
               },
               {
                 "document": "employee_handbook.md",
                 "index": 5,
-                "rank": 3,
+                "rank": 2,
                 "title": "离职交接",
-                "score": 0.00147
+                "score": 0.022769
+              },
+              {
+                "document": "employee_handbook.md",
+                "index": 2,
+                "rank": 3,
+                "title": "加班调休",
+                "score": 0.00752
               }
             ],
             "recall_at_k": 1.0,
@@ -11166,21 +11166,21 @@
                 "index": 0,
                 "rank": 1,
                 "title": "年假制度",
-                "score": 0.000364
+                "score": 0.000263
               },
               {
                 "document": "product_faq.md",
                 "index": 0,
                 "rank": 2,
                 "title": "试用期",
-                "score": 0.000205
+                "score": 0.000133
               },
               {
                 "document": "product_faq.md",
                 "index": 2,
                 "rank": 3,
                 "title": "单点登录",
-                "score": 0.0002
+                "score": 0.000109
               }
             ],
             "recall_at_k": null,

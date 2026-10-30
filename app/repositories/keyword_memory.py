@@ -13,7 +13,11 @@ from rank_bm25 import BM25Plus
 
 from app.domain.chunks import Chunk
 from app.domain.lexical import text_tokens
-from app.domain.retrieval import ChunkFilter, ScoredChunk
+from app.domain.retrieval import (
+    ChunkFilter,
+    ScoredChunk,
+    matches_chunk_filter,
+)
 
 
 class InMemoryKeywordIndex:
@@ -49,7 +53,7 @@ class InMemoryKeywordIndex:
                 chunk
                 for entries in self._chunks.values()
                 for chunk in entries
-                if _matches(chunk, constraints)
+                if matches_chunk_filter(chunk, constraints)
             ]
         if not candidates:
             return []
@@ -83,8 +87,3 @@ class InMemoryKeywordIndex:
             for chunk, score in ranked
             if score > 0.0
         ]
-
-
-
-def _matches(chunk: Chunk, constraints: dict[str, str]) -> bool:
-    return all(getattr(chunk, field) == value for field, value in constraints.items())

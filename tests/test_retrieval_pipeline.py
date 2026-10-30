@@ -312,6 +312,38 @@ async def test_multi_query_expands_and_merges_with_dedup() -> None:
     assert len(ids) == len(set(ids))
 
 
+async def test_multi_query_only_does_not_leak_planner_rewrite() -> None:
+    """开关独立:改写关闭时,一次 chat 产出的改写不得作为主查询生效。"""
+    planner = FakeQueryPlanner(rewritten="未发货订单退款流程", variants=["变体一"])
+    embedder = StubEmbedder(
+        {
+            "原查询": [1.0, 0.0, 0.0],
+            "未发货订单退款流程": [0.0, 1.0, 0.0],
+            "变体一": [0.0, 0.0, 1.0],
+        }
+    )
+    store = InMemoryVectorStore()
+    chunk_a = _chunk("doc", 0, "原查询才命中")
+    chunk_b = _chunk("doc", 1, "改写后命中")
+    store.replace("doc", [chunk_a, chunk_b], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    service = _seed_service(
+        _settings(use_multi_query=True, retrieval_multi_query_count=1),
+        vector_store=store,
+        embedder=embedder,
+        query_planner=planner,
+    )
+
+    hits = await service.search("原查询", top_k=5)
+
+    # 改写没有生效:批量 embed 中只有「原查询 + 变体」,改写文本从未出现在任何通道
+    assert embedder.embedded_batches == [["原查询", "变体一"]]
+    assert all(
+        "未发货订单退款流程" not in batch for batch in embedder.embedded_batches
+    )
+    ids = [hit.chunk.chunk_id for hit in hits]
+    assert chunk_a.chunk_id in ids  # 变体一路检索正常融合
+
+
 # ===== 重排 / MMR =====
 
 

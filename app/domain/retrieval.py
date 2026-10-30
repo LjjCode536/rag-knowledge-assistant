@@ -95,6 +95,11 @@ class KeywordIndex(Protocol):
         ...
 
 
+def matches_chunk_filter(chunk: Chunk, constraints: dict[str, str]) -> bool:
+    """切片元数据逐字段等值匹配:向量库与关键词库共用的检索前过滤实现。"""
+    return all(getattr(chunk, field) == value for field, value in constraints.items())
+
+
 class Reranker(Protocol):
     """重排契约:用重排模型对召回候选按相关性重新打分排序。
 
