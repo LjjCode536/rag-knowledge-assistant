@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import Settings, get_settings
 from app.domain.chunks import ChunkingStrategy
-from app.domain.evaluation import EvaluationReport
+from app.domain.evaluation import EvaluationReport, GenerationMetrics
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
 from app.services.evaluation import (
@@ -187,8 +187,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_BASELINE_REPORT,
         help="T06 基线 JSON 路径,用于差值表(缺省指向仓库基线报告)",
     )
-    parser.add_argument_group("生成链路(T09)")
-    parser.add_argument(
+    generator = parser.add_argument_group("生成链路(T09)")
+    generator.add_argument(
         "--qa-generator",
         choices=("rule", "llm"),
         default=None,
@@ -270,22 +270,20 @@ def gate_checks(report: EvaluationReport, thresholds: dict[str, float]):
         (f"NDCG@{report.k}", report.summary.ndcg_at_k, thresholds["ndcg"]),
         (f"HitRate@{report.k}", report.summary.hit_rate, thresholds["hit_rate"]),
     ]
-    if report.generation is not None:
-        checks.extend(
-            [
-                ("忠实度(规则法)", report.generation.faithfulness, thresholds["faithfulness"]),
-                (
-                    "引用准确率(规则法)",
-                    report.generation.citation_accuracy,
-                    thresholds["citation_accuracy"],
-                ),
-                (
-                    "拒答正确率(生成口径)",
-                    report.generation.refusal_correctness,
-                    thresholds["refusal_correctness"],
-                ),
-            ]
-        )
+    # 生成指标块缺失时按未达标处理:GenerationMetrics() 的 None 手段
+    # 让忠实度 / 引用 / 拒答门禁走「缺失阈值数据」的 ✗ 分支,绝不静默放行。
+    generation = report.generation or GenerationMetrics()
+    checks.extend(
+        [
+            ("忠实度(规则法)", generation.faithfulness, thresholds["faithfulness"]),
+            ("引用准确率(规则法)", generation.citation_accuracy, thresholds["citation_accuracy"]),
+            (
+                "拒答正确率(生成口径)",
+                generation.refusal_correctness,
+                thresholds["refusal_correctness"],
+            ),
+        ]
+    )
     checks.append(
         ("权限边界通过率", report.permission_pass_rate, thresholds["permission_pass_rate"])
     )
@@ -543,7 +541,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     # 无密钥环境强制规则版,与「生成指标 CI 子集」口径一致(见 evaluation/README)
-    min_score = args.min_score if args.min_score is not None else settings.qa_min_score
     min_score = args.min_score if args.min_score is not None else settings.qa_min_score
     # 拒答阈值统一进应用配置:检索口径与 /chat 的生成口径用同一把尺子,
     # 确定性替身的分数分布与生产 bge-m3 不同,阈值随 embedder 口径调整(报告已记录)。

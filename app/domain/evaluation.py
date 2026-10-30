@@ -216,7 +216,7 @@ class RetrievalMetrics(BaseModel):
     cases: int = Field(ge=0)
 
 
-def _round6(value: float) -> float:
+def _round(value: float) -> float:
     return round(value, 6)
 
 
@@ -319,7 +319,7 @@ def ndcg_at_k(expected: Iterable[str], retrieved: Sequence[str], *, k: int) -> f
 # 不触网、不计费,无密钥环境(CI)可复现。
 
 # 高风险断言:回答里出现而资料没有 → 一条扣 0.2(教材"过度承诺"清单)。
-RISKY_CLAIMS: tuple[str, ...] = (
+_RISKY_CLAIMS: tuple[str, ...] = (
     "保证",
     "一定",
     "百分百",
@@ -338,7 +338,8 @@ _BOILER_PHRASES: tuple[str, ...] = (
     "可以参考以下内容",
     "供您参考",
 )
-# 剩余片段中的纯功能词(no 判别力),整句只有这类词时该分句不参与计分。
+# 剩余片段中的纯功能词(无判别力),整句只有这类词时该分句不参与计分;
+# 「据知 / 识库 / 库资」等是套话固定短语被二字滑窗切出的残片。
 _BOILER_TERMS: frozenset[str] = frozenset(
     {
         "根据", "据知", "知识", "识库", "库资", "资料", "当前", "可以", "参考",
@@ -386,21 +387,22 @@ def rule_based_faithfulness(
         return FaithfulnessResult(score=0.0, unsupported_claims=[])
 
     clauses = content_terms(answer)
+    context_tokens = set(text_tokens(context))
     supported = 0
     for clause in clauses:
         clause_terms = set(clause.split())
         if not clause_terms:
             continue
-        overlap = clause_terms & set(text_tokens(context))
+        overlap = clause_terms & context_tokens
         if len(overlap) / len(clause_terms) >= 0.5:
             supported += 1
 
     base = supported / len(clauses) if clauses else 1.0
     unsupported = [
-        claim for claim in RISKY_CLAIMS if claim in answer and claim not in context
+        claim for claim in _RISKY_CLAIMS if claim in answer and claim not in context
     ]
     score = max(0.0, min(1.0, base - 0.2 * len(unsupported)))
-    return FaithfulnessResult(score=_round6(score), unsupported_claims=unsupported)
+    return FaithfulnessResult(score=_round(score), unsupported_claims=unsupported)
 
 
 def rule_based_citation_accuracy(answer: str, cited_texts: Sequence[str]) -> float:
@@ -419,5 +421,5 @@ def rule_based_citation_accuracy(answer: str, cited_texts: Sequence[str]) -> flo
         for text in cited_texts
         if len(answer_terms & set(text_tokens(text))) >= 2
     )
-    return _round6(supported / len(cited_texts))
+    return _round(supported / len(cited_texts))
 

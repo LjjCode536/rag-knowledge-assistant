@@ -722,23 +722,21 @@ def _baseline_delta_lines(
         now_generation = report.generation
         pairs.extend(
             [
-                ("忠实度(生成口径)", base_generation.faithfulness, now_generation.faithfulness)
-                if base_generation
-                else ("忠实度(生成口径)", None, now_generation.faithfulness),
+                (
+                    "忠实度(生成口径)",
+                    base_generation.faithfulness if base_generation else None,
+                    now_generation.faithfulness,
+                ),
                 (
                     "引用准确率(生成口径)",
-                    base_generation.citation_accuracy,
+                    base_generation.citation_accuracy if base_generation else None,
                     now_generation.citation_accuracy,
-                )
-                if base_generation
-                else ("引用准确率(生成口径)", None, now_generation.citation_accuracy),
+                ),
                 (
                     "拒答正确率(生成口径·双向)",
-                    base_generation.refusal_correctness,
+                    base_generation.refusal_correctness if base_generation else None,
                     now_generation.refusal_correctness,
-                )
-                if base_generation
-                else ("拒答正确率(生成口径·双向)", None, now_generation.refusal_correctness),
+                ),
             ]
         )
     lines.extend(
