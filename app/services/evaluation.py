@@ -19,9 +19,11 @@ import yaml
 from app.domain.chunks import ChunkingStrategy
 from app.domain.evaluation import (
     CaseResult,
+    ChunkLocator,
     EvaluationReport,
     ExpectedChunk,
     ExpectedChunkRef,
+    GenerationMetrics,
     GoldenCase,
     GoldenDataset,
     RetrievalMetrics,
@@ -30,6 +32,8 @@ from app.domain.evaluation import (
     mrr,
     ndcg_at_k,
     recall_at_k,
+    rule_based_citation_accuracy,
+    rule_based_faithfulness,
 )
 from app.domain.retrieval import ChunkFilter
 
@@ -79,6 +83,8 @@ class _CorpusIndex:
     # 文档名 -> 该文档的切片;document_names 反向映射 document_id -> 文档名
     documents: dict[str, list[dict[str, Any]]]
     document_names: dict[str, str]
+    # chunk_id -> 切片原文;生成指标需要所引资料的文本支持
+    chunks_by_id: dict[str, dict[str, Any]]
     chunk_strategy: str
     chunk_size: int
     chunk_overlap: int
@@ -91,6 +97,20 @@ class _CorpusIndex:
         if chunks is None:
             raise EvaluationDatasetError(f"语料未完成索引:{corpus_name}")
         return chunks
+
+    def content_of(self, chunk_id: str) -> str:
+        """所引切片的原文;未知切片说明报告与语料不一致,按空文本判 0。"""
+        return str(self.chunks_by_id.get(chunk_id, {}).get("content", ""))
+
+    def locator_of(
+        self, chunk_id: str, fallback_document: str, fallback_index: int
+    ) -> ChunkLocator:
+        """引用 → 「文档#文档内序号」定位;随机 chunk_id 不写入报告。"""
+        chunk = self.chunks_by_id.get(chunk_id)
+        if chunk is None:
+            return ChunkLocator(document=fallback_document or "unknown", index=int(fallback_index))
+        document = self.document_of(str(chunk["document_id"]))
+        return ChunkLocator(document=document, index=int(chunk["index"]))
 
 
 def load_golden_dataset(path: Path) -> GoldenDataset:
@@ -115,9 +135,10 @@ class EvaluationService:
         self._dataset_dir = dataset_dir
         self._config = config
         self._top_k = config.top_k if config.top_k is not None else config.k
+        self._generator: str | None = None
 
     async def run(self) -> EvaluationReport:
-        """完整跑一轮:语料入库 → 逐用例检索 → 汇总 → 报告。"""
+        """完整跑一轮:语料入库 → 逐用例检索与问答 → 汇总 → 报告。"""
         index = await self._index_corpus()
         results = [await self._evaluate_case(case, index) for case in self._dataset.cases]
         answerable = [result for result in results if not result.should_refuse]
@@ -158,6 +179,9 @@ class EvaluationService:
                     if result.permission_ok is not None
                 ]
             ),
+            generator=self._generator,
+            generation=_generation_metrics(results),
+            generation_categories=_generation_metrics_by_category(results),
             case_results=results,
         )
 
@@ -165,6 +189,7 @@ class EvaluationService:
         """按语料清单上传、切片、向量化;缺一步都不进入评估。"""
         documents: dict[str, list[dict[str, Any]]] = {}
         document_names: dict[str, str] = {}
+        chunks_by_id: dict[str, dict[str, Any]] = {}
         chunk_strategy: str | None = None
         chunk_size: int | None = None
         chunk_overlap: int | None = None
@@ -206,12 +231,15 @@ class EvaluationService:
 
             documents[corpus.file_name] = list(chunk_run["chunks"])
             document_names[document_id] = corpus.file_name
+            for chunk in chunk_run["chunks"]:
+                chunks_by_id[str(chunk["chunk_id"])] = chunk
 
         assert chunk_strategy is not None and chunk_size is not None
         assert chunk_overlap is not None
         return _CorpusIndex(
             documents=documents,
             document_names=document_names,
+            chunks_by_id=chunks_by_id,
             chunk_strategy=chunk_strategy,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -235,6 +263,33 @@ class EvaluationService:
             ndcg = ndcg_at_k(expected_ids, retrieved_ids, k=self._config.k)
             hit_rate = hit_rate_at_k(expected_ids, retrieved_ids, k=self._config.k)
             refusal_ok = None
+
+        # 生成链路评估:同一条问答链路(检索 → 阈值 → 生成/拒答)驱动一次 /chat,
+        # 拒答正确率于是可以双向判定(应答被误拒 / 应拒答被乱答都会被记下)。
+        chat = await self._chat(case)
+        refused = bool(chat["refused"])
+        citation_refs: list[ChunkLocator] = []
+        cited_texts: list[str] = []
+        faithfulness: float | None = None
+        citation_accuracy: float | None = None
+        unsupported_claims: list[str] = []
+        if not refused:
+            for citation in chat.get("citations") or []:
+                chunk_id = str(citation["chunk_id"])
+                citation_refs.append(
+                    index.locator_of(
+                        chunk_id,
+                        fallback_document=str(citation.get("file_name") or ""),
+                        fallback_index=int(citation.get("index") or 0),
+                    )
+                )
+                cited_texts.append(index.content_of(chunk_id))
+            faith_result = rule_based_faithfulness(chat["answer"], cited_texts)
+            faithfulness = _round(faith_result.score)
+            citation_accuracy = _round(
+                rule_based_citation_accuracy(chat["answer"], cited_texts)
+            )
+            unsupported_claims = faith_result.unsupported_claims
 
         permission_ok: bool | None = None
         forbidden_best_rank: int | None = None
@@ -272,8 +327,29 @@ class EvaluationService:
             refusal_ok=refusal_ok,
             permission_ok=permission_ok,
             forbidden_best_rank=forbidden_best_rank,
+            refused=refused,
+            refusal_reason=chat.get("refusal_reason"),
+            answer=chat["answer"],
+            faithfulness=faithfulness,
+            citation_accuracy=citation_accuracy,
+            unsupported_claims=unsupported_claims,
+            citations=citation_refs,
             notes=case.notes,
         )
+
+    async def _chat(self, case: GoldenCase) -> dict[str, Any]:
+        """走一次问答主缝;top_k 与检索口径一致,拒答由应用配置阈值决定。"""
+        chat = await self._post(
+            "/api/v1/chat",
+            json={
+                "question": case.question,
+                "top_k": self._top_k,
+                "filters": case.filters.effective() or None,
+            },
+        )
+        # 报告写观测到的生成器种类(rule_based / llm),而非配置推断
+        self._generator = str(chat.get("generator") or self._generator)
+        return chat
 
     def _resolve_expected(
         self, case: GoldenCase, expected: ExpectedChunk, index: _CorpusIndex
@@ -373,6 +449,36 @@ def _aggregate_by_category(results: list[CaseResult]) -> dict[str, RetrievalMetr
     return {category: _aggregate(grouped[category]) for category in sorted(grouped)}
 
 
+def _generation_metrics(results: list[CaseResult]) -> GenerationMetrics:
+    """生成指标:忠实度 / 引用准确率只算作答用例,拒答正确率双向判定。"""
+    answerable = [result for result in results if result.should_refuse is False]
+    answered = [result for result in answerable if result.refused is False]
+    judged = [result for result in results if result.refused is not None]
+    correct_refusal = [result for result in judged if result.refused == result.should_refuse]
+    return GenerationMetrics(
+        cases_total=len(results),
+        answered=len(answered),
+        wrongly_refused=len(answerable) - len(answered),
+        answer_rate=_round(len(answered) / len(answerable)) if answerable else None,
+        faithfulness=_mean([result.faithfulness for result in answered]) if answered else None,
+        citation_accuracy=(
+            _mean([result.citation_accuracy for result in answered]) if answered else None
+        ),
+        refusal_correctness=_round(len(correct_refusal) / len(judged)) if judged else None,
+    )
+
+
+def _generation_metrics_by_category(
+    results: list[CaseResult],
+) -> dict[str, GenerationMetrics]:
+    grouped: dict[str, list[CaseResult]] = {}
+    for result in results:
+        grouped.setdefault(result.category.value, []).append(result)
+    return {
+        category: _generation_metrics(grouped[category]) for category in sorted(grouped)
+    }
+
+
 def _mean(values: list[float | None]) -> float:
     present = [value for value in values if value is not None]
     return _round(sum(present) / len(present)) if present else 0.0
@@ -417,6 +523,7 @@ def render_markdown(
         f"{report.chunk_size} / {report.chunk_overlap} |",
         f"| 向量来源 | `{report.embedder}` |",
         f"| 运行模式 | `{report.mode}` |",
+        f"| 回答生成器 | `{report.generator or '—'}` |",
         f"| 复现命令 | `{report.command}` |",
         *(retrieval_config_rows(report.retrieval_config) if report.retrieval_config else []),
         "",
@@ -431,17 +538,45 @@ def render_markdown(
         f"| 拒答正确率(检索口径) | {_format_optional(report.refusal_accuracy)} | "
         f"拒答用例均值 |",
         f"| 权限边界通过率 | {_format_optional(report.permission_pass_rate)} | 权限用例均值 |",
-        "",
-        f"共 {report.cases_total} 条用例;拒答用例不参与 Recall / MRR / NDCG 均值。",
-        "拒答正确率在 T06 只按检索分数与 `qa_min_score` 判定;生成器主动拒答、"
-        "忠实度与引用准确率留待 T09。",
-        "",
-        "## 分品类指标",
-        "",
-        f"| 品类 | 可回答 / 全部 | Recall@{report.k} | MRR | NDCG@{report.k} | "
-        f"HitRate@{report.k} |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if report.generation is not None:
+        generation = report.generation
+        lines.extend(
+            [
+                "",
+                "### 生成指标(T09,经 /chat 主缝,规则法判定)",
+                "",
+                "| 指标 | 数值 | 口径 |",
+                "| --- | --- | --- |",
+                f"| 忠实度(规则法) | {_format_optional(generation.faithfulness)} | "
+                f"作答用例均值(N={generation.answered}) |",
+                f"| 引用准确率(规则法) | {_format_optional(generation.citation_accuracy)} | "
+                f"作答用例均值(N={generation.answered}) |",
+                f"| 拒答正确率(生成口径·双向) | "
+                f"{_format_optional(generation.refusal_correctness)} | "
+                "应拒答被正确拒答,库中有据可答不被误拒 |",
+                f"| 作答率 | {_format_optional(generation.answer_rate)} | "
+                f"可回答用例中实际作答比例(其中误拒 {generation.wrongly_refused} 条) |",
+                "",
+                "忠实度判定:回答分句需在所引资料里找到词面支撑;资料外的"
+                "「保证 / 立即到账」类过度承诺额外扣分。引用准确率计支撑回答的"
+                "引用占比。`--qa-generator llm` 换真实 LLM 后,同类指标落同一批字段。",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            f"共 {report.cases_total} 条用例;拒答用例不参与 Recall / MRR / NDCG 均值。",
+            "拒答正确率有两条口径:检索口径沿用 T06(应拒答未出现高分命中);"
+            "生成口径见上面的生成指标段,覆盖答与拒两个方向。",
+            "",
+            "## 分品类指标",
+            "",
+            f"| 品类 | 可回答 / 全部 | Recall@{report.k} | MRR | NDCG@{report.k} | "
+            f"HitRate@{report.k} |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     for category in sorted(set(report.categories) | set(report.category_case_counts)):
         metrics = report.categories.get(category)
         total = report.category_case_counts.get(category, metrics.cases if metrics else 0)
@@ -456,6 +591,28 @@ def render_markdown(
     lines.append(
         "`unknown` 等只有拒答用例的品类不参与检索均值,单独计入拒答正确率。"
     )
+    if report.generation_categories:
+        lines.extend(
+            [
+                "",
+                "### 分品类生成指标",
+                "",
+                "| 品类 | 作答 / 可回答 | 忠实度 | 引用准确率 | 拒答正确率(双向) | "
+                "错误拒答 |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for category in sorted(report.generation_categories):
+            metrics = report.generation_categories[category]
+            lines.append(
+                f"| {category} | {metrics.answered} / "
+                f"{metrics.answered + metrics.wrongly_refused} | "
+                f"{_format_optional(metrics.faithfulness)} | "
+                f"{_format_optional(metrics.citation_accuracy)} | "
+                f"{_format_optional(metrics.refusal_correctness)} | "
+                f"{metrics.wrongly_refused} |"
+            )
+        lines.append("")
 
     failures = _failures(report)
     lines.extend(["", "## 未满分用例速览", ""])
@@ -546,6 +703,11 @@ def _baseline_delta_lines(
             f"{baseline.chunk_overlap}),差值不可比,仅列出。"
         )
         return lines
+    if report.min_score != baseline.min_score:
+        lines.append(
+            f"注:本次拒答阈值为 {report.min_score} 与基线 {baseline.min_score} 不同"
+            "(拒答正确率按各自口径判分,Recall / MRR / NDCG 不受影响)。"
+        )
 
     pairs: list[tuple[str, float | None, float | None]] = [
         (f"Recall@{report.k}", baseline.summary.recall_at_k, report.summary.recall_at_k),
@@ -555,6 +717,30 @@ def _baseline_delta_lines(
         ("拒答正确率", baseline.refusal_accuracy, report.refusal_accuracy),
         ("权限边界通过率", baseline.permission_pass_rate, report.permission_pass_rate),
     ]
+    if report.generation is not None:
+        base_generation = baseline.generation
+        now_generation = report.generation
+        pairs.extend(
+            [
+                ("忠实度(生成口径)", base_generation.faithfulness, now_generation.faithfulness)
+                if base_generation
+                else ("忠实度(生成口径)", None, now_generation.faithfulness),
+                (
+                    "引用准确率(生成口径)",
+                    base_generation.citation_accuracy,
+                    now_generation.citation_accuracy,
+                )
+                if base_generation
+                else ("引用准确率(生成口径)", None, now_generation.citation_accuracy),
+                (
+                    "拒答正确率(生成口径·双向)",
+                    base_generation.refusal_correctness,
+                    now_generation.refusal_correctness,
+                )
+                if base_generation
+                else ("拒答正确率(生成口径·双向)", None, now_generation.refusal_correctness),
+            ]
+        )
     lines.extend(
         [
             f"基线:{baseline.run_name}(向量来源 `{baseline.embedder}`)",
@@ -827,11 +1013,37 @@ def _render_case(report: EvaluationReport, result: CaseResult) -> list[str]:
         )
         verdict = "通过" if result.permission_ok else "失败:返回了禁读文档"
         lines.append(f"- 权限边界:{verdict};{control}")
+    if result.refused is not None:
+        lines.extend(_render_generation(result))
     notes = f"- 备注:{result.notes}" if result.notes else ""
     if notes:
         lines.append(notes)
     lines.append(f"- 结论:{_verdict(result)}")
     lines.append("")
+    return lines
+
+
+def _render_generation(result: CaseResult) -> list[str]:
+    """按用例的生成链路留痕:实际作答 / 拒答、忠实度与引用支撑明细。"""
+    lines = []
+    if result.refused:
+        reason = f",原因 {result.refusal_reason}" if result.refusal_reason else ""
+        expectation = "按预期拒答" if result.should_refuse else "错误拒答(应回答)"
+        lines.append(f"- 生成:{expectation}{reason}")
+        return lines
+    answer = " ".join((result.answer or "").split())
+    if len(answer) > 300:
+        answer = answer[:297] + "..."
+    claims = (
+        f";资料外断言:{'、'.join(result.unsupported_claims)}"
+        if result.unsupported_claims
+        else ""
+    )
+    lines.append(f"- 生成:作答 · 忠实度={result.faithfulness:.4f} · "
+                 f"引用准确率={result.citation_accuracy:.4f}{claims}")
+    lines.append(f"  回答:{answer}")
+    for locator in result.citations:
+        lines.append(f"  引用:`{locator.key}`")
     return lines
 
 

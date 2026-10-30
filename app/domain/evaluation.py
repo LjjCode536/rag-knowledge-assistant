@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domain.lexical import text_tokens
 from app.domain.retrieval import ChunkFilter
 
 
@@ -157,6 +159,24 @@ class RetrievedChunk(ChunkLocator):
     score: float
 
 
+class GenerationMetrics(BaseModel):
+    """一组用例的生成指标(T09,教材第 44 章):忠实度 / 引用准确率 / 拒答正确率。
+
+    - ``refusal_correctness`` 是**双向**判定:``refused == should_refuse`` 的
+      用例比例——应拒答不被乱答、应回答不被误拒,两个方向都算一次判定;
+    - ``faithfulness`` / ``citation_accuracy`` 只统计真正作答的用例,
+      拒答(含错误拒答)没有回答内容,不进入这两个均值。
+    """
+
+    cases_total: int = 0
+    answered: int = 0
+    wrongly_refused: int = 0
+    answer_rate: float | None = None
+    faithfulness: float | None = None
+    citation_accuracy: float | None = None
+    refusal_correctness: float | None = None
+
+
 class CaseResult(BaseModel):
     """单条用例的评估结果:预期、实际命中与逐指标,一一对应。"""
 
@@ -175,6 +195,14 @@ class CaseResult(BaseModel):
     refusal_ok: bool | None = None
     permission_ok: bool | None = None
     forbidden_best_rank: int | None = None
+    # T09 生成链路留痕:经 /api/v1/chat 的实际行为与生成指标
+    refused: bool | None = None
+    refusal_reason: str | None = None
+    answer: str | None = None
+    faithfulness: float | None = None
+    citation_accuracy: float | None = None
+    unsupported_claims: list[str] = Field(default_factory=list)
+    citations: list[ChunkLocator] = Field(default_factory=list)
     notes: str = ""
 
 
@@ -186,6 +214,10 @@ class RetrievalMetrics(BaseModel):
     ndcg_at_k: float
     hit_rate: float
     cases: int = Field(ge=0)
+
+
+def _round6(value: float) -> float:
+    return round(value, 6)
 
 
 class EvaluationReport(BaseModel):
@@ -213,6 +245,10 @@ class EvaluationReport(BaseModel):
     category_case_counts: dict[str, int] = Field(default_factory=dict)
     refusal_accuracy: float | None = None
     permission_pass_rate: float | None = None
+    # T09 生成指标:同一轮评估经 /api/v1/chat 驱动生成链路后产出
+    generator: str | None = None
+    generation: GenerationMetrics | None = None
+    generation_categories: dict[str, GenerationMetrics] = Field(default_factory=dict)
     case_results: list[CaseResult] = Field(default_factory=list)
 
 
@@ -271,4 +307,117 @@ def ndcg_at_k(expected: Iterable[str], retrieved: Sequence[str], *, k: int) -> f
     ideal_hits = min(len(expected_set), k)
     idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
     return dcg / idcg if idcg else 0.0
+
+
+# ===== 生成指标:规则法(教材第 44 章;LLM-as-Judge 留作后续可选升级)=====
+#
+# 口径唯一定义在此,评估服务、报告与 CI 门禁共用同一把尺子:
+# - 忠实度:回答的每个分句是否能在**所引资料**里找到词面支撑;资料外的
+#   高风险断言(保证 / 立即到账类过度承诺)额外扣分并留痕;
+# - 引用准确率:回答给出的引用中,确实支撑回答内容的比例。
+# 两者都基于 `text_tokens` 的词面口径(与确定性替身 / BM25 通道同一分词),
+# 不触网、不计费,无密钥环境(CI)可复现。
+
+# 高风险断言:回答里出现而资料没有 → 一条扣 0.2(教材"过度承诺"清单)。
+RISKY_CLAIMS: tuple[str, ...] = (
+    "保证",
+    "一定",
+    "百分百",
+    "百分之百",
+    "立即到账",
+    "无需审核",
+    "稳过",
+)
+
+# 回答模板里的套话:出现在几乎所有回答里,无判别力,计分前剥离。
+_BOILER_PHRASES: tuple[str, ...] = (
+    "根据知识库资料",
+    "根据当前资料",
+    "根据知识库,资料",
+    "以下是相关内容",
+    "可以参考以下内容",
+    "供您参考",
+)
+# 剩余片段中的纯功能词(no 判别力),整句只有这类词时该分句不参与计分。
+_BOILER_TERMS: frozenset[str] = frozenset(
+    {
+        "根据", "据知", "知识", "识库", "库资", "资料", "当前", "可以", "参考",
+        "以下", "内容", "用户", "需要", "应该", "建议", "说明",
+        "回答", "问题", "如果", "那么", "并且", "但是", "或者", "以及", "所以",
+        "因此", "因为", "另外", "此外", "相关", "这样", "这样子", "注意",
+    }
+)
+
+_CLAUSE_SPLIT = re.compile(r"[,。,。;;、;;!?!?\n\r]+")
+
+
+class FaithfulnessResult(BaseModel):
+    """一次忠实度判定:分数 + 资料之外的高风险断言清单(供报告追溯)。"""
+
+    score: float = Field(ge=0.0, le=1.0)
+    unsupported_claims: list[str] = Field(default_factory=list)
+
+
+def content_terms(text: str) -> list[str]:
+    """剥掉套话后的内容分句词面:套话整句剔除,纯功能词分句跳过。"""
+    stripped = text
+    for phrase in _BOILER_PHRASES:
+        stripped = stripped.replace(phrase, "")
+    clauses = [clause for clause in _CLAUSE_SPLIT.split(stripped) if clause.strip()]
+    content: list[str] = []
+    for clause in clauses:
+        tokens = [token for token in text_tokens(clause) if token not in _BOILER_TERMS]
+        if tokens:
+            content.append(" ".join(tokens))
+    return content
+
+
+def rule_based_faithfulness(
+    answer: str, cited_texts: Sequence[str]
+) -> FaithfulnessResult:
+    """规则法忠实度:回答分句在所引资料里的支撑率,过度承诺额外扣分。
+
+    - 每个内容分句的重叠词面占比 ≥ 0.5 记为"被支撑";回答无内容分句 → 1.0;
+    - 未引用任何内容就作答 → 0.0(无据回答,报告与门禁同一个口径);
+    - 资料外的过度承诺每条扣 0.2 并写入 unsupported_claims。
+    """
+    context = "\n".join(cited_texts)
+    if not context.strip():
+        return FaithfulnessResult(score=0.0, unsupported_claims=[])
+
+    clauses = content_terms(answer)
+    supported = 0
+    for clause in clauses:
+        clause_terms = set(clause.split())
+        if not clause_terms:
+            continue
+        overlap = clause_terms & set(text_tokens(context))
+        if len(overlap) / len(clause_terms) >= 0.5:
+            supported += 1
+
+    base = supported / len(clauses) if clauses else 1.0
+    unsupported = [
+        claim for claim in RISKY_CLAIMS if claim in answer and claim not in context
+    ]
+    score = max(0.0, min(1.0, base - 0.2 * len(unsupported)))
+    return FaithfulnessResult(score=_round6(score), unsupported_claims=unsupported)
+
+
+def rule_based_citation_accuracy(answer: str, cited_texts: Sequence[str]) -> float:
+    """规则法引用准确率:确实支撑回答内容的引用占全部引用的比例。
+
+    一条引用"支撑回答"要求它与回答有至少两个词面交集(单个二字词面
+    可能是巧合);无引用或回答没有任何内容词面 → 0(引用本就无处可靠)。
+    """
+    if not cited_texts:
+        return 0.0
+    answer_terms = set(" ".join(content_terms(answer)).split()) or set(text_tokens(answer))
+    if not answer_terms:
+        return 0.0
+    supported = sum(
+        1
+        for text in cited_texts
+        if len(answer_terms & set(text_tokens(text))) >= 2
+    )
+    return _round6(supported / len(cited_texts))
 

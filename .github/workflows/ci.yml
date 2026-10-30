@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: 测试与 lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 安装依赖
+        run: uv sync
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: 全量测试(无密钥,不触网)
+        run: uv run pytest
+
+  evaluation-gate:
+    name: 黄金数据集评估门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 安装依赖
+        run: uv sync
+      # 无密钥环境运行:确定性向量替身 + 规则版生成器。
+      # --min-score 0.07 是替身分数口径的操作点(生产 bge-m3 向量用 0.35,
+      # 曲线数据见 docs/iterations/0003-t09-generation-metrics.md)。
+      # 阈值可调:跌破任一下限即红灯(exit 1)。
+      - name: 评估并对阈值断言
+        run: |
+          uv run python scripts/evaluate.py \
+            --min-score 0.07 --check \
+            --min-recall 0.75 --min-mrr 0.70 --min-ndcg 0.70 --min-hit-rate 0.75 \
+            --min-faithfulness 0.90 --min-citation-accuracy 0.60 \
+            --min-refusal-correctness 0.95 --min-permission-pass-rate 1.0 \
+            --report ci-artifacts/evaluation.md --json-report ci-artifacts/evaluation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-report
+          path: ci-artifacts/

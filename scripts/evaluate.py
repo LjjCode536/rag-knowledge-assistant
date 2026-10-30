@@ -64,6 +64,23 @@ _ITERATION_PATTERN = re.compile(r"^\d{4}$")
 _SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _TOGGLE_FIELDS = RETRIEVAL_TOGGLE_FIELDS
 
+# 门禁默认阈值(T09):覆盖无密钥(CI)可复现的指标子集,质检守下限防回归。
+# 配套运行口径:确定性替身 + --min-score 0.07(替身分数分布与生产 bge-m3 不同,
+# 0.35 是生产向量的操作点;替身下 0.067 才能分开"知识库没有的问题"与真问题,
+# 曲线数据见 docs/iterations/0003 记录)。
+# 上游模式(真实 embedder + 重排 + LLM 生成)会用 --min-* 抬到更高目标,
+# 例如 spec 参考阈值 Recall@3 ≥ 0.85 / MRR ≥ 0.75 / 忠实度 ≥ 0.9。
+DEFAULT_GATE_THRESHOLDS: dict[str, float] = {
+    "recall": 0.75,
+    "mrr": 0.70,
+    "ndcg": 0.70,
+    "hit_rate": 0.75,
+    "faithfulness": 0.90,
+    "citation_accuracy": 0.60,
+    "refusal_correctness": 0.95,
+    "permission_pass_rate": 1.0,
+}
+
 # 消融矩阵:教材第 43 章生产替换清单的开关组合;E/F/G 行验证各能力的边际收益。
 ABLATION_COMBOS: list[tuple[str, dict[str, bool]]] = [
     ("A 全关(基线复现)", {}),
@@ -170,6 +187,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_BASELINE_REPORT,
         help="T06 基线 JSON 路径,用于差值表(缺省指向仓库基线报告)",
     )
+    parser.add_argument_group("生成链路(T09)")
+    parser.add_argument(
+        "--qa-generator",
+        choices=("rule", "llm"),
+        default=None,
+        help="回答生成器:rule=规则版(无密钥可复现,默认);llm=真实 LLM(需密钥)。"
+        "缺省按是否配置密钥解析",
+    )
+    gate = parser.add_argument_group("CI 门禁")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="在报告产出后对门禁阈值断言,跌破即失败(exit 1);红灯验证用 --min-* 拉高阈值",
+    )
+    for flag in _GATE_FLAGS:
+        gate.add_argument(
+            f"--min-{flag.replace('_', '-')}",
+            type=float,
+            default=None,
+            help=GATE_FLAG_HELP[flag],
+        )
     downstream = parser.add_argument_group("高级检索开关(BooleanOptionalAction)")
     for _field, spec in _TOGGLE_SPECS.items():
         downstream.add_argument(spec["flag"], action=argparse.BooleanOptionalAction, default=None)
@@ -199,6 +237,90 @@ _RETRIEVAL_PARAM_FIELDS = (
 )
 # 需要真实上游的开关:无密钥时不得进评估(会变成静默降级数据)
 _UPSTREAM_KEYED_FIELDS = ("use_query_rewrite", "use_multi_query", "use_rerank")
+
+# 门禁阈值 CLI 旗标 → 报告字段;与 DEFAULT_GATE_THRESHOLDS 同序
+GATE_FLAG_HELP: dict[str, str] = {
+    "recall": "Recall@K 下限(缺省用门禁默认值)",
+    "mrr": "MRR 下限",
+    "ndcg": "NDCG@K 下限",
+    "hit_rate": "HitRate@K 下限",
+    "faithfulness": "忠实度(规则法)下限",
+    "citation_accuracy": "引用准确率(规则法)下限",
+    "refusal_correctness": "拒答正确率(生成口径·双向)下限",
+    "permission_pass_rate": "权限边界通过率下限",
+}
+_GATE_FLAGS = tuple(GATE_FLAG_HELP)
+
+
+def gate_thresholds(args: argparse.Namespace) -> dict[str, float]:
+    """--check 生效的阈值:默认值打底,显式 --min-* 覆盖(阈值可调)。"""
+    thresholds = dict(DEFAULT_GATE_THRESHOLDS)
+    for flag in _GATE_FLAGS:
+        value = getattr(args, f"min_{flag}")
+        if value is not None:
+            thresholds[flag] = float(value)
+    return thresholds
+
+
+def gate_checks(report: EvaluationReport, thresholds: dict[str, float]):
+    """门禁逐项核对:(名称, 实测值, 下限)。实测值缺失按未达标处理。"""
+    checks = [
+        (f"Recall@{report.k}", report.summary.recall_at_k, thresholds["recall"]),
+        ("MRR", report.summary.mrr, thresholds["mrr"]),
+        (f"NDCG@{report.k}", report.summary.ndcg_at_k, thresholds["ndcg"]),
+        (f"HitRate@{report.k}", report.summary.hit_rate, thresholds["hit_rate"]),
+    ]
+    if report.generation is not None:
+        checks.extend(
+            [
+                ("忠实度(规则法)", report.generation.faithfulness, thresholds["faithfulness"]),
+                (
+                    "引用准确率(规则法)",
+                    report.generation.citation_accuracy,
+                    thresholds["citation_accuracy"],
+                ),
+                (
+                    "拒答正确率(生成口径)",
+                    report.generation.refusal_correctness,
+                    thresholds["refusal_correctness"],
+                ),
+            ]
+        )
+    checks.append(
+        ("权限边界通过率", report.permission_pass_rate, thresholds["permission_pass_rate"])
+    )
+    return checks
+
+
+def run_gate(report: EvaluationReport, thresholds: dict[str, float]) -> bool:
+    """打印门禁核对表;跌破下限 → False(CI 红灯的依据)。"""
+    passed = True
+    for name, actual, floor in gate_checks(report, thresholds):
+        if actual is None:
+            print(f"[gate] {name} 缺失阈值数据(< {floor:.4f})✗", file=sys.stderr)
+            passed = False
+            continue
+        ok = actual + 1e-9 >= floor
+        passed = passed and ok
+        stream = sys.stdout if ok else sys.stderr
+        print(
+            f"[gate] {name} {actual:.4f} ≥ {floor:.4f} "
+            f"{'✓' if ok else '✗ 跌破门禁'}",
+            file=stream,
+        )
+    print(f"[gate] 门禁结论:{'通过' if passed else '未通过'}", file=sys.stderr)
+    return passed
+
+
+def resolve_qa_generator(settings: Settings, args: argparse.Namespace) -> str | None:
+    """生成器选择:显式 --qa-generator 优先且 ``llm`` 必须有密钥;缺省规则版。
+
+    规则版缺省(即便本地配了密钥)是为了让评估默认零成本、逐字复现;
+    要评真实 LLM 生成质量,显式传 ``--qa-generator llm``。
+    """
+    if args.qa_generator == "llm" and not settings.upstream_configured:
+        return None  # main() 负责报错退出
+    return args.qa_generator or "rule"
 
 
 def _effective_search_toggles(
@@ -300,6 +422,7 @@ async def _run_ablation(
     """消融矩阵 runner:每行固定全关基线 + 该行的显式开关,互不泄漏。"""
     base = get_settings()
     toggle_zero_base = {field: False for field in _TOGGLE_FIELDS}
+    toggle_zero_base["qa_generator"] = resolve_qa_generator(base, args) or "rule"
     runs: list[tuple[str, EvaluationReport]] = []
     skipped: list[str] = []
     dataset_dir = args.dataset.resolve().parent
@@ -411,6 +534,25 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
+    qa_generator = resolve_qa_generator(settings, args)
+    if qa_generator is None:
+        print(
+            "--qa-generator llm 需要真实上游密钥;先设置 SILICONFLOW_API_KEY,"
+            "或用规则版基线(产出无密钥可复现的生成指标)",
+            file=sys.stderr,
+        )
+        return 2
+    # 无密钥环境强制规则版,与「生成指标 CI 子集」口径一致(见 evaluation/README)
+    min_score = args.min_score if args.min_score is not None else settings.qa_min_score
+    min_score = args.min_score if args.min_score is not None else settings.qa_min_score
+    # 拒答阈值统一进应用配置:检索口径与 /chat 的生成口径用同一把尺子,
+    # 确定性替身的分数分布与生产 bge-m3 不同,阈值随 embedder 口径调整(报告已记录)。
+    global_updates = {
+        **effective_toggles,
+        "qa_generator": qa_generator,
+        "qa_min_score": min_score,
+    }
+
     if (
         args.run_name != DEFAULT_RUN_NAME
         and args.report is None
@@ -427,6 +569,9 @@ def main(argv: list[str] | None = None) -> int:
 
     report_path = args.report or DEFAULT_REPORT_DIR / f"{args.iteration}-{args.slug}.md"
     json_report_path = args.json_report or report_path.with_suffix(".json")
+    if args.check and args.ablate:
+        print("门禁只对单次运行生效:--check 与 --ablate 不可同时使用", file=sys.stderr)
+        return 2
 
     dataset_path = args.dataset.resolve()
     try:
@@ -435,7 +580,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"读取黄金数据集失败:{exc}", file=sys.stderr)
         return 1
 
-    min_score = args.min_score if args.min_score is not None else settings.qa_min_score
     mode = "external" if args.base_url else "in-process"
     if args.base_url:
         embedder = args.embedder_label
@@ -445,7 +589,6 @@ def main(argv: list[str] | None = None) -> int:
         embedder = settings.embedding_model
     assert embedder is not None  # 外部模式已在上面校验
     command = "uv run python scripts/evaluate.py " + " ".join(raw_args)
-    global_updates = effective_toggles
     config = EvaluationConfig(
         k=args.k,
         top_k=args.top_k,
@@ -507,6 +650,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"报告:{report_path}")
     print(f"JSON:{json_report_path}")
+    if args.check and not run_gate(report, gate_thresholds(args)):
+        print("指标跌破门禁:CI 红灯(报告已落盘,便于回看)", file=sys.stderr)
+        return 1
     return 0
 
 
