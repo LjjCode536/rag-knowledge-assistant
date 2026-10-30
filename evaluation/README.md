@@ -29,6 +29,20 @@ uv run python scripts/evaluate.py --base-url http://127.0.0.1:8000 \
   --min-score 0.35 --embedder-label BAAI/bge-m3
 ```
 
+## T07 高级检索消融
+
+无密钥的单次运行默认「全关」,与 T06 基线同口径(报告含「与基线对比」差值表):
+
+```bash
+uv run python scripts/evaluate.py --iteration 0002 --slug t07-ablation \
+  --run-name "T07 高级检索" --ablate
+```
+
+- `--ablate` 在同一数据集上重跑开关矩阵:全关 / 混合 / 重排 / 混合+重排 / +MMR / +查询改写 / +多查询扩展;重排与 LLM 规划组合需要 `SILICONFLOW_API_KEY`,无密钥时显式标注跳过,不静默降级出数。
+- `--hybrid/--no-hybrid`、`--rerank/--no-rerank`、`--mmr/--no-mmr`、`--rewrite/--no-rewrite`、`--multi-query/--no-multi-query` 覆盖单次运行的检索开关;`--use-app-defaults` 改用应用默认(需上游密钥的组合会做前置校验)。
+- 各组合的上游调用逐用例串行,不触免费档限速。
+- 消融报告落在 `docs/iterations/0002-t07-advanced-retrieval.{md,json}`,含与 T06 基线的差值表与默认组合依据。
+
 ## 用例字段
 
 | 字段 | 说明 |

@@ -7,28 +7,15 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Sequence
 
+from app.domain.lexical import text_tokens  # 分词口径随本替身对外共用
 from app.integrations.llm.client import EmbedResult, TokenUsage
 
 DIM = 64
 # 评估基线用 1024 维:与生产 bge-m3 的向量维度对齐,同时把哈希碰撞压到可忽略;
 # 测试仍用 64 维的轻量默认值,只关心相对排序,不关心维度。
 EVALUATION_DIM = 1024
-_LATIN = re.compile(r"[A-Za-z0-9]+")
-_CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
-
-
-def text_tokens(text: str) -> list[str]:
-    """英文取词、中文取二字滑窗,保证中文查询与切片有词面交集可言。"""
-    tokens = _LATIN.findall(text)
-    for run in _CJK_RUN.findall(text):
-        if len(run) < 2:
-            tokens.append(run)
-        else:
-            tokens.extend(run[i : i + 2] for i in range(len(run) - 1))
-    return tokens
 
 
 def text_vector(text: str, dim: int = DIM) -> list[float]:

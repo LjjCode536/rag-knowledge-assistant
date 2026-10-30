@@ -18,7 +18,9 @@ from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.tracing import TraceIdMiddleware
+from app.domain.retrieval import KeywordIndex, QueryPlanner
 from app.integrations.llm.client import UnifiedLLMClient
+from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.memory import (
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
@@ -30,6 +32,8 @@ from app.services.chunking import ChunkingService
 from app.services.embedding import Embedder, EmbeddingService
 from app.services.generation import AnswerGenerator, RuleBasedAnswerGenerator
 from app.services.ingestion import IngestionService
+from app.services.query_planning import SiliconFlowQueryPlanner
+from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
 from app.services.storage import LocalDocumentStorage
 
@@ -39,11 +43,14 @@ def create_app(
     *,
     embedder: Embedder | None = None,
     answer_generator: AnswerGenerator | None = None,
+    keyword_index: KeywordIndex | None = None,
+    query_planner: QueryPlanner | None = None,
+    reranker: Reranker | None = None,
 ) -> FastAPI:
-    """建应用;embedder 与生成器可注入替身(测试),缺省走真实实现。
+    """建应用;embedder、生成器与高级检索协作对象可注入替身(测试),缺省走真实实现。
 
-    embedder 与文档仓储、切片仓储、向量库一起注入服务层;生成器在
-    问答服务处替换。真实上游与假替身在主接缝处互换,其余装配零改动。
+    embedder 与文档仓储、切片仓储、向量库、关键词索引一起注入服务层;
+    生成器在问答服务处替换。真实上游与假替身在主接缝处互换,其余装配零改动。
     """
     settings = settings or get_settings()
     configure_logging(settings)
@@ -56,6 +63,11 @@ def create_app(
     document_repository = InMemoryDocumentRepository()
     chunk_repository = InMemoryChunkRepository()
     vector_store = InMemoryVectorStore()
+    effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
+    effective_planner = (
+        query_planner if query_planner is not None else SiliconFlowQueryPlanner(llm_client)
+    )
+    effective_reranker = reranker if reranker is not None else SiliconFlowReranker(llm_client)
     query_log_repository = InMemoryQueryLogRepository()
     ingestion_service = IngestionService(
         repository=document_repository,
@@ -71,10 +83,15 @@ def create_app(
         chunk_repository=chunk_repository,
         vector_store=vector_store,
         embedder=effective_embedder,
+        keyword_index=effective_keyword_index,
     )
     retrieval_service = RetrievalService(
         vector_store=vector_store,
         embedder=effective_embedder,
+        settings=settings,
+        keyword_index=effective_keyword_index,
+        query_planner=effective_planner,
+        reranker=effective_reranker,
     )
     answer_service = AnswerService(
         retrieval_service=retrieval_service,
@@ -105,6 +122,7 @@ def create_app(
     app.state.chunking_service = chunking_service
     app.state.embedding_service = embedding_service
     app.state.retrieval_service = retrieval_service
+    app.state.keyword_index = effective_keyword_index
     app.state.answer_service = answer_service
     app.state.query_log_repository = query_log_repository
     app.state.vector_store = vector_store

@@ -19,7 +19,19 @@ SEARCH_URL = "/api/v1/search"
 
 @pytest.fixture
 def indexed_client(settings):
-    """注入假向量替身,并预置 acme / beta 两个已入库文档。"""
+    """注入假向量替身,并预置 acme / beta 两个已入库文档。
+
+    切片打分断言固定 T04 合同口径:显式全关,不随应用默认组合漂移。
+    """
+    settings = settings.model_copy(
+        update={
+            "use_query_rewrite": False,
+            "use_multi_query": False,
+            "use_hybrid": False,
+            "use_mmr": False,
+            "use_rerank": False,
+        }
+    )
     from app.main import create_app
 
     app = create_app(settings, embedder=DeterministicEmbedder())

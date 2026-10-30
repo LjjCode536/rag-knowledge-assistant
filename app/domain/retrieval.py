@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -66,4 +66,69 @@ class VectorStore(Protocol):
         filters: ChunkFilter | None,
     ) -> list[ScoredChunk]:
         """按相似度降序返回至多 top_k 个切片;过滤在相似度计算之前完成。"""
+        ...
+
+    def vector_of(self, chunk_id: str) -> Sequence[float] | None:
+        """取一个切片的已存向量(MMR 需要候选间的多样性计算);缺失返回 None。"""
+        ...
+
+
+class KeywordIndex(Protocol):
+    """关键词通道契约:词法检索与检索前过滤(混合检索的另一半)。
+
+    与 :class:`VectorStore` 同语义:同一个文档重写即整组替换;过滤发生在
+    打分之前;分数为词法相关性(BM25),与向量余弦不同尺度,融合时归一。
+    """
+
+    def replace(self, document_id: str, chunks: Sequence[Chunk]) -> None:
+        """整组写入一个文档的全部切片(重写即换,旧词法条目整批作废)。"""
+        ...
+
+    def search(
+        self,
+        query: str,
+        *,
+        top_k: int,
+        filters: ChunkFilter | None,
+    ) -> list[ScoredChunk]:
+        """按词法相关性降序返回至多 top_k 个切片;过滤在打分之前完成。"""
+        ...
+
+
+class Reranker(Protocol):
+    """重排契约:用重排模型对召回候选按相关性重新打分排序。
+
+    输入候选保持调用方顺序(供不同上游还原 index),返回按重排分降序、
+    分数替换为重排分的切片;上游失败由实现方决定降级或上抛。
+    """
+
+    async def rerank(
+        self,
+        query: str,
+        candidates: Sequence[ScoredChunk],
+        *,
+        top_n: int,
+    ) -> list[ScoredChunk]:
+        """返回至多 top_n 个切片,按重排相关性降序。"""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class QueryPlan:
+    """一次检索查询的规划产物:改写 + 多查询扩展变体。
+
+    `rewritten` 为 None 表示改写不可用(回退);`variants` 只含去重后
+    的非空字符串。原查询始终可用:规划只是增强,不是依赖。
+    """
+
+    original: str
+    rewritten: str | None = None
+    variants: list[str] = field(default_factory=list)
+
+
+class QueryPlanner(Protocol):
+    """查询规划契约:一次产出查询改写与多查询扩展变体(可各自取用)。"""
+
+    async def plan(self, question: str, *, variant_count: int) -> QueryPlan:
+        """返回查询规划;实现方保证失败回退而非中断检索。"""
         ...

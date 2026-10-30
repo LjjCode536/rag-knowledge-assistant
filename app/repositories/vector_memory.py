@@ -64,6 +64,15 @@ class InMemoryVectorStore:
         scored.sort(key=lambda hit: hit.score, reverse=True)
         return scored[:top_k]
 
+    def vector_of(self, chunk_id: str) -> list[float] | None:
+        """内存形态直接查表:切片已被嵌入,向量必然可取。"""
+        with self._lock:
+            for entries in self._entries.values():
+                for chunk, stored in entries:
+                    if chunk.chunk_id == chunk_id:
+                        return list(stored)
+        return None
+
 
 def _matches(chunk: Chunk, constraints: dict[str, str]) -> bool:
     return all(getattr(chunk, field) == value for field, value in constraints.items())

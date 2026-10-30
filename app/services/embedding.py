@@ -18,7 +18,7 @@ import structlog
 from app.core.errors import AppError, InvalidDocumentStateError, NotFoundError
 from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.repositories import ChunkRepository, DocumentRepository
-from app.domain.retrieval import VectorStore
+from app.domain.retrieval import KeywordIndex, VectorStore
 from app.domain.state_machine import ensure_transition
 from app.integrations.llm.client import EmbedResult, TokenUsage
 
@@ -45,7 +45,7 @@ class EmbeddingRunResult:
 
 
 class EmbeddingService:
-    """把一个已切片文档的全部切片批量向量化并写入向量库。"""
+    """把一个已切片文档的全部切片批量向量化并写入向量库与关键词索引。"""
 
     def __init__(
         self,
@@ -54,11 +54,13 @@ class EmbeddingService:
         chunk_repository: ChunkRepository,
         vector_store: VectorStore,
         embedder: Embedder,
+        keyword_index: KeywordIndex | None = None,
     ) -> None:
         self._documents = document_repository
         self._chunks = chunk_repository
         self._vectors = vector_store
         self._embedder = embedder
+        self._keyword_index = keyword_index
 
     async def embed_document(
         self, document_id: str, *, model: str | None = None
@@ -106,6 +108,9 @@ class EmbeddingService:
                 details={"document_id": document_id},
             )
         self._vectors.replace(document_id, chunks, result.vectors)
+        # 关键词通道与向量库同组替换、同批写入:两条通道候选永远一致。
+        if self._keyword_index is not None:
+            self._keyword_index.replace(document_id, chunks)
 
         self._transition(record, DocumentStatus.EMBEDDING)
         self._transition(record, DocumentStatus.INDEXED)

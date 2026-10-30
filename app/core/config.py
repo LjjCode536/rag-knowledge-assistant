@@ -66,6 +66,27 @@ class Settings(BaseSettings):
     qa_top_k: int = Field(default=3, ge=1, le=50)
     qa_min_score: float = Field(default=0.35, ge=-1.0, le=1.0)
 
+    # ===== 高级检索(教材第 43 章 RetrievalConfig 的逐项开关模式)=====
+    # 默认组合以 T07 消融数据为准(docs/iterations/0002-t07-advanced-retrieval):
+    # 重排 + 查询改写 Recall@3 0.7917 → 1.0000 / MRR 0.7500 → 1.0000,且拒答
+    # 正确率保持 1.0。MMR(-0.042 Recall)与多查询扩展(与改写打平但多耗上游)
+    # 不进默认;混合检索单独开启会破坏拒答阈值语义(消融 B 组合),列为需重排
+    # 校准分数的增强项。
+    use_query_rewrite: bool = True
+    use_multi_query: bool = False
+    use_hybrid: bool = False
+    use_mmr: bool = False
+    use_rerank: bool = True
+    # 融合权重:同一切片在两通道归一分上加权;两权重不可同时为 0
+    retrieval_vector_weight: float = Field(default=0.7, ge=0, le=1)
+    retrieval_keyword_weight: float = Field(default=0.3, ge=0, le=1)
+    # 候选池:重排 / MMR 需要远多于 top_k 的候选(先召回合成再精选)
+    retrieval_candidate_k: int = Field(default=30, ge=1, le=200)
+    # 多查询扩展生成的变体查询数量(不含原查询)
+    retrieval_multi_query_count: int = Field(default=3, ge=1, le=10)
+    # MMR 相关性 / 多样性权衡(1 = 纯相关性,0 = 纯多样性)
+    retrieval_mmr_lambda: float = Field(default=0.7, ge=0, le=1)
+
     @field_validator("siliconflow_api_key", mode="before")
     @classmethod
     def _blank_key_is_unset(cls, value: object) -> object:
@@ -73,6 +94,18 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             value = value.strip()
             return value or None
+        return value
+
+    @field_validator("retrieval_keyword_weight", mode="after")
+    @classmethod
+    def _fusion_weights_not_both_zero(cls, value: float, info) -> float:
+        """双通道权重同时为 0 时融合无意义;在配置期直接拒绝。"""
+        if info.field_name == "retrieval_keyword_weight":
+            vector_weight = info.data.get("retrieval_vector_weight")
+            if vector_weight is not None and vector_weight == 0 and value == 0:
+                raise ValueError(
+                    "retrieval_vector_weight 与 retrieval_keyword_weight 不可同时为 0"
+                )
         return value
 
     @property

@@ -10,6 +10,7 @@ import math
 from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -142,7 +143,8 @@ class ExpectedChunkRef(ChunkLocator):
     """
 
     anchor: str
-    chunk_id: str = Field(exclude=True)
+    # JSON 报告刻意不写 chunk_id(每次入库都会变);反序列化时补空占位即可
+    chunk_id: str = Field(default="", exclude=True)
     title: str | None = None
 
 
@@ -150,7 +152,7 @@ class RetrievedChunk(ChunkLocator):
     """一次检索命中:排名、文档内序号、文档与分数。"""
 
     rank: int = Field(ge=1)
-    chunk_id: str = Field(exclude=True)
+    chunk_id: str = Field(default="", exclude=True)
     title: str | None = None
     score: float
 
@@ -202,6 +204,8 @@ class EvaluationReport(BaseModel):
     embedder: str
     mode: str
     command: str
+    # M4 起记录高级检索开关快照(混合 / MMR / 重排等),保证组合可追溯
+    retrieval_config: dict[str, Any] | None = None
     cases_total: int = Field(ge=0)
     summary: RetrievalMetrics
     categories: dict[str, RetrievalMetrics] = Field(default_factory=dict)

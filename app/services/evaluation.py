@@ -38,6 +38,15 @@ SCHEMA_VERSION = 1
 DEFAULT_RUN_NAME = "T06 检索指标基线"
 DEFAULT_EMBEDDER_LABEL = "deterministic-lexical-1024d"
 
+# 高级检索开关清单(M4):CLI、报告快照与默认组合论证共用同一顺序
+RETRIEVAL_TOGGLE_FIELDS = (
+    "use_query_rewrite",
+    "use_multi_query",
+    "use_hybrid",
+    "use_mmr",
+    "use_rerank",
+)
+
 
 class EvaluationDatasetError(Exception):
     """黄金数据集自身不合法:锚点找不到、命中多个切片等。"""
@@ -61,6 +70,8 @@ class EvaluationConfig:
     mode: str = "in-process"
     command: str = "uv run python scripts/evaluate.py"
     run_name: str = DEFAULT_RUN_NAME
+    # M4 高级检索开关快照(评估时点按名称记录,进入报告的「检索配置」行)
+    retrieval_config: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -132,6 +143,7 @@ class EvaluationService:
             embedder=self._config.embedder,
             mode=self._config.mode,
             command=self._config.command,
+            retrieval_config=self._config.retrieval_config,
             cases_total=len(results),
             summary=summary,
             categories=categories,
@@ -374,8 +386,13 @@ def _round(value: float | None) -> float | None:
     return round(value, 6) if value is not None else None
 
 
-def render_markdown(report: EvaluationReport) -> str:
-    """人读报告:配置、摘要、分品类、逐用例与后续对比约定。"""
+def render_markdown(
+    report: EvaluationReport, *, baseline: EvaluationReport | None = None
+) -> str:
+    """人读报告:配置、摘要、分品类、逐用例与后续对比约定。
+
+    ``baseline`` 给定时追加「与基线对比」差值表(指标口径一致才可比)。
+    """
     lines: list[str] = [
         f"# {report.run_name}:{report.dataset_name} v{report.dataset_version}",
         "",
@@ -401,6 +418,7 @@ def render_markdown(report: EvaluationReport) -> str:
         f"| 向量来源 | `{report.embedder}` |",
         f"| 运行模式 | `{report.mode}` |",
         f"| 复现命令 | `{report.command}` |",
+        *(retrieval_config_rows(report.retrieval_config) if report.retrieval_config else []),
         "",
         "## 摘要",
         "",
@@ -448,6 +466,9 @@ def render_markdown(report: EvaluationReport) -> str:
     else:
         lines.append("本轮所有用例满分。")
 
+    if baseline is not None:
+        lines.extend(_baseline_delta_lines(report, baseline))
+
     lines.extend(["", "## 逐用例结果", ""])
     for result in report.case_results:
         lines.extend(_render_case(report, result))
@@ -472,6 +493,279 @@ def render_json(report: EvaluationReport) -> str:
     return (
         json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
     )
+
+
+def retrieval_config_rows(config: dict[str, Any] | None) -> list[str]:
+    """「检索配置」行:高级检索开关的可追溯快照(M4 起)。"""
+    if config is None:
+        return []
+    return [f"| 检索配置 | {format_retrieval_config(config)} |"]
+
+
+def format_retrieval_config(config: dict[str, Any]) -> str:
+    """开关快照 → 单行人读文本,报告表格与消融对比共用。"""
+    order = [
+        ("use_query_rewrite", "query_rewrite"),
+        ("use_multi_query", "multi_query"),
+        ("use_hybrid", "hybrid"),
+        ("use_mmr", "mmr"),
+        ("use_rerank", "rerank"),
+    ]
+    states = [f"{label}={'on' if config.get(name) else 'off'}" for name, label in order]
+    params = []
+    for key, label in (
+        ("retrieval_vector_weight", "w_v"),
+        ("retrieval_keyword_weight", "w_k"),
+        ("retrieval_candidate_k", "candidate_k"),
+        ("retrieval_multi_query_count", "nq"),
+        ("retrieval_mmr_lambda", "lambda"),
+    ):
+        if key in config:
+            params.append(f"{label}={config[key]}")
+    if params:
+        states.extend(params)
+    return "、".join(states)
+
+
+def _baseline_delta_lines(
+    report: EvaluationReport, baseline: EvaluationReport
+) -> list[str]:
+    """「与基线对比」差值表:同一数据集 / K / 切分 / 向量口径才并入对比。"""
+    comparable = (
+        report.dataset_version == baseline.dataset_version
+        and report.k == baseline.k
+        and report.chunk_strategy == baseline.chunk_strategy
+        and report.chunk_size == baseline.chunk_size
+        and report.chunk_overlap == baseline.chunk_overlap
+    )
+    lines = ["", "## 与基线对比", ""]
+    if not comparable:
+        lines.append(
+            f"⚠️ 基线({baseline.run_name})口径不同(数据集 v{baseline.dataset_version} / K="
+            f"{baseline.k} / 切分 {baseline.chunk_strategy}-{baseline.chunk_size}-"
+            f"{baseline.chunk_overlap}),差值不可比,仅列出。"
+        )
+        return lines
+
+    pairs: list[tuple[str, float | None, float | None]] = [
+        (f"Recall@{report.k}", baseline.summary.recall_at_k, report.summary.recall_at_k),
+        ("MRR", baseline.summary.mrr, report.summary.mrr),
+        (f"NDCG@{report.k}", baseline.summary.ndcg_at_k, report.summary.ndcg_at_k),
+        (f"HitRate@{report.k}", baseline.summary.hit_rate, report.summary.hit_rate),
+        ("拒答正确率", baseline.refusal_accuracy, report.refusal_accuracy),
+        ("权限边界通过率", baseline.permission_pass_rate, report.permission_pass_rate),
+    ]
+    lines.extend(
+        [
+            f"基线:{baseline.run_name}(向量来源 `{baseline.embedder}`)",
+            "",
+            "| 指标 | 基线 | 本次 | 差值 |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for name, base_value, now_value in pairs:
+        base_text = "—" if base_value is None else f"{base_value:.4f}"
+        now_text = "—" if now_value is None else f"{now_value:.4f}"
+        if base_value is None or now_value is None:
+            delta_text = "—"
+        else:
+            delta = now_value - base_value
+            delta_text = f"{delta:+.4f}"
+        lines.append(f"| {name} | {base_text} | {now_text} | {delta_text} |")
+    lines.append("")
+    return lines
+
+
+def render_ablation_markdown(
+    run_name: str,
+    dataset: GoldenDataset,
+    config: EvaluationConfig,
+    runs: list[tuple[str, EvaluationReport]],
+    *,
+    skipped: list[str] | None = None,
+    baseline: EvaluationReport | None = None,
+) -> str:
+    """消融对比报告:同一数据集上的开关组合矩阵 + 与基线的差值(M4 T07)。"""
+    k = config.k
+    lines: list[str] = [
+        f"# {run_name}:{dataset.name} v{dataset.version}",
+        "",
+        "> 由 `scripts/evaluate.py --ablate` 生成;消融组合在同一数据集、同一切分"
+        "与同一向量来源下逐个重跑,只差检索开关。",
+        "> 各组合的检索服务单线程串行调用上游,不触免费档限速;重排组合需密钥。",
+        "> A/B 行为确定性替身时序,可逐字复现;含真实上游的组合(重排 / 改写 / 多查询)"
+        "分数会带模型服务端轻微抖动,±0.01 内的指标差异视为噪声。",
+        "> 报告用「文档#index + 锚点」定位切片;随机 chunk_id 不写入报告。",
+        "",
+        "## 评估配置",
+        "",
+        "| 配置 | 值 |",
+        "| --- | --- |",
+        f"| 数据集 | `{dataset.name}` v{dataset.version} |",
+        f"| 用例总数 | {len(dataset.cases)} |",
+        f"| K / 拒答阈值 | {k} / {config.min_score} |",
+        f"| 向量来源 | `{config.embedder}` |",
+        f"| 运行模式 | `{config.mode}`(各组合独立进程内重建) |",
+        "| 上游并发 | `serial`(逐用例串行) |",
+        ablation_repro_line(config.command),
+        "",
+        "## 消融对比",
+        "",
+        f"| 组合 | 检索配置 | Recall@{k} | MRR | NDCG@{k} | HitRate@{k} |"
+        " ΔRecall vs 基线 | ΔMRR vs 基线 | 拒答正确率 | 权限通过率 |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    base_recall, base_mrr = _baseline_point(baseline)
+    for label, report in runs:
+        state = format_retrieval_config(
+            report.retrieval_config or {"use_hybrid": None, "use_rerank": None}
+        )
+        delta_recall = _delta_text(report.summary.recall_at_k, base_recall)
+        delta_mrr = _delta_text(report.summary.mrr, base_mrr)
+        lines.append(
+            f"| {label} | {state} | {report.summary.recall_at_k:.4f} | "
+            f"{report.summary.mrr:.4f} | {report.summary.ndcg_at_k:.4f} | "
+            f"{report.summary.hit_rate:.4f} | {delta_recall} | {delta_mrr} | "
+            f"{_format_optional(report.refusal_accuracy)} | "
+            f"{_format_optional(report.permission_pass_rate)} |"
+        )
+    for note in skipped or []:
+        lines.append(f"| {note} | | — | — | — | — | — | — | — | — |")
+    lines.extend(["", _default_choice_lines(runs)])
+    lines.extend(_category_delta_lines(runs, k))
+
+    primary_label, primary = _primary(runs)
+    lines.extend(
+        [
+            "",
+            f"## 逐用例结果(主推组合:{primary_label})",
+            "",
+        ]
+    )
+    for result in primary.case_results:
+        lines.extend(_render_case(primary, result))
+    lines.extend(
+        [
+            "## 与后续迭代对比的约定",
+            "",
+            "- 后续消融固定本矩阵与 K / 切分 / 向量来源;新增开关先加行再替换默认。",
+            "- 重排开组合的基线口径注明重排模型与 rerank 阈值;与替身基线不混比。",
+            "- 拒答正确率仍按检索分数与 `qa_min_score` 判定;重排分会改变分数分布,",
+            "  若拒答正确率下降需要在默认值与阈值上单独论证。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def ablation_repro_line(command: str) -> str:
+    """消融报告的复现命令行:已含 --ablate 的命令不再重复追加。"""
+    repro = command if "--ablate" in command else command + " --ablate"
+    return f"| 复现命令 | `{repro}` |"
+
+
+def _baseline_point(
+    baseline: EvaluationReport | None,
+) -> tuple[float | None, float | None]:
+    if baseline is None:
+        return None, None
+    return baseline.summary.recall_at_k, baseline.summary.mrr
+
+
+def _delta_text(value: float, base: float | None) -> str:
+    if base is None:
+        return "—"
+    return f"{value - base:+.4f}"
+
+
+def _default_choice_lines(runs: list[tuple[str, EvaluationReport]]) -> str:
+    """默认组合依据:先比 Recall / MRR,并列时取上游开销最小的开关组合。"""
+    if not runs:
+        return "无成功运行的组合,默认组合暂不调整。"
+    label, report = _primary(runs)
+    state = format_retrieval_config(
+        report.retrieval_config or {"use_hybrid": None, "use_rerank": None}
+    )
+    return (
+        f"**默认组合依据**:「{label}」(k={report.k})在本数据集上"
+        f"Recall={report.summary.recall_at_k:.4f} / MRR={report.summary.mrr:.4f};"
+        f"并列取最优时按上游开销较小的开关组合取舍,对应 {state} 为当前默认值。"
+    )
+
+
+def _enabled_toggle_count(report: EvaluationReport) -> int:
+    config = report.retrieval_config or {}
+    return sum(1 for field in RETRIEVAL_TOGGLE_FIELDS if config.get(field))
+
+
+def _primary(runs: list[tuple[str, EvaluationReport]]) -> tuple[str, EvaluationReport]:
+    """主推组合:Recall / MRR 最优;并列时任取上游开销最小,再按矩阵序。
+
+    _TOGGLE_FIELDS 来自 scripts.evaluate 的开关清单;循环依赖解释:评估
+    服务只关心「开关数量」这一成本信号,不 import CLI。
+    """
+    best = runs[0]
+    best_cost = _enabled_toggle_count(best[1])
+    for candidate in runs[1:]:
+        candidate_cost = _enabled_toggle_count(candidate[1])
+        candidate_score = (candidate[1].summary.recall_at_k, candidate[1].summary.mrr)
+        best_score = (best[1].summary.recall_at_k, best[1].summary.mrr)
+        if candidate_score > best_score or (
+            candidate_score == best_score and candidate_cost < best_cost
+        ):
+            best, best_cost = candidate, candidate_cost
+    return best
+
+
+def _category_delta_lines(
+    runs: list[tuple[str, EvaluationReport]], k: int
+) -> list[str]:
+    """分品类对比:全关组合 vs 主推组合。"""
+    if len(runs) < 2:
+        return []
+    _, base_report = runs[0]
+    primary_label, primary = _primary(runs)
+    if primary is base_report:
+        return []
+    categories = sorted(
+        set(base_report.categories) | set(primary.categories)
+    )
+    lines = [
+        "",
+        f"## 分品类影响(全关 → {primary_label})",
+        "",
+        f"| 品类 | Recall@{k}(全关) | Recall@{k}(主推) | ΔMRR |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for category in categories:
+        base_metrics = base_report.categories.get(category)
+        now_metrics = primary.categories.get(category)
+        base_recall = f"{base_metrics.recall_at_k:.4f}" if base_metrics else "—"
+        now_recall = f"{now_metrics.recall_at_k:.4f}" if now_metrics else "—"
+        delta_mrr = (
+            f"{now_metrics.mrr - base_metrics.mrr:+.4f}"
+            if base_metrics and now_metrics
+            else "—"
+        )
+        lines.append(
+            f"| {category} | {base_recall} | {now_recall} | {delta_mrr} |"
+        )
+    lines.append("")
+    return lines
+
+
+def render_ablation_json(runs: list[tuple[str, EvaluationReport]], skipped: list[str]) -> str:
+    """机器可读消融报告:与 Markdown 同构,CI 门禁直接消费。"""
+    payload = {
+        "schema_version": 1,
+        "kind": "ablation",
+        "skipped": skipped,
+        "runs": [
+            {"label": label, "report": report.model_dump(mode="json")}
+            for label, report in runs
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 def _render_case(report: EvaluationReport, result: CaseResult) -> list[str]:
@@ -600,7 +894,10 @@ __all__ = [
     "EvaluationConfig",
     "EvaluationDatasetError",
     "EvaluationService",
+    "format_retrieval_config",
     "load_golden_dataset",
+    "render_ablation_json",
+    "render_ablation_markdown",
     "render_json",
     "render_markdown",
 ]
