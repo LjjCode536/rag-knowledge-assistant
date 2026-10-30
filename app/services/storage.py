@@ -17,3 +17,13 @@ class LocalDocumentStorage:
         target = self._root / f"{document_id}{suffix}"
         target.write_bytes(content)
         return target
+
+    def delete(self, document_id: str, *, file_name: str) -> None:
+        """删除已落盘的上传文件(文档删除的连带清理);文件不存在按幂等处理。
+
+        命名规则须与 :meth:`save` 保持同一口径(suffix 来自 file_name)。
+        """
+        suffix = Path(file_name).suffix.lower()
+        target = self._root / f"{document_id}{suffix}"
+        if target.is_file():
+            target.unlink()

@@ -26,10 +26,20 @@ _ALLOWED: dict[DocumentStatus, frozenset[DocumentStatus]] = {
     DocumentStatus.EMBEDDING: frozenset({DocumentStatus.INDEXED, DocumentStatus.FAILED}),
     DocumentStatus.INDEXED: frozenset(),
     DocumentStatus.FAILED: frozenset(),
+    # T10 文档生命周期新增终态(见 ADR-0009):常规管线下无出边
+    DocumentStatus.SUPERSEDED: frozenset(),
+    DocumentStatus.DELETED: frozenset(),
 }
+
+# 退位与删除是跨状态的终结迁移:旧版本可从任意进行中 / 已入库 / 已失败
+# 状态退位或被删除,不再逐状态枚举(ADR-0009)。
+_LIFECYCLE_TARGETS = frozenset({DocumentStatus.SUPERSEDED, DocumentStatus.DELETED})
 
 
 def ensure_transition(current: DocumentStatus, target: DocumentStatus) -> None:
     """校验迁移合法性,不合法时抛 :class:`StateTransitionError`。"""
+    # 生命周期终态可从任意状态到达,包含同态迁移(并发退位 / 重复删除幂等)
+    if target in _LIFECYCLE_TARGETS:
+        return
     if target not in _ALLOWED[current]:
         raise StateTransitionError(f"文档状态不允许从 {current} 迁移到 {target}")

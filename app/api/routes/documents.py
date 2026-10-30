@@ -12,6 +12,7 @@ from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
 from app.services.ingestion import IngestionService
+from app.services.lifecycle import DocumentLifecycleService
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -29,6 +30,7 @@ class DocumentView(BaseModel):
     version: str
     status: DocumentStatus
     error_message: str | None = None
+    is_latest: bool = True
     page_count: int | None = None
     element_count: int | None = None
     chunk_count: int | None = None
@@ -37,6 +39,8 @@ class DocumentView(BaseModel):
     chunked_at: datetime | None = None
     indexed_at: datetime | None = None
     failed_at: datetime | None = None
+    superseded_at: datetime | None = None
+    deleted_at: datetime | None = None
 
     @classmethod
     def of(cls, record: DocumentRecord) -> DocumentView:
@@ -51,6 +55,7 @@ class DocumentView(BaseModel):
             version=record.version,
             status=record.status,
             error_message=record.error_message,
+            is_latest=record.is_latest,
             page_count=record.page_count,
             element_count=record.element_count,
             chunk_count=record.chunk_count,
@@ -59,6 +64,8 @@ class DocumentView(BaseModel):
             chunked_at=record.chunked_at,
             indexed_at=record.indexed_at,
             failed_at=record.failed_at,
+            superseded_at=record.superseded_at,
+            deleted_at=record.deleted_at,
         )
 
 
@@ -136,3 +143,18 @@ def get_document_elements(request: Request, document_id: str) -> ApiEnvelope[Ele
     views = [ElementView(**element.model_dump()) for element in service.get_elements(document_id)]
     data = ElementsView(document_id=record.id, page_count=record.page_count, elements=views)
     return success_envelope(data, trace_id=trace_id_of(request))
+
+
+@router.delete(
+    "/{document_id}",
+    response_model=ApiEnvelope[DocumentView],
+    summary="删除文档(切片与向量连带清理)",
+)
+def delete_document(request: Request, document_id: str) -> ApiEnvelope[DocumentView]:
+    """删除知识库文档:状态机迁移到 deleted 终态,切片、向量、关键词通道条目与
+    落盘文件连带清理;档案保留可查(终态、失败原因)、重复删除幂等。
+    清理失败返回 `DOCUMENT_DELETE_FAILED`,档案原状保留、可重试。
+    """
+    service: DocumentLifecycleService = request.app.state.lifecycle_service
+    record = service.delete(document_id)
+    return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))

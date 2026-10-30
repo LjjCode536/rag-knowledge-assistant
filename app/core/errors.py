@@ -31,6 +31,8 @@ class ErrorCode(StrEnum):
     DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
     DOCUMENT_CHUNK_FAILED = "DOCUMENT_CHUNK_FAILED"
     INVALID_DOCUMENT_STATE = "INVALID_DOCUMENT_STATE"
+    DOCUMENT_SUPERSEDE_FAILED = "DOCUMENT_SUPERSEDE_FAILED"
+    DOCUMENT_DELETE_FAILED = "DOCUMENT_DELETE_FAILED"
 
 
 class AppError(Exception):
@@ -157,3 +159,22 @@ class InvalidDocumentStateError(AppError):
     code = ErrorCode.INVALID_DOCUMENT_STATE
     status_code = 409
     default_message = "文档当前状态不允许该操作"
+
+
+class DocumentSupersedeError(AppError):
+    """版本退位失败(清理旧版本数据时);档案原状保留,失败原因可查,重试即可。"""
+
+    code = ErrorCode.DOCUMENT_SUPERSEDE_FAILED
+    status_code = 500
+    default_message = "文档版本退位失败,旧版本数据未变更,可重试"
+    retryable = True
+
+
+class DocumentDeleteError(AppError):
+    """删除失败(连带清理切片 / 向量 / 关键词通道条目 / 落盘文件时);档案原状
+    保留、已完成清理不回滚,重试即从未完成的清理步骤恢复。"""
+
+    code = ErrorCode.DOCUMENT_DELETE_FAILED
+    status_code = 500
+    default_message = "文档删除失败,可重试"
+    retryable = True

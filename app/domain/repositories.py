@@ -28,6 +28,14 @@ class DocumentRepository(Protocol):
         """保存档案(状态机流转后的落库)。"""
         ...
 
+    def find_latest_by_file(self, *, tenant: str, file_name: str) -> DocumentRecord | None:
+        """按标识(租户 + 文件名)取现行最新版本(is_latest=True);不存在返回 None。
+
+        T10 版本退位的登记依据:同一知识库文档的各版本共用这一标识;
+        若出现多余候选(不变量被破坏),取 created_at 最新的一条防御性兜底。
+        """
+        ...
+
 
 class ChunkRepository(Protocol):
     """切片仓储的存取契约。
@@ -41,6 +49,10 @@ class ChunkRepository(Protocol):
 
     def list_by_document(self, document_id: str) -> list[Chunk]:
         """按文档取全部切片(含切片元数据),未切分返回空列表。"""
+        ...
+
+    def delete(self, document_id: str) -> None:
+        """连带清理一个文档的全部切片(文档删除);未入库按幂等处理。"""
         ...
 
 

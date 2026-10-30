@@ -35,6 +35,19 @@ class InMemoryDocumentRepository:
         with self._lock:
             self._records[record.id] = record
 
+    def find_latest_by_file(self, *, tenant: str, file_name: str) -> DocumentRecord | None:
+        with self._lock:
+            candidates = [
+                record
+                for record in self._records.values()
+                if record.tenant == tenant
+                and record.file_name == file_name
+                and record.is_latest
+            ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda record: record.created_at)
+
 
 class InMemoryChunkRepository:
     """切片仓储的内存实现:一个文档一组切片,重切即整组替换。
@@ -53,6 +66,10 @@ class InMemoryChunkRepository:
     def list_by_document(self, document_id: str) -> list[Chunk]:
         with self._lock:
             return list(self._chunks.get(document_id, []))
+
+    def delete(self, document_id: str) -> None:
+        with self._lock:
+            self._chunks.pop(document_id, None)
 
 
 class InMemoryQueryLogRepository:

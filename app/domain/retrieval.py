@@ -68,6 +68,10 @@ class VectorStore(Protocol):
         """按相似度降序返回至多 top_k 个切片;过滤在相似度计算之前完成。"""
         ...
 
+    def delete(self, document_id: str) -> None:
+        """清理一个文档的全部向量(T10 版本退位与删除的连带清理);未入库按幂等处理。"""
+        ...
+
     def vector_of(self, chunk_id: str) -> Sequence[float] | None:
         """取一个切片的已存向量(MMR 需要候选间的多样性计算);缺失返回 None。"""
         ...
@@ -92,6 +96,10 @@ class KeywordIndex(Protocol):
         filters: ChunkFilter | None,
     ) -> list[ScoredChunk]:
         """按词法相关性降序返回至多 top_k 个切片;过滤在打分之前完成。"""
+        ...
+
+    def delete(self, document_id: str) -> None:
+        """清理一个文档的全部关键词通道条目(T10 版本退位与删除的连带清理);未入库按幂等处理。"""
         ...
 
 

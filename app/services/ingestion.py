@@ -6,6 +6,7 @@ M7 引入异步 ingestion 时复用同一服务,状态可查语义不变。
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 
 import structlog
@@ -15,17 +16,32 @@ from app.domain.documents import DocumentElement, DocumentFormat, DocumentRecord
 from app.domain.repositories import DocumentRepository
 from app.domain.state_machine import ensure_transition
 from app.integrations.parsing.factory import get_parser
+from app.services.lifecycle import DocumentLifecycleService
 from app.services.storage import LocalDocumentStorage
 
 logger = structlog.get_logger("ingestion")
 
 
 class IngestionService:
-    """上传即解析;解析失败不外抛,落入 failed 状态并记录原因。"""
+    """上传即解析;解析失败不外抛,落入 failed 状态并记录原因。
 
-    def __init__(self, *, repository: DocumentRepository, storage: LocalDocumentStorage) -> None:
+    同一标识(租户 + 文件名)的新版本在上新即让旧版本退位并清理其
+    向量与关键词通道条目,检索面只保留最新版本的入库结果(见 ADR-0009)。
+    """
+
+    def __init__(
+        self,
+        *,
+        repository: DocumentRepository,
+        storage: LocalDocumentStorage,
+        lifecycle_service: DocumentLifecycleService,
+    ) -> None:
         self._repository = repository
         self._storage = storage
+        self._lifecycle_service = lifecycle_service
+        # 并发上传同一标识(租户 + 文件名)时,身份查找 → 退位 → 登记必须串行:
+        # 这是一个进程内的关键段,M3 生产形态由数据库事务接管同一语义(ADR-0009)
+        self._version_lock = threading.Lock()
 
     def ingest(
         self,
@@ -41,16 +57,25 @@ class IngestionService:
         file_name = _base_name(file_name)
         file_type = DocumentFormat.from_filename(file_name)
 
-        record = DocumentRecord(
-            file_name=file_name,
-            file_type=file_type,
-            size_bytes=len(content),
-            tenant=tenant,
-            department=department,
-            doc_type=doc_type,
-            version=version,
-        )
-        self._repository.add(record)
+        # 同标识(租户 + 文件名)的旧版本在上新即退位;退位失败不落残档——
+        # 新档案此刻尚未登记,旧档案原状保留,重传即从退位步骤重试(ADR-0009)
+        with self._version_lock:
+            previous = self._repository.find_latest_by_file(
+                tenant=tenant, file_name=file_name
+            )
+            if previous is not None:
+                self._lifecycle_service.supersede(previous)
+
+            record = DocumentRecord(
+                file_name=file_name,
+                file_type=file_type,
+                size_bytes=len(content),
+                tenant=tenant,
+                department=department,
+                doc_type=doc_type,
+                version=version,
+            )
+            self._repository.add(record)
         self._transition(record, DocumentStatus.PARSING)
         self._storage.save(record.id, file_name=file_name, content=content)
 

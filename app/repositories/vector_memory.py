@@ -41,6 +41,11 @@ class InMemoryVectorStore:
         with self._lock:
             self._entries[document_id] = entries
 
+    def delete(self, document_id: str) -> None:
+        """整批清掉一个文档的全部向量(版本退位 / 删除的连带清理),未入库幂等。"""
+        with self._lock:
+            self._entries.pop(document_id, None)
+
     def search(
         self,
         vector: Sequence[float],

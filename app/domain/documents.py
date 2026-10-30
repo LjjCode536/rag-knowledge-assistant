@@ -82,6 +82,10 @@ class DocumentStatus(StrEnum):
     EMBEDDING = "embedding"
     INDEXED = "indexed"
     FAILED = "failed"
+    # T10 文档生命周期:superseded 承接版本退位(新版本上新、旧版本让位),
+    # deleted 承接文档删除;两者均为终态,迁移表见 state_machine / ADR-0009。
+    SUPERSEDED = "superseded"
+    DELETED = "deleted"
 
 
 class DocumentRecord(BaseModel):
@@ -93,6 +97,10 @@ class DocumentRecord(BaseModel):
     size_bytes: int
     status: DocumentStatus = DocumentStatus.UPLOADED
     error_message: str | None = None
+    # ===== 版本生命周期(T10):同一标识(租户 + 文件名)的新版本上新即退位 =====
+    is_latest: bool = True
+    superseded_at: datetime | None = None
+    deleted_at: datetime | None = None
     # ===== 知识库文档元数据(切片时冗余进切片元数据)=====
     tenant: str = "default"
     department: str | None = None

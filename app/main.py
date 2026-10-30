@@ -18,7 +18,7 @@ from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.tracing import TraceIdMiddleware
-from app.domain.retrieval import KeywordIndex, QueryPlanner
+from app.domain.retrieval import KeywordIndex, QueryPlanner, VectorStore
 from app.integrations.llm.client import UnifiedLLMClient
 from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.memory import (
@@ -36,6 +36,7 @@ from app.services.generation import (
     SiliconFlowAnswerGenerator,
 )
 from app.services.ingestion import IngestionService
+from app.services.lifecycle import DocumentLifecycleService
 from app.services.query_planning import SiliconFlowQueryPlanner
 from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
@@ -59,6 +60,7 @@ def create_app(
     keyword_index: KeywordIndex | None = None,
     query_planner: QueryPlanner | None = None,
     reranker: Reranker | None = None,
+    vector_store: VectorStore | None = None,
 ) -> FastAPI:
     """建应用;embedder、生成器与高级检索协作对象可注入替身(测试),缺省走真实实现。
 
@@ -77,16 +79,25 @@ def create_app(
     )
     document_repository = InMemoryDocumentRepository()
     chunk_repository = InMemoryChunkRepository()
-    vector_store = InMemoryVectorStore()
+    effective_vector_store = vector_store if vector_store is not None else InMemoryVectorStore()
     effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
     effective_planner = (
         query_planner if query_planner is not None else SiliconFlowQueryPlanner(llm_client)
     )
     effective_reranker = reranker if reranker is not None else SiliconFlowReranker(llm_client)
     query_log_repository = InMemoryQueryLogRepository()
+    document_storage = LocalDocumentStorage(settings.upload_dir)
+    lifecycle_service = DocumentLifecycleService(
+        document_repository=document_repository,
+        chunk_repository=chunk_repository,
+        vector_store=effective_vector_store,
+        keyword_index=effective_keyword_index,
+        storage=document_storage,
+    )
     ingestion_service = IngestionService(
         repository=document_repository,
-        storage=LocalDocumentStorage(settings.upload_dir),
+        storage=document_storage,
+        lifecycle_service=lifecycle_service,
     )
     chunking_service = ChunkingService(
         document_repository=document_repository,
@@ -96,12 +107,12 @@ def create_app(
     embedding_service = EmbeddingService(
         document_repository=document_repository,
         chunk_repository=chunk_repository,
-        vector_store=vector_store,
+        vector_store=effective_vector_store,
         embedder=effective_embedder,
         keyword_index=effective_keyword_index,
     )
     retrieval_service = RetrievalService(
-        vector_store=vector_store,
+        vector_store=effective_vector_store,
         embedder=effective_embedder,
         settings=settings,
         keyword_index=effective_keyword_index,
@@ -140,7 +151,8 @@ def create_app(
     app.state.keyword_index = effective_keyword_index
     app.state.answer_service = answer_service
     app.state.query_log_repository = query_log_repository
-    app.state.vector_store = vector_store
+    app.state.vector_store = effective_vector_store
+    app.state.lifecycle_service = lifecycle_service
 
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)

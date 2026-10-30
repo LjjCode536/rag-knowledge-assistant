@@ -36,6 +36,11 @@ class InMemoryKeywordIndex:
         with self._lock:
             self._chunks[document_id] = list(chunks)
 
+    def delete(self, document_id: str) -> None:
+        """整批清掉一个文档的全部关键词通道条目(版本退位 / 删除的连带清理),未入库幂等。"""
+        with self._lock:
+            self._chunks.pop(document_id, None)
+
     def search(
         self,
         query: str,
