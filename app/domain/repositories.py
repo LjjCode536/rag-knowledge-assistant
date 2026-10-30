@@ -7,6 +7,7 @@ from typing import Protocol
 
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord
+from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
 
@@ -107,4 +108,20 @@ class FeedbackRepository(Protocol):
 
     def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
         """返回反馈总数;给 verdict 时只统计该判定。"""
+        ...
+
+
+class EvaluationRunRepository(Protocol):
+    """评估运行留档的存取契约(六张表之一 evaluation_runs,T13)。
+
+    评估报告照旧落 docs/iterations 的 Markdown + JSON 文件;本契约是同一份
+    报告在生产库的留档面(进程内存实现供测试,生产形态走 PostgreSQL)。
+    """
+
+    def add(self, report: EvaluationReport, *, run_id: str) -> None:
+        """落库一次评估运行;同 run_id 重复落库视为程序错误。"""
+        ...
+
+    def count(self) -> int:
+        """返回已留档的评估运行总数。"""
         ...

@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.chunks import ChunkingStrategy
@@ -73,10 +73,19 @@ class Settings(BaseSettings):
     # ===== 向量库后端(M3 三级存储:memory → chroma → pgvector)=====
     # memory = 进程内存基线(默认,重启即失忆,测试 / CI 指标口径);
     # chroma = Chroma 持久向量库(教材第 42 章),行为与基线一致,
-    # 仅余同分顺序与 float32 精度两类可解释差异。
-    vector_store: Literal["memory", "chroma"] = "memory"
+    # 仅余同分顺序与 float32 精度两类可解释差异;
+    # pgvector = PostgreSQL 16 + pgvector 生产持久化(教材第 42 / 45 章生产表),
+    # 六张表(documents / chunks / embeddings / query_logs / feedbacks /
+    # evaluation_runs)全部落地 psycopg 连接串指向的数据库,仓储与向量库
+    # 同一切换;必须配置 database_url,缺了在配置期直接拒绝,绝不静默回退。
+    vector_store: Literal["memory", "chroma", "pgvector"] = "memory"
     # chroma 数据目录:一个目录一份标签,重启不重嵌(运行时产物,已被 gitignore)
     chroma_path: Path = Path("data/chroma")
+
+    # ===== 生产持久化(pgvector 模式)=====
+    # PostgreSQL 连接串,与 compose 的 DATABASE_URL 同一形态:
+    # postgresql://rag:<密码>@<主机>:5432/rag
+    database_url: str | None = None
 
     # ===== 高级检索(教材第 43 章 RetrievalConfig 的逐项开关模式)=====
     # 默认组合以 T07 消融数据为准(docs/iterations/0002-t07-advanced-retrieval):
@@ -119,6 +128,16 @@ class Settings(BaseSettings):
                     "retrieval_vector_weight 与 retrieval_keyword_weight 不可同时为 0"
                 )
         return value
+
+    @model_validator(mode="after")
+    def _pgvector_requires_database_url(self) -> Settings:
+        """pgvector 模式必须显式给出连接串:生产持久化不得静默降级为内存态。"""
+        if self.vector_store == "pgvector" and not (self.database_url or "").strip():
+            raise ValueError(
+                "vector_store=pgvector 需要配置 database_url"
+                "(postgresql://<用户>:<密码>@<主机>:5432/<库>)"
+            )
+        return self
 
     @property
     def upstream_configured(self) -> bool:

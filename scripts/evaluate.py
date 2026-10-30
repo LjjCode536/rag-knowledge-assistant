@@ -30,6 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -163,9 +164,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--vector-store",
-        choices=("memory", "chroma"),
+        choices=("memory", "chroma", "pgvector"),
         default="memory",
-        help="进程内模式的向量库后端:memory=基线(默认),chroma=持久向量库(T12)",
+        help="进程内模式的向量库后端:memory=基线(默认),chroma=持久向量库(T12),"
+        "pgvector=PostgreSQL 生产持久化(T13,DATABASE_URL 指向的库,整库覆盖式写入"
+        "评估语料,评估结束不清理)",
+    )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="PostgreSQL 连接串(pgvector 评估与 --record-run 留档用:"
+        "postgresql://<用户>:<密码>@<主机>:5432/<库>);缺省用应用配置 DATABASE_URL",
     )
     parser.add_argument(
         "--embedder-label",
@@ -221,6 +230,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--use-app-defaults",
         action="store_true",
         help="检索开关默认沿用应用配置(需密钥的组合会做前置校验);缺省全关,T06 基线口径",
+    )
+    persistence = parser.add_argument_group("生产持久化留档(T13)")
+    persistence.add_argument(
+        "--record-run",
+        action="store_true",
+        help="把本次评估报告留档进 evaluation_runs 表(PostgreSQL,需 --database-url"
+        "或应用配置);报告文件照旧落盘,留档供跨迭代追溯",
     )
     return parser.parse_args(argv)
 
@@ -328,14 +344,26 @@ def resolve_qa_generator(settings: Settings, args: argparse.Namespace) -> str | 
 
 
 def _vector_store_updates(args: argparse.Namespace, temp_dir: Path) -> dict[str, Any]:
-    """进程内评估的向量库后端配置:memory 沿用默认,chroma 数据落临时目录。"""
+    """进程内评估的向量库后端配置:memory 沿用默认,chroma 数据落临时目录。
+
+    pgvector:评估语料写入连接串指向的库(表在此前为幂等建好);语料按文档
+    整组覆盖,不做 清空 —— 供跨次对比时沿用同一库,靠 run/文档 id 区隔。
+    """
     if args.vector_store == "chroma":
         return {"vector_store": "chroma", "chroma_path": temp_dir / "chroma"}
+    if args.vector_store == "pgvector":
+        updates: dict[str, Any] = {"vector_store": "pgvector"}
+        if args.database_url:
+            updates["database_url"] = args.database_url
+        return updates
     return {}
 
 
 def _release_vector_store(app) -> None:
-    """清掉向量库后端持有的文件句柄(chroma);内存后端没有 close,按无操作处理。"""
+    """清掉向量库后端持有的资源(chroma 文件句柄 / pgvector 连接池);
+
+    pgvector 模式的连接池为仓储与向量库共享,close 幂等。
+    """
     store = getattr(app.state, "vector_store", None)
     close = getattr(store, "close", None)
     if callable(close):
@@ -525,6 +553,25 @@ async def _run_combo(
             _release_vector_store(app)
 
 
+def _record_evaluation_run(report: EvaluationReport, dsn: str, *, run_id: str) -> None:
+    """把评估报告留档进 evaluation_runs 表;失败给出警告但不改变评估结果。"""
+    from app.repositories.postgres import PgDatabase, PgEvaluationRunRepository
+
+    try:
+        db = PgDatabase(dsn)
+        try:
+            PgEvaluationRunRepository(db).add(report, run_id=run_id)
+        finally:
+            db.close()
+    except Exception as exc:
+        print(f"评估运行留档失败({run_id}):{exc}", file=sys.stderr)
+
+
+def settings_database_url() -> str | None:
+    url = get_settings().database_url
+    return url if url and url.strip() else None
+
+
 def main(argv: list[str] | None = None) -> int:
     raw_args = argv if argv is not None else sys.argv[1:]
     args = _parse_args(argv)
@@ -552,9 +599,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    if args.base_url and args.vector_store == "chroma":
+    if args.base_url and args.vector_store in ("chroma", "pgvector"):
         print(
             "--vector-store 只支持进程内模式:外部模式的后端由服务端自己的配置决定",
+            file=sys.stderr,
+        )
+        return 2
+    if args.record_run and args.database_url is None and not settings_database_url():
+        print(
+            "--record-run 需要 PostgreSQL 连接串:显式 --database-url 或应用配置 DATABASE_URL",
             file=sys.stderr,
         )
         return 2
@@ -641,6 +694,8 @@ def main(argv: list[str] | None = None) -> int:
         retrieval_config=snapshot,
     )
     baseline = _load_baseline(args.baseline_report)
+    # --record-run 只留档单次运行(消融矩阵逐组合另行留档,不在本入口)
+    single_report: EvaluationReport | None = None
 
     try:
         if args.ablate:
@@ -671,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
             json_text = render_json(report)
             summary = report.summary
             k = report.k
+            single_report = report
     except (EvaluationApiError, EvaluationDatasetError) as exc:
         print(f"评估失败:{exc}", file=sys.stderr)
         return 1
@@ -679,6 +735,12 @@ def main(argv: list[str] | None = None) -> int:
     report_path.write_text(markdown, encoding="utf-8", newline="\n")
     json_report_path.parent.mkdir(parents=True, exist_ok=True)
     json_report_path.write_text(json_text, encoding="utf-8", newline="\n")
+
+    if args.record_run and single_report is not None:
+        dsn = args.database_url or settings_database_url()
+        run_id = f"run_{uuid4().hex[:12]}"
+        _record_evaluation_run(single_report, dsn, run_id=run_id)
+        print(f"评估运行已留档:run_id={run_id}")
 
     print(
         f"用例 {summary.cases} 条 | "

@@ -9,12 +9,26 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.core.errors import NotFoundError
 from app.main import create_app
+from tests.pg_utils import PgTestDatabase, fresh_test_database, pg_available
 
 
 @pytest.fixture
 def upload_dir(tmp_path: Path) -> Path:
     """上传落盘目录指向 pytest 临时目录,验证落盘位置可配置且不污染仓库。"""
     return tmp_path / "uploaded_docs"
+
+
+@pytest.fixture
+def test_pg_database() -> Iterator[PgTestDatabase]:
+    """每用例一张重建过的 rag_test 库;后端不可达(无 Docker)时整批跳过。
+
+    建表走生产同一 DDL(ensure_schema),仓储与向量库的真实落库都在这里验证。
+    """
+    if not pg_available():
+        pytest.skip("PostgreSQL 测试后端不可达(docker compose up -d db 启动)")
+    db = fresh_test_database()
+    yield db
+    # 外部清理即可:pool 由各实现自己 close,库留给下一用例整库重建
 
 
 @pytest.fixture

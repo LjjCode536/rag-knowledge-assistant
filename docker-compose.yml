@@ -1,0 +1,32 @@
+# 生产持久化(M3·第三层 T13,教材第 42 / 45 章生产表):
+# PostgreSQL 16 + pgvector 一键拉起,本地即可复现生产形态。
+#
+# 用法:
+#   docker compose up -d db          # 启动(数据存在命名卷里,重启容器数据仍在)
+#   docker compose down -v           # 彻底清库(谨慎:连同全部落库数据)
+#
+# 连接串与 .env.example 的 DATABASE_URL 同一形态:
+#   postgresql://rag:<密码>@127.0.0.1:5432/rag
+#
+# 凭据仅用于本地开发默认值;生产部署用环境变量覆盖(POSTGRES_USER / POSTGRES_PASSWORD)。
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rag-assistant-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag} -d ${POSTGRES_DB:-rag}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
@@ -19,6 +21,12 @@ from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.tracing import TraceIdMiddleware
+from app.domain.repositories import (
+    ChunkRepository,
+    DocumentRepository,
+    FeedbackRepository,
+    QueryLogRepository,
+)
 from app.domain.retrieval import KeywordIndex, QueryPlanner, VectorStore
 from app.integrations.llm.client import UnifiedLLMClient
 from app.repositories.keyword_memory import InMemoryKeywordIndex
@@ -45,6 +53,9 @@ from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
 from app.services.storage import LocalDocumentStorage
 
+if TYPE_CHECKING:
+    from app.repositories.postgres import PgDatabase
+
 
 def _build_answer_generator(
     settings: Settings, llm_client: UnifiedLLMClient
@@ -62,6 +73,55 @@ def _build_vector_store(settings: Settings) -> VectorStore:
 
         return ChromaVectorStore(persist_dir=settings.chroma_path)
     return InMemoryVectorStore()
+
+
+@dataclass(slots=True)
+class _Persistence:
+    """装配产物:仓储 + 向量库 + 可选的共享连接池(pgvector 模式)。"""
+
+    documents: DocumentRepository
+    chunks: ChunkRepository
+    query_logs: QueryLogRepository
+    feedbacks: FeedbackRepository
+    store: VectorStore
+    # pgvector 模式下四仓储与向量库共用;memory / chroma 模式恒为 None
+    pg: PgDatabase | None = None
+
+
+def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> _Persistence:
+    """按配置装配持久化层:M3 三级存储的最后一级(pgvector)接六张生产表。
+
+    memory / chroma 模式:四个数据仓储保持进程内存实现(测试 / 无 Docker 开发);
+    pgvector 模式:四仓储 + 向量库全部切到 PostgreSQL,共用一个连接池,
+    构造即跑幂等建库(六张表),库不可达在此显式失败,绝不静默回退。
+    """
+    if settings.vector_store == "pgvector":
+        from app.repositories.postgres import (
+            PgChunkRepository,
+            PgDatabase,
+            PgDocumentRepository,
+            PgFeedbackRepository,
+            PgQueryLogRepository,
+        )
+        from app.repositories.vector_pgvector import PgVectorStore
+
+        pg_database = PgDatabase(settings.database_url)
+        return _Persistence(
+            documents=PgDocumentRepository(pg_database),
+            chunks=PgChunkRepository(pg_database),
+            query_logs=PgQueryLogRepository(pg_database),
+            feedbacks=PgFeedbackRepository(pg_database),
+            store=vector_store if vector_store is not None else PgVectorStore(pg_database),
+            pg=pg_database,
+        )
+    # memory / chroma:数据仓储零依赖进程内存实现(M2 / M4 基线)
+    return _Persistence(
+        documents=InMemoryDocumentRepository(),
+        chunks=InMemoryChunkRepository(),
+        query_logs=InMemoryQueryLogRepository(),
+        feedbacks=InMemoryFeedbackRepository(),
+        store=vector_store if vector_store is not None else _build_vector_store(settings),
+    )
 
 
 def create_app(
@@ -89,18 +149,17 @@ def create_app(
         if answer_generator is not None
         else _build_answer_generator(settings, llm_client)
     )
-    document_repository = InMemoryDocumentRepository()
-    chunk_repository = InMemoryChunkRepository()
-    effective_vector_store = (
-        vector_store if vector_store is not None else _build_vector_store(settings)
-    )
+    persistence = _build_persistence(settings, vector_store)
+    document_repository = persistence.documents
+    chunk_repository = persistence.chunks
+    effective_vector_store = persistence.store
     effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
     effective_planner = (
         query_planner if query_planner is not None else SiliconFlowQueryPlanner(llm_client)
     )
     effective_reranker = reranker if reranker is not None else SiliconFlowReranker(llm_client)
-    query_log_repository = InMemoryQueryLogRepository()
-    feedback_repository = InMemoryFeedbackRepository()
+    query_log_repository = persistence.query_logs
+    feedback_repository = persistence.feedbacks
     feedback_service = FeedbackService(
         feedback_repository=feedback_repository,
         query_log_repository=query_log_repository,
@@ -152,6 +211,9 @@ def create_app(
         try:
             yield
         finally:
+            # pgvector 模式:连接池随应用关闭归还;memory / chroma 无此资源
+            if persistence.pg is not None:
+                persistence.pg.close()
             await llm_client.aclose()
 
     # debug 恒为 False:堆栈只进日志,绝不进入响应。
@@ -173,6 +235,8 @@ def create_app(
     app.state.feedback_service = feedback_service
     app.state.vector_store = effective_vector_store
     app.state.lifecycle_service = lifecycle_service
+    # pgvector 模式的共享连接池(memory / chroma 恒为 None),运维与测试清理用
+    app.state.pg_database = persistence.pg
 
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)

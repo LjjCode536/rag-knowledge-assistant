@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord
+from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
 
@@ -145,3 +146,22 @@ class InMemoryFeedbackRepository:
                 for record in self._records.values()
                 if verdict is None or record.verdict == verdict
             )
+
+
+class InMemoryEvaluationRunRepository:
+    """评估运行留档的内存实现:M2 起评估报告已落 docs/iterations 文件,
+    内存仓储供测试 / 进程内评估的留档口;生产形态由 PostgreSQL 接管。"""
+
+    def __init__(self) -> None:
+        self._runs: dict[str, EvaluationReport] = {}
+        self._lock = threading.Lock()
+
+    def add(self, report: EvaluationReport, *, run_id: str) -> None:
+        with self._lock:
+            if run_id in self._runs:
+                raise ValueError(f"评估运行已存在:{run_id}")
+            self._runs[run_id] = report
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._runs)

@@ -2,7 +2,7 @@
 
 生产级企业知识库服务的迭代式实践:后端 FastAPI + 自建领域层,框架层以 LangChain 成熟组件当零件库,模型服务统一走硅基流动(OpenAI 兼容)。开发遵循"评估驱动迭代",每个里程碑都产出可复现的前后指标对比。
 
-> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座**(批量向量化 / 内存向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 黄金数据集 + 检索指标);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
+> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座** + **T13 生产持久化**(批量向量化 / 三级向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 反馈闭环 / 黄金数据集 + 检索指标 / PostgreSQL + pgvector 六张生产表);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
 
 ## 快速开始
 
@@ -74,11 +74,31 @@ curl -X POST http://127.0.0.1:8000/api/v1/search \
 
 - 默认使用 M3 第一层内存向量库(`VECTOR_STORE=memory`,重启即失忆,测试 / CI 口径);
   设 `VECTOR_STORE=chroma`(数据落 `CHROMA_PATH`,默认 `data/chroma`)切换到 Chroma
-  持久后端(教材第 42 章):同题同结果,切换前后指标对比见
-  `docs/iterations/0004-t12-vector-store-switch.md`。
-- 向量库的 `VectorStore` 契约在领域层;换后端只换实现,后续 pgvector 沿同一路径。
+  持久后端,设 `VECTOR_STORE=pgvector` 切换到 PostgreSQL 16 + pgvector 生产持久化
+  (T13;需先 `docker compose up -d db` 看下节):同题同结果,前后指标对比见
+  `docs/iterations/0004-t12-vector-store-switch.md` 与 `0005-t13-pgvector.md`。
+- 向量库的 `VectorStore` 契约在领域层;换后端只换实现(ADR-0001)。
 - 过滤发生在相似度计算之前:被权限条件排除的切片不占 top-k 名额。
 - 未配置密钥时返回统一上游错误,文档停在 `chunked` 可直接重试,不落 `failed`。
+
+### 生产持久化(T13,pgvector + Docker Compose)
+
+```bash
+docker compose up -d db                                # PostgreSQL 16 + pgvector
+uv run python scripts/init_pg.py                       # 幂等建库:扩展 + 六张生产表
+VECTOR_STORE=pgvector uv run python -m uvicorn app.asgi:app --reload
+```
+
+- 六张表:`documents` / `chunks` / `embeddings` / `query_logs` / `feedbacks` /
+  `evaluation_runs`;四仓储(档案 / 切片 / 查询日志 / 反馈)与向量库同切,共用一个
+  连接池;建表脚本幂等,可重复执行。
+- 全链路(入库 → 问答 → 日志 → 反馈)与"重启容器数据仍在"在真库上测试验证
+  (`tests/test_repositories_pg.py`);检索分数与内存基线 / Chroma 同源复算,检索前过滤
+  下推 SQL `WHERE` 等价生效(ADR-0011)。
+- 评估器同样可切:`uv run python scripts/evaluate.py --vector-store pgvector`,
+  `--record-run` 可把报告留档进 `evaluation_runs`(需 `--database-url` 或配置)。
+- 无 Docker:保持默认 `VECTOR_STORE=memory` 即可,行为与基线一致;pgvector 模式缺
+  `DATABASE_URL` 或库不可达时装配期显式报错,不静默降级。
 
 ### 在线问答(M3)
 
@@ -187,17 +207,18 @@ app/
   asgi.py                    # ASGI 入口(只装配,供 uvicorn)
   main.py                    # 应用工厂 create_app
   api/routes/                # HTTP 路由(健康检查 / 文档)
-  core/                      # 配置 / 异常 / 信封 / 日志 / trace_id / 异常处理器
-  domain/                    # 领域层:ParsedDocument schema / 状态机 / 仓储接口(权威契约)
+  core/                      # 配置 / 异常 / 信封 / 日志 / trace_id / 异常处理器  domain/                    # 领域层:ParsedDocument schema / 状态机 / 仓储接口(权威契约)
   services/                  # 应用服务:入库编排 / 落盘存储
-  repositories/              # 仓储实现(进程内存,M3 换 PostgreSQL)
+  repositories/              # 仓储实现(内存基线 / Chroma / PG 生产持久化)
   integrations/              # 实现层零件
     llm/                     #   统一 LLM 客户端与可注入传输层
     parsing/                 #   五种格式解析器与工厂(ADR-0002)
 evaluation/                  # 黄金数据集(v1 YAML)与评估语料
 tests/                       # 按接缝组织的测试
 scripts/evaluate.py          # 检索指标评估器(默认无密钥)
+scripts/init_pg.py           # 幂等建表 / 迁移(pgvector 生产持久化)
 scripts/check_upstream.py    # 需要密钥的连通性脚本
+docker-compose.yml           # PostgreSQL 16 + pgvector 一键拉起
 docs/adr/                    # 架构决策记录
 docs/iterations/             # 指标基线 / 前后对比报告
 GLOSSARY.md                  # 领域术语表(唯一权威词汇)
@@ -211,5 +232,7 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0003](docs/adr/0003-failure-semantics-and-memory-vector-baseline.md):向量化失败不落 failed;内存向量库为 M3 基线
 - [ADR-0004](docs/adr/0004-grounded-answer-refusal-baseline.md):有据回答基线:规则生成器、低分拒答与内存查询日志
 - [ADR-0005](docs/adr/0005-evaluation-foundation.md):评估基座:锚点定位、API 主缝与无密钥检索指标
+- [ADR-0009](docs/adr/0009-document-supersession-and-deletion.md):文档版本退位与删除:清理先行、状态机后置
+- [ADR-0011](docs/adr/0011-pgvector-production-persistence.md):生产持久化切 pgvector;六张生产表;无 Docker 回退口径
 - [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)
