@@ -162,6 +162,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="进程内模式的向量来源;deterministic 不需要密钥(默认)",
     )
     parser.add_argument(
+        "--vector-store",
+        choices=("memory", "chroma"),
+        default="memory",
+        help="进程内模式的向量库后端:memory=基线(默认),chroma=持久向量库(T12)",
+    )
+    parser.add_argument(
         "--embedder-label",
         default=None,
         help="外部模式(--base-url)记录到报告里的向量来源,如 BAAI/bge-m3",
@@ -321,6 +327,21 @@ def resolve_qa_generator(settings: Settings, args: argparse.Namespace) -> str | 
     return args.qa_generator or "rule"
 
 
+def _vector_store_updates(args: argparse.Namespace, temp_dir: Path) -> dict[str, Any]:
+    """进程内评估的向量库后端配置:memory 沿用默认,chroma 数据落临时目录。"""
+    if args.vector_store == "chroma":
+        return {"vector_store": "chroma", "chroma_path": temp_dir / "chroma"}
+    return {}
+
+
+def _release_vector_store(app) -> None:
+    """清掉向量库后端持有的文件句柄(chroma);内存后端没有 close,按无操作处理。"""
+    store = getattr(app.state, "vector_store", None)
+    close = getattr(store, "close", None)
+    if callable(close):
+        close()
+
+
 def _effective_search_toggles(
     settings: Settings, args: argparse.Namespace
 ) -> tuple[dict[str, bool], dict[str, Any]]:
@@ -387,7 +408,11 @@ async def _run(
 
     base = get_settings()
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
-        updates: dict[str, Any] = {"upload_dir": Path(temp_dir), **settings_updates}
+        updates: dict[str, Any] = {
+            "upload_dir": Path(temp_dir),
+            **settings_updates,
+            **_vector_store_updates(args, Path(temp_dir)),
+        }
         if not args.verbose:
             updates.update({"log_level": "WARNING", "log_format": "console"})
         settings = base.model_copy(update=updates)
@@ -409,6 +434,7 @@ async def _run(
                 return await service.run()
         finally:
             await app.state.llm_client.aclose()
+            _release_vector_store(app)
 
 
 async def _run_ablation(
@@ -452,6 +478,7 @@ async def _run_ablation(
             dataset_dir=dataset_dir,
             settings_updates=combo_updates,
             config=combo_config,
+            args=args,
         )
         runs.append((label, report))
         print(
@@ -467,10 +494,15 @@ async def _run_combo(
     dataset_dir: Path,
     settings_updates: dict[str, Any],
     config: EvaluationConfig,
+    args: argparse.Namespace,
 ) -> EvaluationReport:
     base = get_settings()
     with tempfile.TemporaryDirectory(prefix="rag-evaluation-") as temp_dir:
-        updates: dict[str, Any] = {"upload_dir": Path(temp_dir), **settings_updates}
+        updates: dict[str, Any] = {
+            "upload_dir": Path(temp_dir),
+            **settings_updates,
+            **_vector_store_updates(args, Path(temp_dir)),
+        }
         updates.setdefault("log_level", "WARNING")
         updates.setdefault("log_format", "console")
         settings = base.model_copy(update=updates)
@@ -489,6 +521,7 @@ async def _run_combo(
                 return await service.run()
         finally:
             await app.state.llm_client.aclose()
+            _release_vector_store(app)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -515,6 +548,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.base_url and not args.embedder_label:
         print(
             "外部模式必须显式提供 --embedder-label,如 --embedder-label BAAI/bge-m3",
+            file=sys.stderr,
+        )
+        return 2
+    if args.base_url and args.vector_store == "chroma":
+        print(
+            "--vector-store 只支持进程内模式:外部模式的后端由服务端自己的配置决定",
             file=sys.stderr,
         )
         return 2

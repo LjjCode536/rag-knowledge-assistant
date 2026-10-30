@@ -1,0 +1,1928 @@
+{
+  "schema_version": 1,
+  "run_name": "T12 向量库切换 · 前(内存基线)",
+  "dataset_name": "enterprise-kb-retrieval",
+  "dataset_version": 1,
+  "k": 3,
+  "top_k": 3,
+  "min_score": 0.07,
+  "chunk_strategy": "table_aware",
+  "chunk_size": 500,
+  "chunk_overlap": 50,
+  "embedder": "deterministic-lexical-1024d",
+  "mode": "in-process",
+  "command": "uv run python scripts/evaluate.py --iteration 0004 --slug t12-vector-store-switch-memory --run-name T12 向量库切换 · 前(内存基线) --min-score 0.07",
+  "retrieval_config": {
+    "use_query_rewrite": false,
+    "use_multi_query": false,
+    "use_hybrid": false,
+    "use_mmr": false,
+    "use_rerank": false,
+    "retrieval_vector_weight": 0.7,
+    "retrieval_keyword_weight": 0.3,
+    "retrieval_candidate_k": 30,
+    "retrieval_multi_query_count": 3,
+    "retrieval_mmr_lambda": 0.7
+  },
+  "cases_total": 26,
+  "summary": {
+    "recall_at_k": 0.791667,
+    "mrr": 0.75,
+    "ndcg_at_k": 0.760911,
+    "hit_rate": 0.791667,
+    "cases": 24
+  },
+  "categories": {
+    "hr": {
+      "recall_at_k": 0.333333,
+      "mrr": 0.333333,
+      "ndcg_at_k": 0.333333,
+      "hit_rate": 0.333333,
+      "cases": 3
+    },
+    "invoice": {
+      "recall_at_k": 1.0,
+      "mrr": 0.75,
+      "ndcg_at_k": 0.815465,
+      "hit_rate": 1.0,
+      "cases": 2
+    },
+    "it": {
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "cases": 2
+    },
+    "leave": {
+      "recall_at_k": 0.666667,
+      "mrr": 0.666667,
+      "ndcg_at_k": 0.666667,
+      "hit_rate": 0.666667,
+      "cases": 3
+    },
+    "logistics": {
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "cases": 1
+    },
+    "permission": {
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "cases": 1
+    },
+    "product": {
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "cases": 4
+    },
+    "refund": {
+      "recall_at_k": 1.0,
+      "mrr": 0.75,
+      "ndcg_at_k": 0.815465,
+      "hit_rate": 1.0,
+      "cases": 2
+    },
+    "reimbursement": {
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "cases": 3
+    },
+    "security": {
+      "recall_at_k": 0.333333,
+      "mrr": 0.333333,
+      "ndcg_at_k": 0.333333,
+      "hit_rate": 0.333333,
+      "cases": 3
+    }
+  },
+  "category_case_counts": {
+    "refund": 2,
+    "logistics": 1,
+    "invoice": 2,
+    "leave": 3,
+    "reimbursement": 3,
+    "unknown": 2,
+    "hr": 3,
+    "it": 2,
+    "security": 3,
+    "product": 4,
+    "permission": 1
+  },
+  "refusal_accuracy": 1.0,
+  "permission_pass_rate": 1.0,
+  "generator": "rule_based",
+  "generation": {
+    "cases_total": 26,
+    "answered": 23,
+    "wrongly_refused": 1,
+    "answer_rate": 0.958333,
+    "faithfulness": 1.0,
+    "citation_accuracy": 0.637681,
+    "refusal_correctness": 0.961538
+  },
+  "generation_categories": {
+    "hr": {
+      "cases_total": 3,
+      "answered": 3,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.555555,
+      "refusal_correctness": 1.0
+    },
+    "invoice": {
+      "cases_total": 2,
+      "answered": 2,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.416666,
+      "refusal_correctness": 1.0
+    },
+    "it": {
+      "cases_total": 2,
+      "answered": 2,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.833333,
+      "refusal_correctness": 1.0
+    },
+    "leave": {
+      "cases_total": 3,
+      "answered": 3,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.611111,
+      "refusal_correctness": 1.0
+    },
+    "logistics": {
+      "cases_total": 1,
+      "answered": 1,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "refusal_correctness": 1.0
+    },
+    "permission": {
+      "cases_total": 1,
+      "answered": 1,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "refusal_correctness": 1.0
+    },
+    "product": {
+      "cases_total": 4,
+      "answered": 4,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.708333,
+      "refusal_correctness": 1.0
+    },
+    "refund": {
+      "cases_total": 2,
+      "answered": 2,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.5,
+      "refusal_correctness": 1.0
+    },
+    "reimbursement": {
+      "cases_total": 3,
+      "answered": 3,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.611111,
+      "refusal_correctness": 1.0
+    },
+    "security": {
+      "cases_total": 3,
+      "answered": 2,
+      "wrongly_refused": 1,
+      "answer_rate": 0.666667,
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.833333,
+      "refusal_correctness": 0.666667
+    },
+    "unknown": {
+      "cases_total": 2,
+      "answered": 0,
+      "wrongly_refused": 0,
+      "answer_rate": null,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 1.0
+    }
+  },
+  "case_results": [
+    {
+      "case_id": "refund_unshipped",
+      "question": "没发货可以退钱吗？",
+      "category": "refund",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "anchor": "订单尚未发货时",
+          "title": "未发货退款"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "rank": 1,
+          "title": "服务等级",
+          "score": 0.151186
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 2,
+          "title": "未发货退款",
+          "score": 0.124274
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 3,
+          "title": "年假制度",
+          "score": 0.115278
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 0.5,
+      "ndcg_at_k": 0.63093,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,订单未发货时,用户可以申请取消订单并退款。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 3
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
+      "notes": "教材样例 case_refund_001:口语化退款问题"
+    },
+    {
+      "case_id": "refund_shipped",
+      "question": "已经发货了还能直接退款吗？",
+      "category": "refund",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "after_sales.md",
+          "index": 1,
+          "anchor": "订单已经发货后",
+          "title": "已发货退款"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "after_sales.md",
+          "index": 1,
+          "rank": 1,
+          "title": "已发货退款",
+          "score": 0.193122
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 2,
+          "title": "未发货退款",
+          "score": 0.148704
+        },
+        {
+          "document": "it_security.md",
+          "index": 3,
+          "rank": 3,
+          "title": "安全事件",
+          "score": 0.103418
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,订单未发货时,用户可以申请取消订单并退款。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.666667,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "after_sales.md",
+          "index": 1
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0
+        },
+        {
+          "document": "it_security.md",
+          "index": 3
+        }
+      ],
+      "notes": "教材样例 case_refund_002:已发货退款规则"
+    },
+    {
+      "case_id": "logistics_delay",
+      "question": "快递超过七天没动怎么办？",
+      "category": "logistics",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "anchor": "超过七天没有更新",
+          "title": "物流异常"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 1,
+          "title": "物流异常",
+          "score": 0.279508
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 2,
+          "title": "数据导出",
+          "score": 0.062017
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 1,
+          "rank": 3,
+          "title": "付款账期",
+          "score": 0.058722
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:物流信息超过七天没有更新时,客服应主动联系承运商核查,并向客户说明处理进度。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "after_sales.md",
+          "index": 2
+        }
+      ],
+      "notes": "教材样例 case_logistics_001:物流异常"
+    },
+    {
+      "case_id": "invoice_enterprise",
+      "question": "企业发票需要填写什么？",
+      "category": "invoice",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "anchor": "公司名称、纳税人识别号",
+          "title": "企业发票"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "rank": 1,
+          "title": "企业发票",
+          "score": 0.388889
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 2,
+          "title": "差旅报销",
+          "score": 0.154303
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 3,
+          "title": "物流异常",
+          "score": 0.117851
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,企业发票需要填写公司名称和纳税人识别号。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2
+        }
+      ],
+      "notes": "教材样例 case_invoice_001:发票规则"
+    },
+    {
+      "case_id": "leave_annual_tenure",
+      "question": "入职多久可以申请年假？",
+      "category": "leave",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "anchor": "入职满一年",
+          "title": "年假制度"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 1,
+          "title": "年假制度",
+          "score": 0.35583
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 2,
+          "title": "未发货退款",
+          "score": 0.219199
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 3,
+          "title": "数据导出",
+          "score": 0.130744
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,订单未发货时,用户可以申请取消订单并退款。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1
+        }
+      ],
+      "notes": "教材样例 case_leave_001:HR 年假制度"
+    },
+    {
+      "case_id": "reimbursement_materials",
+      "question": "差旅报销要提交哪些材料？",
+      "category": "reimbursement",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "anchor": "发票、行程单和审批记录",
+          "title": "差旅报销"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 1,
+          "title": "差旅报销",
+          "score": 0.341565
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "rank": 2,
+          "title": "培训预算",
+          "score": 0.108465
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "rank": 3,
+          "title": "企业发票",
+          "score": 0.105409
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,企业发票需要填写公司名称和纳税人识别号。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 0
+        }
+      ],
+      "notes": "教材样例 case_reimbursement_001:财务报销制度"
+    },
+    {
+      "case_id": "reimbursement_full_process",
+      "question": "差旅报销要交哪些材料,最晚什么时候交？",
+      "category": "reimbursement",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "anchor": "发票、行程单和审批记录",
+          "title": "差旅报销"
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "anchor": "十五个工作日内",
+          "title": "差旅报销"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 1,
+          "title": "差旅报销",
+          "score": 0.159364
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 2,
+          "title": "物流异常",
+          "score": 0.091287
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 3,
+          "title": "数据导出",
+          "score": 0.050637
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,差旅报销需要提交发票、行程单和审批记录。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.5,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2
+        }
+      ],
+      "notes": "同文档多切片用例:同时覆盖材料与提交时限"
+    },
+    {
+      "case_id": "unknown_shuttle",
+      "question": "公司班车路线是什么？",
+      "category": "unknown",
+      "difficulty": "medium",
+      "should_refuse": true,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 1,
+          "title": "单点登录",
+          "score": 0.065653
+        },
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "rank": 2,
+          "title": "VPN 使用",
+          "score": 0.0635
+        },
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "rank": 3,
+          "title": "设备管理",
+          "score": 0.0625
+        }
+      ],
+      "recall_at_k": null,
+      "mrr": null,
+      "ndcg_at_k": null,
+      "hit_rate": null,
+      "refusal_ok": true,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
+      "notes": "教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底"
+    },
+    {
+      "case_id": "leave_sick_report",
+      "question": "身体不舒服请假要提前通知谁？",
+      "category": "leave",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 1,
+          "anchor": "当天上午十点前",
+          "title": "病假申请"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 3,
+          "rank": 1,
+          "title": "安全事件",
+          "score": 0.099015
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 2,
+          "title": "差旅报销",
+          "score": 0.089087
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 1,
+          "rank": 3,
+          "title": "付款账期",
+          "score": 0.053606
+        }
+      ],
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0,
+      "hit_rate": 0.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,差旅报销需要提交发票、行程单和审批记录。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.5,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "it_security.md",
+          "index": 3
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        }
+      ],
+      "notes": "病假报备时限"
+    },
+    {
+      "case_id": "leave_overtime_comp",
+      "question": "调休有效期是几个月？",
+      "category": "leave",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 2,
+          "anchor": "三个月内",
+          "title": "加班调休"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 2,
+          "rank": 1,
+          "title": "加班调休",
+          "score": 0.172062
+        },
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "rank": 2,
+          "title": "设备管理",
+          "score": 0.0625
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "rank": 3,
+          "title": "企业发票",
+          "score": 0.058926
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:工作日加班可按一比一比例申请调休,调休需在加班发生后的三个月内使用完毕。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 2
+        }
+      ],
+      "notes": "调休有效期"
+    },
+    {
+      "case_id": "hr_resignation_notice",
+      "question": "辞职要提前几天说？",
+      "category": "hr",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 5,
+          "anchor": "提前三十天",
+          "title": "离职交接"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "rank": 1,
+          "title": "培训预算",
+          "score": 0.194461
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "rank": 2,
+          "title": "企业发票",
+          "score": 0.125988
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 3,
+          "title": "差旅报销",
+          "score": 0.116642
+        }
+      ],
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0,
+      "hit_rate": 0.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,企业发票需要填写公司名称和纳税人识别号。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 4
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 0
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        }
+      ],
+      "notes": "离职通知期"
+    },
+    {
+      "case_id": "hr_training_budget",
+      "question": "公司给个人学习经费吗？额度多少？",
+      "category": "hr",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "anchor": "五千元",
+          "title": "培训预算"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0,
+          "rank": 1,
+          "title": "企业发票",
+          "score": 0.144338
+        },
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "rank": 2,
+          "title": "服务等级",
+          "score": 0.11547
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 3,
+          "title": "年假制度",
+          "score": 0.088045
+        }
+      ],
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0,
+      "hit_rate": 0.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,企业发票需要填写公司名称和纳税人识别号。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0
+        },
+        {
+          "document": "product_faq.md",
+          "index": 3
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
+      "notes": "培训预算额度"
+    },
+    {
+      "case_id": "offboarding_cross_doc",
+      "question": "离职要提前多久申请,账号什么时候回收？",
+      "category": "hr",
+      "difficulty": "hard",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 5,
+          "anchor": "提前三十天",
+          "title": "离职交接"
+        },
+        {
+          "document": "it_security.md",
+          "index": 4,
+          "anchor": "两个工作日内",
+          "title": "账号回收"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 5,
+          "rank": 1,
+          "title": "离职交接",
+          "score": 0.179787
+        },
+        {
+          "document": "it_security.md",
+          "index": 4,
+          "rank": 2,
+          "title": "账号回收",
+          "score": 0.1557
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "rank": 3,
+          "title": "培训预算",
+          "score": 0.132842
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:离职需提前三十天提交书面申请,并在最后工作日前完成工作交接与资产归还。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 5
+        },
+        {
+          "document": "it_security.md",
+          "index": 4
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4
+        }
+      ],
+      "notes": "跨文档多切片用例:同时覆盖离职通知期与账号回收"
+    },
+    {
+      "case_id": "reimbursement_deadline",
+      "question": "报销单最晚什么时候交？",
+      "category": "reimbursement",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "anchor": "十五个工作日内",
+          "title": "差旅报销"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3,
+          "rank": 1,
+          "title": "差旅报销",
+          "score": 0.102869
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 2,
+          "title": "数据导出",
+          "score": 0.065372
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 3,
+          "title": "物流异常",
+          "score": 0.058926
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,差旅报销需要提交发票、行程单和审批记录。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 3
+        }
+      ],
+      "notes": "报销提交时限"
+    },
+    {
+      "case_id": "invoice_payment_terms",
+      "question": "给供应商打款要等多少天？",
+      "category": "invoice",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "finance_invoice.md",
+          "index": 1,
+          "anchor": "验收合格后的三十天",
+          "title": "付款账期"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 1,
+          "rank": 1,
+          "title": "密码策略",
+          "score": 0.117444
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 1,
+          "rank": 2,
+          "title": "付款账期",
+          "score": 0.117444
+        },
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "rank": 3,
+          "title": "服务等级",
+          "score": 0.063246
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 0.5,
+      "ndcg_at_k": 0.63093,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:密码至少十二位,必须包含大小写字母、数字和特殊符号,并且每九十天更换一次。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.5,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "it_security.md",
+          "index": 1
+        },
+        {
+          "document": "finance_invoice.md",
+          "index": 1
+        }
+      ],
+      "notes": "供应商付款账期"
+    },
+    {
+      "case_id": "it_vpn_access",
+      "question": "在家办公怎么连公司系统？",
+      "category": "it",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "anchor": "公司 VPN",
+          "title": "VPN 使用"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "rank": 1,
+          "title": "VPN 使用",
+          "score": 0.113592
+        },
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "rank": 2,
+          "title": "设备管理",
+          "score": 0.111803
+        },
+        {
+          "document": "after_sales.md",
+          "index": 1,
+          "rank": 3,
+          "title": "已发货退款",
+          "score": 0.101274
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:远程办公必须通过公司 VPN 接入内网。VPN 账号与员工工号绑定,不得转借他人使用。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.666667,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "it_security.md",
+          "index": 0
+        },
+        {
+          "document": "it_security.md",
+          "index": 2
+        },
+        {
+          "document": "after_sales.md",
+          "index": 1
+        }
+      ],
+      "notes": "远程接入方式"
+    },
+    {
+      "case_id": "security_password_rotation",
+      "question": "登录口令有有效期吗？",
+      "category": "security",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "it_security.md",
+          "index": 1,
+          "anchor": "每九十天",
+          "title": "密码策略"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 1,
+          "title": "单点登录",
+          "score": 0.131306
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 2,
+          "title": "年假制度",
+          "score": 0.107833
+        },
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "rank": 3,
+          "title": "设备管理",
+          "score": 0.0625
+        }
+      ],
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0,
+      "hit_rate": 0.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,员工入职满一年后,可以按照公司制度申请年假。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 2
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
+      "notes": "密码轮换周期"
+    },
+    {
+      "case_id": "security_device_software",
+      "question": "公司电脑能自己装软件吗？",
+      "category": "security",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "anchor": "不得安装未经审批的软件",
+          "title": "设备管理"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 2,
+          "rank": 1,
+          "title": "设备管理",
+          "score": 0.167705
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 2,
+          "title": "单点登录",
+          "score": 0.117444
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 3,
+          "title": "年假制度",
+          "score": 0.096449
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,员工入职满一年后,可以按照公司制度申请年假。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.666667,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "it_security.md",
+          "index": 2
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
+      "notes": "终端软件管理"
+    },
+    {
+      "case_id": "security_incident_report",
+      "question": "怀疑邮箱被盗了第一步做什么？",
+      "category": "security",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "it_security.md",
+          "index": 3,
+          "anchor": "立即断开网络",
+          "title": "安全事件"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "rank": 1,
+          "title": "VPN 使用",
+          "score": 0.051848
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 2,
+          "title": "物流异常",
+          "score": 0.051031
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 3,
+          "title": "未发货退款",
+          "score": 0.047458
+        }
+      ],
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0,
+      "hit_rate": 0.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
+      "notes": "安全事件响应"
+    },
+    {
+      "case_id": "it_account_recovery",
+      "question": "人走了系统权限什么时候停？",
+      "category": "it",
+      "difficulty": "medium",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "it_security.md",
+          "index": 4,
+          "anchor": "两个工作日内",
+          "title": "账号回收"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "it_security.md",
+          "index": 4,
+          "rank": 1,
+          "title": "账号回收",
+          "score": 0.090909
+        },
+        {
+          "document": "after_sales.md",
+          "index": 2,
+          "rank": 2,
+          "title": "物流异常",
+          "score": 0.0533
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "rank": 3,
+          "title": "培训预算",
+          "score": 0.051709
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:员工离职或转岗时,部门负责人需在系统中提交账号权限回收申请,由信息技术部在两个工作日内处理。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "it_security.md",
+          "index": 4
+        }
+      ],
+      "notes": "离职账号回收"
+    },
+    {
+      "case_id": "product_trial",
+      "question": "企业版能免费用多久？",
+      "category": "product",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "product_faq.md",
+          "index": 0,
+          "anchor": "三十天免费试用",
+          "title": "试用期"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 0,
+          "rank": 1,
+          "title": "试用期",
+          "score": 0.262613
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 2,
+          "title": "单点登录",
+          "score": 0.131306
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 2,
+          "rank": 3,
+          "title": "加班调休",
+          "score": 0.114708
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:企业版提供三十天免费试用,试用期内可以随时升级为付费版本。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.666667,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 0
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 2
+        }
+      ],
+      "notes": "企业版试用期"
+    },
+    {
+      "case_id": "product_data_export",
+      "question": "怎么把知识库里的东西备份下来？",
+      "category": "product",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "anchor": "控制台导出",
+          "title": "数据导出"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 1,
+          "title": "数据导出",
+          "score": 0.108786
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 2,
+          "title": "单点登录",
+          "score": 0.051503
+        },
+        {
+          "document": "it_security.md",
+          "index": 4,
+          "rank": 3,
+          "title": "账号回收",
+          "score": 0.041812
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:管理员可以在控制台导出全部知识库数据,导出文件保留七天。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 1
+        }
+      ],
+      "notes": "数据导出方式"
+    },
+    {
+      "case_id": "product_sso",
+      "question": "能用公司账号登录系统吗？",
+      "category": "product",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "anchor": "SAML 2.0",
+          "title": "单点登录"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 1,
+          "title": "单点登录",
+          "score": 0.411054
+        },
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "rank": 2,
+          "title": "VPN 使用",
+          "score": 0.113592
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4,
+          "rank": 3,
+          "title": "培训预算",
+          "score": 0.108465
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:企业版支持 SAML 2.0 单点登录,配置完成后员工可使用公司账号登录。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.666667,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 2
+        },
+        {
+          "document": "it_security.md",
+          "index": 0
+        },
+        {
+          "document": "employee_handbook.md",
+          "index": 4
+        }
+      ],
+      "notes": "SSO 支持"
+    },
+    {
+      "case_id": "product_sla",
+      "question": "标准版会不会经常宕机？",
+      "category": "product",
+      "difficulty": "easy",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "anchor": "百分之九十九点九",
+          "title": "服务等级"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "rank": 1,
+          "title": "服务等级",
+          "score": 0.180907
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 2,
+          "title": "未发货退款",
+          "score": 0.099136
+        },
+        {
+          "document": "it_security.md",
+          "index": 1,
+          "rank": 3,
+          "title": "密码策略",
+          "score": 0.055989
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,订单未发货时,用户可以申请取消订单并退款。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.5,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 3
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0
+        }
+      ],
+      "notes": "服务等级"
+    },
+    {
+      "case_id": "permission_tenant_isolation",
+      "question": "入职多久可以申请年假,满半年还是满一年？",
+      "category": "permission",
+      "difficulty": "hard",
+      "should_refuse": false,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "anchor": "入职满一年",
+          "title": "年假制度"
+        }
+      ],
+      "retrieved": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0,
+          "rank": 1,
+          "title": "年假制度",
+          "score": 0.419371
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0,
+          "rank": 2,
+          "title": "未发货退款",
+          "score": 0.164399
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1,
+          "rank": 3,
+          "title": "数据导出",
+          "score": 0.098058
+        }
+      ],
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_rate": 1.0,
+      "refusal_ok": null,
+      "permission_ok": true,
+      "forbidden_best_rank": 2,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,订单未发货时,用户可以申请取消订单并退款。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 0.333333,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        },
+        {
+          "document": "after_sales.md",
+          "index": 0
+        },
+        {
+          "document": "product_faq.md",
+          "index": 1
+        }
+      ],
+      "notes": "globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档"
+    },
+    {
+      "case_id": "unknown_gym",
+      "question": "公司健身房开放到几点？",
+      "category": "unknown",
+      "difficulty": "medium",
+      "should_refuse": true,
+      "filters": {
+        "tenant": "acme"
+      },
+      "expected": [],
+      "retrieved": [
+        {
+          "document": "product_faq.md",
+          "index": 3,
+          "rank": 1,
+          "title": "服务等级",
+          "score": 0.066667
+        },
+        {
+          "document": "product_faq.md",
+          "index": 2,
+          "rank": 2,
+          "title": "单点登录",
+          "score": 0.061898
+        },
+        {
+          "document": "it_security.md",
+          "index": 0,
+          "rank": 3,
+          "title": "VPN 使用",
+          "score": 0.059868
+        }
+      ],
+      "recall_at_k": null,
+      "mrr": null,
+      "ndcg_at_k": null,
+      "hit_rate": null,
+      "refusal_ok": true,
+      "permission_ok": null,
+      "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
+      "notes": "知识库不存在的问题,验证低分兜底"
+    }
+  ]
+}

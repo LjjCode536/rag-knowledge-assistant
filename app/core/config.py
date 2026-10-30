@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     # 上游超时 / 限流统一转为 UPSTREAM_* 错误码)
     qa_generator: Literal["rule", "llm"] = "llm"
 
+    # ===== 向量库后端(M3 三级存储:memory → chroma → pgvector)=====
+    # memory = 进程内存基线(默认,重启即失忆,测试 / CI 指标口径);
+    # chroma = Chroma 持久向量库(教材第 42 章),行为与基线一致,
+    # 仅余同分顺序与 float32 精度两类可解释差异。
+    vector_store: Literal["memory", "chroma"] = "memory"
+    # chroma 数据目录:一个目录一份标签,重启不重嵌(运行时产物,已被 gitignore)
+    chroma_path: Path = Path("data/chroma")
+
     # ===== 高级检索(教材第 43 章 RetrievalConfig 的逐项开关模式)=====
     # 默认组合以 T07 消融数据为准(docs/iterations/0002-t07-advanced-retrieval):
     # 重排 + 查询改写 Recall@3 0.7917 → 1.0000 / MRR 0.7500 → 1.0000,且拒答

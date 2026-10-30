@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -106,6 +107,21 @@ class KeywordIndex(Protocol):
 def matches_chunk_filter(chunk: Chunk, constraints: dict[str, str]) -> bool:
     """切片元数据逐字段等值匹配:向量库与关键词库共用的检索前过滤实现。"""
     return all(getattr(chunk, field) == value for field, value in constraints.items())
+
+
+def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
+    """余弦相似度:各向量库后端共用的相似度实现(内存基线与 Chroma 同源)。
+
+    向量长度不一致或含零向量按 0 分处理,不参与有效排序。
+    """
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 class Reranker(Protocol):

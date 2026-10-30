@@ -10,6 +10,7 @@ local doc/
 
 # ===== 运行时产物 =====
 data/uploaded_docs/
+data/chroma/
 data/stores/
 *.sqlite3
 *.db

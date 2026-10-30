@@ -5,6 +5,7 @@ description = "企业 AI 知识库:生产级 RAG 服务(评估驱动迭代)"
 requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.12",
+    "chromadb>=1.5.9",
     "fastapi>=0.115",
     "httpx>=0.28",
     "langchain-text-splitters>=1.1.3",

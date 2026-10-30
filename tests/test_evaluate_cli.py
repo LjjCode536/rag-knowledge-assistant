@@ -143,3 +143,56 @@ def test_cli_qa_generator_llm_requires_upstream_key(
     ]
 
     assert main(common) == 2
+
+
+# ===== 向量库后端切换(T12)=====
+
+
+def test_cli_chroma_backend_runs_and_records_backend(
+    tmp_path: Path, keyless_settings: Settings
+) -> None:
+    """--vector-store chroma 切换后端:进程内评估照常出报告,复现命令留痕。"""
+    report = tmp_path / "chroma.md"
+    json_report = tmp_path / "chroma.json"
+
+    code = main(
+        [
+            "--dataset",
+            str(DATASET_PATH),
+            "--report",
+            str(report),
+            "--json-report",
+            str(json_report),
+            "--run-name",
+            "T12 向量库后端 Chroma",
+            "--vector-store",
+            "chroma",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["summary"]["cases"] >= 20
+    assert payload["mode"] == "in-process"
+    # 复现命令里已带 --vector-store,报告中留痕即可按命令复原这次口径
+    assert "--vector-store chroma" in payload["command"]
+
+
+def test_cli_chroma_backend_rejected_in_external_mode(keyless_settings: Settings) -> None:
+    """外部模式改不了服务端后端:--vector-store chroma 直接拒绝(exit 2)。"""
+    assert main(
+        [
+            "--dataset",
+            str(DATASET_PATH),
+            "--report",
+            "report.md",
+            "--min-score",
+            "0.35",
+            "--base-url",
+            "http://127.0.0.1:9",
+            "--embedder-label",
+            "BAAI/bge-m3",
+            "--vector-store",
+            "chroma",
+        ]
+    ) == 2

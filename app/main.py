@@ -55,6 +55,15 @@ def _build_answer_generator(
     return SiliconFlowAnswerGenerator(llm_client)
 
 
+def _build_vector_store(settings: Settings) -> VectorStore:
+    """按配置取向量库后端:memory = 内存基线,chroma = Chroma 持久库(M3 第二层)。"""
+    if settings.vector_store == "chroma":
+        from app.repositories.vector_chroma import ChromaVectorStore  # 局部导入:默认路径零加载
+
+        return ChromaVectorStore(persist_dir=settings.chroma_path)
+    return InMemoryVectorStore()
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -82,7 +91,9 @@ def create_app(
     )
     document_repository = InMemoryDocumentRepository()
     chunk_repository = InMemoryChunkRepository()
-    effective_vector_store = vector_store if vector_store is not None else InMemoryVectorStore()
+    effective_vector_store = (
+        vector_store if vector_store is not None else _build_vector_store(settings)
+    )
     effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
     effective_planner = (
         query_planner if query_planner is not None else SiliconFlowQueryPlanner(llm_client)

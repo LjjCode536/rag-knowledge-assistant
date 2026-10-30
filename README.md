@@ -72,7 +72,11 @@ curl -X POST http://127.0.0.1:8000/api/v1/search \
   -d '{"query": "年假", "top_k": 3, "filters": {"tenant": "acme"}}'
 ```
 
-- 向量库为 M3 第一层内存基线(`VectorStore` 契约在领域层,后续换 Chroma / pgvector 只替换实现)。
+- 默认使用 M3 第一层内存向量库(`VECTOR_STORE=memory`,重启即失忆,测试 / CI 口径);
+  设 `VECTOR_STORE=chroma`(数据落 `CHROMA_PATH`,默认 `data/chroma`)切换到 Chroma
+  持久后端(教材第 42 章):同题同结果,切换前后指标对比见
+  `docs/iterations/0004-t12-vector-store-switch.md`。
+- 向量库的 `VectorStore` 契约在领域层;换后端只换实现,后续 pgvector 沿同一路径。
 - 过滤发生在相似度计算之前:被权限条件排除的切片不占 top-k 名额。
 - 未配置密钥时返回统一上游错误,文档停在 `chunked` 可直接重试,不落 `failed`。
 

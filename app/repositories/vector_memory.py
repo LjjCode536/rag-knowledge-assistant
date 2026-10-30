@@ -6,12 +6,11 @@
 
 from __future__ import annotations
 
-import math
 import threading
 from collections.abc import Sequence
 
 from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, ScoredChunk, matches_chunk_filter
+from app.domain.retrieval import ChunkFilter, ScoredChunk, cosine_similarity, matches_chunk_filter
 
 
 class InMemoryVectorStore:
@@ -63,7 +62,7 @@ class InMemoryVectorStore:
                 if matches_chunk_filter(chunk, constraints)
             ]
         scored = [
-            ScoredChunk(chunk=chunk, score=_cosine(vector, stored))
+            ScoredChunk(chunk=chunk, score=cosine_similarity(vector, stored))
             for chunk, stored in candidates
         ]
         scored.sort(key=lambda hit: hit.score, reverse=True)
@@ -77,15 +76,3 @@ class InMemoryVectorStore:
                     if chunk.chunk_id == chunk_id:
                         return list(stored)
         return None
-
-
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    """余弦相似度;向量长度不一致或含零向量按 0 分处理,不参与有效排序。"""
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
