@@ -18,6 +18,7 @@ from app.domain.qa import (
     AnswerContext,
     Citation,
     ContextSource,
+    GenerationUsage,
     QueryHit,
     QueryLog,
     RefusalReason,
@@ -69,9 +70,10 @@ class AnswerService:
         min_score = self._settings.qa_min_score
         started = time.perf_counter()
 
-        hits = await self._retrieval.search(
+        outcome = await self._retrieval.retrieve(
             question, top_k=effective_top_k, filters=filters
         )
+        hits = outcome.hits
         accepted = [hit for hit in hits if hit.score >= min_score]
         sources = self._sources_of(accepted)
         context = AnswerContext(
@@ -86,8 +88,11 @@ class AnswerService:
             reason = RefusalReason.LOW_SCORE
 
         answer = REFUSAL_ANSWER
+        usage = GenerationUsage()
         if reason is None:
-            answer = (await self._generator.generate(question, context=context)).strip()
+            generated = await self._generator.generate(question, context=context)
+            usage = generated.usage
+            answer = generated.text.strip()
             if not answer or answer == REFUSAL_ANSWER:
                 answer = REFUSAL_ANSWER
                 reason = RefusalReason.GENERATOR_REFUSED
@@ -107,6 +112,10 @@ class AnswerService:
             top_k=effective_top_k,
             min_score=min_score,
             latency_ms=latency_ms,
+            generator=self._generator.kind,
+            token_usage=usage,
+            rewritten_question=outcome.rewritten_question,
+            expanded_questions=outcome.expanded_questions,
         )
         self._query_logs.add(log)
         logger.info(
@@ -122,6 +131,10 @@ class AnswerService:
             best_score=hits[0].score if hits else None,
             min_score=min_score,
             latency_ms=latency_ms,
+            generator=self._generator.kind.value,
+            total_tokens=usage.total_tokens,
+            rewritten_question=outcome.rewritten_question,
+            expanded_queries=len(outcome.expanded_questions),
         )
         return AnswerRunResult(log=log, citations=citations)
 

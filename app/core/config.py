@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # 默认 top-k 与拒答阈值;最高分低于阈值即拒答(检索低分兜底)
     qa_top_k: int = Field(default=3, ge=1, le=50)
     qa_min_score: float = Field(default=0.35, ge=-1.0, le=1.0)
+    # 回答生成器种类:rule = 规则版基线(不触网);llm = 真实 LLM 有据生成
+    # (默认 Qwen/Qwen3-8B,llm_model 可换;需 SILICONFLOW_API_KEY,
+    # 上游超时 / 限流统一转为 UPSTREAM_* 错误码)
+    qa_generator: Literal["rule", "llm"] = "llm"
 
     # ===== 高级检索(教材第 43 章 RetrievalConfig 的逐项开关模式)=====
     # 默认组合以 T07 消融数据为准(docs/iterations/0002-t07-advanced-retrieval):

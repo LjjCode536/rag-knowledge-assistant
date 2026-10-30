@@ -19,7 +19,11 @@ def upload_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def settings(upload_dir: Path) -> Settings:
-    """测试配置:不读 .env、无密钥、JSON 日志、上传落盘进临时目录。"""
+    """测试配置:不读 .env、无密钥、JSON 日志、上传落盘进临时目录。
+
+    生成器固定规则版:离线基线口径;真实 LLM 生成在 test_generation_llm.py
+    与 test_chat_llm_api.py 用 keyed 配置 + 假传输层单独验证。
+    """
     return Settings(
         _env_file=None,
         environment="test",
@@ -27,6 +31,7 @@ def settings(upload_dir: Path) -> Settings:
         log_format="json",
         log_level="INFO",
         upload_dir=upload_dir,
+        qa_generator="rule",
     )
 
 

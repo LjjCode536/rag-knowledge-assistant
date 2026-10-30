@@ -30,12 +30,25 @@ from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.answering import AnswerService
 from app.services.chunking import ChunkingService
 from app.services.embedding import Embedder, EmbeddingService
-from app.services.generation import AnswerGenerator, RuleBasedAnswerGenerator
+from app.services.generation import (
+    AnswerGenerator,
+    RuleBasedAnswerGenerator,
+    SiliconFlowAnswerGenerator,
+)
 from app.services.ingestion import IngestionService
 from app.services.query_planning import SiliconFlowQueryPlanner
 from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
 from app.services.storage import LocalDocumentStorage
+
+
+def _build_answer_generator(
+    settings: Settings, llm_client: UnifiedLLMClient
+) -> AnswerGenerator:
+    """按配置选回答生成器:rule = 规则版基线,llm = 真实 LLM 有据生成。"""
+    if settings.qa_generator == "rule":
+        return RuleBasedAnswerGenerator()
+    return SiliconFlowAnswerGenerator(llm_client)
 
 
 def create_app(
@@ -58,7 +71,9 @@ def create_app(
     llm_client = UnifiedLLMClient(settings)
     effective_embedder = embedder if embedder is not None else llm_client
     effective_generator = (
-        answer_generator if answer_generator is not None else RuleBasedAnswerGenerator()
+        answer_generator
+        if answer_generator is not None
+        else _build_answer_generator(settings, llm_client)
     )
     document_repository = InMemoryDocumentRepository()
     chunk_repository = InMemoryChunkRepository()

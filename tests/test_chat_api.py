@@ -11,9 +11,10 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain.qa import AnswerContext
+from app.domain.qa import AnswerContext, GenerationUsage, GeneratorKind
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
+from app.services.generation import GeneratedAnswer
 from tests.fake_pdf import build_pdf
 
 DOCUMENTS_URL = "/api/v1/documents"
@@ -29,19 +30,30 @@ UNRELATED_QUESTION = "垃圾分类怎么处理?"
 class RecordingGenerator:
     """可注入生成器替身:记录收到的编号上下文,返回固定有据回答。"""
 
+    kind = GeneratorKind.LLM
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, AnswerContext]] = []
 
-    async def generate(self, question: str, *, context: AnswerContext) -> str:
+    async def generate(
+        self, question: str, *, context: AnswerContext
+    ) -> GeneratedAnswer:
         self.calls.append((question, context))
-        return "根据知识库资料,这是替身回答。"
+        return GeneratedAnswer(
+            text="根据知识库资料,这是替身回答。",
+            usage=GenerationUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        )
 
 
 class RefusingGenerator:
     """总是拒答的生成器替身:验证拒答时不把命中误标为回答证据。"""
 
-    async def generate(self, question: str, *, context: AnswerContext) -> str:
-        return "根据当前资料无法确认。"
+    kind = GeneratorKind.LLM
+
+    async def generate(
+        self, question: str, *, context: AnswerContext
+    ) -> GeneratedAnswer:
+        return GeneratedAnswer(text="根据当前资料无法确认。")
 
 
 def _index(client: TestClient, name: str, content: str | bytes, **form: str) -> dict:
@@ -118,6 +130,10 @@ def test_chat_returns_grounded_answer_with_full_citations(indexed_client):
     assert data["latency_ms"] >= 0
     assert data["top_k"] >= 1
     assert data["min_score"] >= 0
+    assert data["generator"] == "rule_based"
+    assert data["token_usage"]["total_tokens"] == 0
+    assert data["rewritten_question"] is None
+    assert data["expanded_questions"] == []
 
 
 def test_chat_refuses_unrelated_question_without_fabricating(indexed_client):
@@ -163,6 +179,14 @@ def test_query_logs_record_question_hits_and_latency(indexed_client):
     assert answered_log["top_k"] == 3
     assert answered_log["min_score"] == 0.35
     assert answered_log["filters"] == {}
+    assert answered_log["generator"] == "rule_based"
+    assert answered_log["token_usage"] == {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    assert answered_log["rewritten_question"] is None
+    assert answered_log["expanded_questions"] == []
     assert answered_log["hits"]
     hit = answered_log["hits"][0]
     assert hit["rank"] == 1
@@ -207,6 +231,7 @@ def test_injected_generator_receives_numbered_context(settings, upload_dir):
         data = _chat(client, LEAVE_QUESTION)
 
     assert data["answer"] == "根据知识库资料,这是替身回答。"
+    assert data["token_usage"]["total_tokens"] == 15
     assert data["citations"][0]["chunk_id"] == indexed["chunks"][0]["chunk_id"]
     question, context = generator.calls[0]
     assert question == LEAVE_QUESTION

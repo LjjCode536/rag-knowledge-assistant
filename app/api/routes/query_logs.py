@@ -10,7 +10,13 @@ from pydantic import BaseModel
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import NotFoundError
 from app.core.tracing import trace_id_of
-from app.domain.qa import QueryHit, QueryLog, RefusalReason
+from app.domain.qa import (
+    GenerationUsage,
+    GeneratorKind,
+    QueryHit,
+    QueryLog,
+    RefusalReason,
+)
 from app.domain.repositories import QueryLogRepository
 
 router = APIRouter(prefix="/api/v1/query-logs", tags=["qa"])
@@ -33,7 +39,7 @@ class QueryHitView(BaseModel):
 
 
 class QueryLogView(BaseModel):
-    """查询日志视图:问题、答案、拒答原因、命中与端到端延迟。"""
+    """查询日志视图:问题、答案、拒答原因、命中、Token 用量与端到端延迟。"""
 
     query_id: str
     trace_id: str
@@ -46,6 +52,10 @@ class QueryLogView(BaseModel):
     top_k: int
     min_score: float
     latency_ms: float
+    generator: GeneratorKind
+    token_usage: GenerationUsage
+    rewritten_question: str | None = None
+    expanded_questions: list[str]
     created_at: datetime
 
     @classmethod
@@ -62,6 +72,10 @@ class QueryLogView(BaseModel):
             top_k=log.top_k,
             min_score=log.min_score,
             latency_ms=log.latency_ms,
+            generator=log.generator,
+            token_usage=log.token_usage,
+            rewritten_question=log.rewritten_question,
+            expanded_questions=log.expanded_questions,
             created_at=log.created_at,
         )
 

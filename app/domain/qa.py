@@ -24,6 +24,21 @@ class RefusalReason(StrEnum):
     GENERATOR_REFUSED = "generator_refused"
 
 
+class GeneratorKind(StrEnum):
+    """回答生成器种类:稳定码,进查询日志与响应,让规则版 / 真实 LLM 的行为差异可观测。"""
+
+    RULE_BASED = "rule_based"
+    LLM = "llm"
+
+
+class GenerationUsage(BaseModel):
+    """一次回答生成步的 Token 用量;规则版生成器恒为零。"""
+
+    prompt_tokens: int = Field(default=0, ge=0)
+    completion_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+
+
 class Citation(BaseModel):
     """来源引用:指回一条切片,并补齐文档、标题与页码等定位信息。"""
 
@@ -67,7 +82,7 @@ class QueryHit(BaseModel):
 
 
 class QueryLog(BaseModel):
-    """查询日志:原始问题、命中、答案、拒答原因与端到端延迟。"""
+    """查询日志:原始与改写 / 扩展后的问题、命中、答案、拒答原因、Token 用量与端到端延迟。"""
 
     query_id: str = Field(default_factory=lambda: f"qry_{uuid4().hex[:12]}")
     trace_id: str
@@ -80,4 +95,10 @@ class QueryLog(BaseModel):
     top_k: int
     min_score: float
     latency_ms: float
+    # 生成器留痕:用了哪种生成器、消耗多少 Token(规则版为零)
+    generator: GeneratorKind
+    token_usage: GenerationUsage = Field(default_factory=GenerationUsage)
+    # 实际用于检索的改写与扩展查询(未启用 / 未改写 → 原问题即口径,记 None / 空)
+    rewritten_question: str | None = None
+    expanded_questions: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

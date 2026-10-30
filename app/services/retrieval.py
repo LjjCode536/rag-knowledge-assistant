@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import structlog
@@ -29,6 +29,19 @@ from app.domain.retrieval import (
 from app.services.embedding import Embedder
 
 logger = structlog.get_logger("retrieval")
+
+
+@dataclass(slots=True)
+class RetrievalOutcome:
+    """一次检索的结果:命中切片 + 实际生效的改写 / 扩展查询(供查询日志留痕)。
+
+    ``rewritten_question`` / ``expanded_questions`` 只记录真正参与了召回
+    的口径:开关未开、规划回退原查询时分别是 None 与空列表。
+    """
+
+    hits: list[ScoredChunk]
+    rewritten_question: str | None = None
+    expanded_questions: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -110,6 +123,16 @@ class RetrievalService:
         filters: ChunkFilter | None = None,
     ) -> list[ScoredChunk]:
         """返回按最终分数降序的切片,附完整切片元数据。"""
+        return (await self.retrieve(query, top_k=top_k, filters=filters)).hits
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        top_k: int,
+        filters: ChunkFilter | None = None,
+    ) -> RetrievalOutcome:
+        """检索的主入口:返回命中与实际生效的改写 / 扩展查询口径。"""
         started = datetime.now(UTC)
         settings = self._settings
         if not (
@@ -121,9 +144,9 @@ class RetrievalService:
         ):
             return await self._legacy_search(query, top_k=top_k, filters=filters)
 
-        hits = await self._advanced_search(query, top_k=top_k, filters=filters)
-        self._log_completed(query, top_k, filters, hits, started)
-        return hits
+        outcome = await self._advanced_search(query, top_k=top_k, filters=filters)
+        self._log_completed(query, top_k, filters, outcome.hits, started)
+        return outcome
 
     # ===== 基线路径(全关,分数与时序与 T06 完全一致)=====
 
@@ -133,7 +156,7 @@ class RetrievalService:
         *,
         top_k: int,
         filters: ChunkFilter | None,
-    ) -> list[ScoredChunk]:
+    ) -> RetrievalOutcome:
         started = datetime.now(UTC)
         embedded_query = await self._embedder.embed([query])
         hits = self._vectors.search(
@@ -152,7 +175,7 @@ class RetrievalService:
                 (datetime.now(UTC) - started).total_seconds() * 1000, 2
             ),
         )
-        return hits
+        return RetrievalOutcome(hits=hits)
 
     # ===== 高级路径 =====
 
@@ -162,7 +185,7 @@ class RetrievalService:
         *,
         top_k: int,
         filters: ChunkFilter | None,
-    ) -> list[ScoredChunk]:
+    ) -> RetrievalOutcome:
         settings = self._settings
         plan = QueryPlan(original=query)
         if settings.use_query_rewrite or settings.use_multi_query:
@@ -203,7 +226,16 @@ class RetrievalService:
             )
         else:
             candidates = candidates[:top_k]
-        return candidates
+        return RetrievalOutcome(
+            hits=candidates,
+            # 留痕只记实际参与召回的口径:开关未开的产物不写进查询日志。
+            rewritten_question=(
+                plan.rewritten if settings.use_query_rewrite else None
+            ),
+            expanded_questions=(
+                list(plan.variants) if settings.use_multi_query else []
+            ),
+        )
 
     def _fuse_channels(
         self,

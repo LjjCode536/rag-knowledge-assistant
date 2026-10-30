@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
-from app.domain.qa import Citation, RefusalReason
+from app.domain.qa import Citation, GenerationUsage, GeneratorKind, RefusalReason
 from app.domain.retrieval import ChunkFilter
 from app.services.answering import AnswerRunResult, AnswerService
 
@@ -46,7 +46,7 @@ class CitationView(BaseModel):
 
 
 class ChatView(BaseModel):
-    """一次问答视图:答案、拒答原因、引用与端到端延迟。"""
+    """一次问答视图:答案、拒答原因、引用、生成器留痕与端到端延迟。"""
 
     query_id: str
     question: str
@@ -58,6 +58,10 @@ class ChatView(BaseModel):
     filters: dict[str, str]
     citations: list[CitationView]
     latency_ms: float
+    generator: GeneratorKind
+    token_usage: GenerationUsage
+    rewritten_question: str | None = None
+    expanded_questions: list[str]
 
     @classmethod
     def of(cls, result: AnswerRunResult) -> ChatView:
@@ -73,6 +77,10 @@ class ChatView(BaseModel):
             filters=log.filters,
             citations=[CitationView.of(citation) for citation in result.citations],
             latency_ms=log.latency_ms,
+            generator=log.generator,
+            token_usage=log.token_usage,
+            rewritten_question=log.rewritten_question,
+            expanded_questions=log.expanded_questions,
         )
 
 

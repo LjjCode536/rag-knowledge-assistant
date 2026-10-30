@@ -113,8 +113,13 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
 
 - 资料不足时统一拒答(`refused=true`、`refusal_reason` 为 `no_hits` / `low_score` / `generator_refused`),答案固定为 `根据当前资料无法确认。`,且不返回引用。
 - 拒答阈值由 `QA_MIN_SCORE` 配置(默认 `0.35`);默认 `QA_TOP_K=3`。
-- 查询日志:`GET /api/v1/query-logs?limit=20`(最近优先)与 `GET /api/v1/query-logs/{query_id}`,含原始问题、命中 / 分数、是否进入证据、拒答原因与延迟。
-- 生成器当前为规则版基线(教材第 45 章 stub),T08(M5)换真实 LLM 时只替换 `AnswerGenerator` 实现。
+- 查询日志:`GET /api/v1/query-logs?limit=20`(最近优先)与 `GET /api/v1/query-logs/{query_id}`,含原始问题与改写 / 扩展后的问题、命中 / 分数、是否进入证据、拒答原因、生成器种类(`generator`=`rule_based` / `llm`)、Token 用量(`token_usage`)与延迟。
+- 回答生成器默认真实 LLM 有据生成(`QA_GENERATOR=llm`,默认模型 `Qwen/Qwen3-8B`,经 `LLM_MODEL` 可换):
+
+  - Prompt 强约束:只依据编号资料回答、不足即统一拒答、绝不编造,回答用 `[编号]` 标注所依据的资料;
+  - 上下文为空直接拒答,不触上游;上游超时 / 限流等错误经统一客户端转为 `UPSTREAM_TIMEOUT` / `UPSTREAM_RATE_LIMITED` 等稳定错误码;
+  - `QA_GENERATOR=rule` 可切回规则版基线(不触网、零 Token),两种模式在 `generator` 字段上可观测;
+  - 真实上游验证:`uv run python scripts/check_upstream.py`(需密钥、会计费)。
 
 ### 检索评估(T06)
 
