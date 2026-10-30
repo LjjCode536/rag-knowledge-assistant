@@ -11,6 +11,7 @@ from app.api.routes.chat import router as chat_router
 from app.api.routes.chunks import router as chunks_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.embeddings import router as embeddings_router
+from app.api.routes.feedback import router as feedback_router
 from app.api.routes.health import router as health_router
 from app.api.routes.query_logs import router as query_logs_router
 from app.api.routes.search import router as search_router
@@ -24,12 +25,14 @@ from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.memory import (
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
+    InMemoryFeedbackRepository,
     InMemoryQueryLogRepository,
 )
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.answering import AnswerService
 from app.services.chunking import ChunkingService
 from app.services.embedding import Embedder, EmbeddingService
+from app.services.feedback import FeedbackService
 from app.services.generation import (
     AnswerGenerator,
     RuleBasedAnswerGenerator,
@@ -86,6 +89,11 @@ def create_app(
     )
     effective_reranker = reranker if reranker is not None else SiliconFlowReranker(llm_client)
     query_log_repository = InMemoryQueryLogRepository()
+    feedback_repository = InMemoryFeedbackRepository()
+    feedback_service = FeedbackService(
+        feedback_repository=feedback_repository,
+        query_log_repository=query_log_repository,
+    )
     document_storage = LocalDocumentStorage(settings.upload_dir)
     lifecycle_service = DocumentLifecycleService(
         document_repository=document_repository,
@@ -151,6 +159,7 @@ def create_app(
     app.state.keyword_index = effective_keyword_index
     app.state.answer_service = answer_service
     app.state.query_log_repository = query_log_repository
+    app.state.feedback_service = feedback_service
     app.state.vector_store = effective_vector_store
     app.state.lifecycle_service = lifecycle_service
 
@@ -163,4 +172,5 @@ def create_app(
     app.include_router(search_router)
     app.include_router(chat_router)
     app.include_router(query_logs_router)
+    app.include_router(feedback_router)
     return app

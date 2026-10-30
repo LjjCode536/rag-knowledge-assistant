@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord
+from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
 
 
@@ -98,3 +99,49 @@ class InMemoryQueryLogRepository:
     def count(self) -> int:
         with self._lock:
             return len(self._logs)
+
+
+class InMemoryFeedbackRepository:
+    """回答反馈的内存实现:一问一评(同 feedback_id 覆盖),列表按时间倒序返回。
+
+    问答反馈端点运行在事件循环中,但仍与其它内存仓储保持一致,读写加锁;
+    生产形态由 PostgreSQL 的 feedbacks 表接管。
+    """
+
+    def __init__(self) -> None:
+        self._records: dict[str, FeedbackRecord] = {}
+        self._lock = threading.Lock()
+
+    def add(self, record: FeedbackRecord) -> None:
+        with self._lock:
+            self._records[record.feedback_id] = record
+
+    def get(self, feedback_id: str) -> FeedbackRecord | None:
+        with self._lock:
+            return self._records.get(feedback_id)
+
+    def get_by_query_id(self, query_id: str) -> FeedbackRecord | None:
+        with self._lock:
+            for record in reversed(self._records.values()):
+                if record.query_id == query_id:
+                    return record
+        return None
+
+    def list_recent(
+        self, *, limit: int, verdict: FeedbackVerdict | None = None
+    ) -> list[FeedbackRecord]:
+        with self._lock:
+            records = [
+                record
+                for record in reversed(self._records.values())
+                if verdict is None or record.verdict == verdict
+            ]
+        return records[:limit]
+
+    def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
+        with self._lock:
+            return sum(
+                1
+                for record in self._records.values()
+                if verdict is None or record.verdict == verdict
+            )
