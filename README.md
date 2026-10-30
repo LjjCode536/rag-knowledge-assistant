@@ -207,7 +207,8 @@ app/
   asgi.py                    # ASGI 入口(只装配,供 uvicorn)
   main.py                    # 应用工厂 create_app
   api/routes/                # HTTP 路由(健康检查 / 文档)
-  core/                      # 配置 / 异常 / 信封 / 日志 / trace_id / 异常处理器  domain/                    # 领域层:ParsedDocument schema / 状态机 / 仓储接口(权威契约)
+  core/                      # 配置 / 异常 / 信封 / 日志 / trace_id / 异常处理器
+  domain/                    # 领域层:ParsedDocument schema / 状态机 / 仓储接口(权威契约)
   services/                  # 应用服务:入库编排 / 落盘存储
   repositories/              # 仓储实现(内存基线 / Chroma / PG 生产持久化)
   integrations/              # 实现层零件

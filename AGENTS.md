@@ -8,7 +8,7 @@
 
 ```bash
 uv sync                                        # 安装依赖(含 dev)
-uv run pytest                                  # 全量测试(不读 .env、不触网)
+uv run pytest                                  # 全量测试(不读 .env;不触外网,本地 PG 不可达时 pgvector 集成用例自动跳过)
 uv run ruff check .                            # lint
 uv run python -m uvicorn app.asgi:app --reload # 本地启动
 uv run python scripts/evaluate.py              # 黄金数据集检索指标(默认无密钥)

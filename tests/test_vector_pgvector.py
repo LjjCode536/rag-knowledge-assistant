@@ -225,3 +225,27 @@ def test_reopening_same_database_keeps_vectors(test_pg_database):
         assert [hit.chunk.content for hit in hits] == ["存档"]
     finally:
         second.close()
+
+
+def test_mixed_dimension_column_degrades_without_crashing(pg_store):
+    """迁移期混维共存:同库里新维度与旧维度向量并存,检索按 0 分降级不崩溃,
+    且结果不超 top_k(整库重嵌前的过渡窗口)。"""
+    pg_store.replace(
+        "doc-1",
+        [_chunk("旧一维"), _chunk("旧二维", index=1)],
+        [[1.0], [1.0, 1.0]],
+    )
+    pg_store.replace("doc-2", [_chunk("三维", document_id="doc-2")], [[1.0, 1.0, 1.0]])
+
+    hits = pg_store.search([1.0, 1.0, 1.0], top_k=2, filters=ChunkFilter())
+
+    assert len(hits) == 2  # 至多 top_k
+    assert hits[0].chunk.content == "三维"
+    assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+    # 维度不一致的两条旧向量不参与有效相似度,同按 0 分降级
+    assert hits[1].score == 0.0
+
+    # 查询维度也不匹配:全部候选按 0 分降级,不 5xx
+    mismatches = pg_store.search([1.0, 1.0, 1.0, 1.0], top_k=1, filters=ChunkFilter())
+    assert len(mismatches) == 1
+    assert mismatches[0].score == 0.0

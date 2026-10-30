@@ -346,8 +346,9 @@ def resolve_qa_generator(settings: Settings, args: argparse.Namespace) -> str | 
 def _vector_store_updates(args: argparse.Namespace, temp_dir: Path) -> dict[str, Any]:
     """进程内评估的向量库后端配置:memory 沿用默认,chroma 数据落临时目录。
 
-    pgvector:评估语料写入连接串指向的库(表在此前为幂等建好);语料按文档
-    整组覆盖,不做 清空 —— 供跨次对比时沿用同一库,靠 run/文档 id 区隔。
+    pgvector:评估语料写入连接串指向的库(表在启动时幂等建好);语料按文档
+    整组覆盖,评估之间不做整库清空 —— 供跨次对比沿用同一库,靠新上传的
+    文档 id 区隔;要干净口径请指向评估专用库。
     """
     if args.vector_store == "chroma":
         return {"vector_store": "chroma", "chroma_path": temp_dir / "chroma"}

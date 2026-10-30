@@ -58,7 +58,12 @@ class PgDatabase:
                 f"{ready_timeout:.0f}s 内就绪):{database_url.rsplit('@', 1)[-1]}"
             ) from exc
         with self.connection() as conn:
-            ensure_schema(conn)
+            try:
+                ensure_schema(conn)
+            except Exception:
+                # 建库失败即不可用:跳过归还池的连接,直接关闭,不留悬挂资源
+                self._pool.close()
+                raise
 
     def connection(self):
         """借一个连接;with 退出即归还池化连接(异常路径同样归还)。"""

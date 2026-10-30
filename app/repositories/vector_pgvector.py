@@ -99,7 +99,9 @@ class PgVectorStore:
         self._db = db
 
     def close(self) -> None:
-        """关闭底层连接池(与其他仓储共享时,仅由装配点统一 close)。"""
+        """统一关闭钩子:pgvector 模式下仓储与向量库共用同一连接池,由装配点
+        调用(应用 lifespan 收尾 / 评估脚本收尾 / 测试清理),幂等。
+        """
         self._db.close()
 
     def replace(
@@ -174,7 +176,8 @@ class PgVectorStore:
             for row in rows
         ]
         hits.sort(key=lambda hit: hit.score, reverse=True)
-        return hits
+        # 混维降级路径取回的是全量过滤候选,必须切回 top_k(契约:至多 top_k 个)
+        return hits[:top_k]
 
     def _fetch_candidates(
         self, cursor, ordered: str, unordered: str, params: list[str], query_vector: str, top_k: int
