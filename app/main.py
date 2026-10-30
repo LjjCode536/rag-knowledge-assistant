@@ -49,6 +49,7 @@ from app.services.generation import (
 from app.services.ingestion import IngestionService
 from app.services.ingestion_pipeline import IngestionPipeline
 from app.services.lifecycle import DocumentLifecycleService
+from app.services.qa_cache import AnswerCache
 from app.services.query_planning import SiliconFlowQueryPlanner
 from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
@@ -143,6 +144,16 @@ def create_app(
     settings = settings or get_settings()
     configure_logging(settings)
 
+    # 在线问答答档缓存(T15):相同问题在 TTL 内复用,知识库变化时整体失效
+    answer_cache = (
+        AnswerCache(
+            ttl_seconds=settings.qa_cache_ttl_seconds,
+            maxsize=settings.qa_cache_maxsize,
+        )
+        if settings.qa_cache_enabled
+        else None
+    )
+
     llm_client = UnifiedLLMClient(settings)
     effective_embedder = embedder if embedder is not None else llm_client
     effective_generator = (
@@ -172,6 +183,7 @@ def create_app(
         vector_store=effective_vector_store,
         keyword_index=effective_keyword_index,
         storage=document_storage,
+        answer_cache=answer_cache,
     )
     ingestion_service = IngestionService(
         repository=document_repository,
@@ -189,6 +201,7 @@ def create_app(
         vector_store=effective_vector_store,
         embedder=effective_embedder,
         keyword_index=effective_keyword_index,
+        answer_cache=answer_cache,
     )
     ingestion_pipeline = IngestionPipeline(
         ingestion_service=ingestion_service,
@@ -209,6 +222,7 @@ def create_app(
         query_log_repository=query_log_repository,
         generator=effective_generator,
         settings=settings,
+        answer_cache=answer_cache,
     )
 
     @asynccontextmanager
@@ -238,6 +252,7 @@ def create_app(
     app.state.retrieval_service = retrieval_service
     app.state.keyword_index = effective_keyword_index
     app.state.answer_service = answer_service
+    app.state.answer_cache = answer_cache
     app.state.query_log_repository = query_log_repository
     app.state.feedback_service = feedback_service
     app.state.vector_store = effective_vector_store

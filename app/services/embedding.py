@@ -21,6 +21,7 @@ from app.domain.repositories import ChunkRepository, DocumentRepository
 from app.domain.retrieval import KeywordIndex, VectorStore
 from app.domain.state_machine import ensure_transition
 from app.integrations.llm.client import EmbedResult, TokenUsage
+from app.services.qa_cache import AnswerCache
 
 logger = structlog.get_logger("embedding")
 
@@ -55,12 +56,14 @@ class EmbeddingService:
         vector_store: VectorStore,
         embedder: Embedder,
         keyword_index: KeywordIndex | None = None,
+        answer_cache: AnswerCache | None = None,
     ) -> None:
         self._documents = document_repository
         self._chunks = chunk_repository
         self._vectors = vector_store
         self._embedder = embedder
         self._keyword_index = keyword_index
+        self._answer_cache = answer_cache
 
     async def embed_document(
         self, document_id: str, *, model: str | None = None
@@ -111,6 +114,9 @@ class EmbeddingService:
         # 关键词通道与向量库同组替换、同批写入:两条通道候选永远一致。
         if self._keyword_index is not None:
             self._keyword_index.replace(document_id, chunks)
+        # 检索面变化:答档缓存整体失效,问答不落后于知识库更新(T15)
+        if self._answer_cache is not None:
+            self._answer_cache.clear(reason="document_embedded")
 
         self._transition(record, DocumentStatus.EMBEDDING)
         self._transition(record, DocumentStatus.INDEXED)

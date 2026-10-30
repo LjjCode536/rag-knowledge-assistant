@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any
 
 import httpx
@@ -67,11 +69,27 @@ class RecordingSleep:
         self.delays.append(seconds)
 
 
+class FakeClock:
+    """可编程单调时钟:sleep 推进自身,等待与节拍计算完全确定。"""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self.now = start
+        self.delays: list[float] = []
+
+    def time(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.delays.append(seconds)
+        self.now += seconds
+
+
 def build_client(
     settings: Settings,
     responses: list[TransportResponse | Exception],
     *,
     sleep: RecordingSleep | None = None,
+    clock=None,
     **overrides: Any,
 ) -> tuple[UnifiedLLMClient, FakeTransport]:
     values: dict[str, Any] = {
@@ -82,7 +100,10 @@ def build_client(
     values.update(overrides)
     configured = settings.model_copy(update=values)
     transport = FakeTransport(responses)
-    client = UnifiedLLMClient(configured, transport=transport, sleep=sleep or RecordingSleep())
+    kwargs: dict[str, Any] = {"sleep": sleep or RecordingSleep()}
+    if clock is not None:
+        kwargs["clock"] = clock
+    client = UnifiedLLMClient(configured, transport=transport, **kwargs)
     return client, transport
 
 
@@ -301,3 +322,96 @@ async def test_success_logs_usage_and_latency(settings, capsys):
     assert logged["total_tokens"] == 18
     assert logged["latency_ms"] >= 0
     assert logged["attempts"] == 1
+
+
+async def test_throttle_spaces_consecutive_calls(settings):
+    clock = FakeClock()
+    client, transport = build_client(
+        settings,
+        [TransportResponse(200, CHAT_OK_BODY), TransportResponse(200, CHAT_OK_BODY)],
+        sleep=clock.sleep,
+        clock=clock.time,
+        llm_min_interval_seconds=0.5,
+    )
+
+    await client.chat(MESSAGES)
+    await client.chat(MESSAGES)
+
+    assert len(transport.calls) == 2
+    # 首请求不动等待;次请求被压到节拍上,恰好等了一个最小间隔
+    assert clock.delays == [0.5]
+    assert clock.now == pytest.approx(0.5)
+
+
+async def test_throttle_disabled_by_default_never_waits(settings):
+    clock = FakeClock()
+    client, transport = build_client(
+        settings,
+        [TransportResponse(200, CHAT_OK_BODY), TransportResponse(200, CHAT_OK_BODY)],
+        sleep=clock.sleep,
+        clock=clock.time,
+    )
+
+    await client.chat(MESSAGES)
+    await client.chat(MESSAGES)
+
+    assert len(transport.calls) == 2
+    assert clock.delays == []
+
+
+async def test_429_honors_retry_after_seconds(settings):
+    sleep = RecordingSleep()
+    client, transport = build_client(
+        settings,
+        [
+            TransportResponse(429, {}, headers={"Retry-After": "2"}),
+            TransportResponse(200, CHAT_OK_BODY),
+        ],
+        sleep=sleep,
+        llm_max_retries=1,
+    )
+
+    result = await client.chat(MESSAGES)
+
+    assert result.content == "按工龄计算。"
+    assert len(transport.calls) == 2
+    # 上游明示 2 秒再试:退避遵循服务端指示,而不是固定指数基数
+    assert sleep.delays == [2.0]
+
+
+async def test_429_honors_retry_after_http_date(settings):
+    due = datetime.now(UTC) + timedelta(seconds=60)
+    sleep = RecordingSleep()
+    client, transport = build_client(
+        settings,
+        [
+            TransportResponse(429, {}, headers={"Retry-After": format_datetime(due, usegmt=True)}),
+            TransportResponse(200, CHAT_OK_BODY),
+        ],
+        sleep=sleep,
+        llm_max_retries=1,
+    )
+
+    await client.chat(MESSAGES)
+
+    assert len(transport.calls) == 2
+    assert 55.0 <= sleep.delays[0] <= 60.0
+
+
+async def test_429_without_retry_after_keeps_exponential_backoff(settings):
+    sleep = RecordingSleep()
+    client, transport = build_client(
+        settings,
+        [
+            TransportResponse(429, {}),
+            TransportResponse(429, {}, headers={"Retry-After": "garbage"}),
+            TransportResponse(200, CHAT_OK_BODY),
+        ],
+        sleep=sleep,
+        llm_max_retries=2,
+    )
+
+    await client.chat(MESSAGES)
+
+    assert len(transport.calls) == 3
+    assert sleep.delays == [0.5, 1.0]

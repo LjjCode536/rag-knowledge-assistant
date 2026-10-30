@@ -62,6 +62,8 @@ class ChatView(BaseModel):
     token_usage: GenerationUsage
     rewritten_question: str | None = None
     expanded_questions: list[str]
+    # T15:True 表示本次回答来自答档缓存(同题二次询问)
+    cache_hit: bool = False
 
     @classmethod
     def of(cls, result: AnswerRunResult) -> ChatView:
@@ -81,6 +83,7 @@ class ChatView(BaseModel):
             token_usage=log.token_usage,
             rewritten_question=log.rewritten_question,
             expanded_questions=log.expanded_questions,
+            cache_hit=result.cache_hit,
         )
 
 

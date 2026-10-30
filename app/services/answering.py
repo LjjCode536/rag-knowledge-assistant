@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import structlog
 
@@ -26,6 +28,7 @@ from app.domain.qa import (
 from app.domain.repositories import DocumentRepository, QueryLogRepository
 from app.domain.retrieval import ChunkFilter, ScoredChunk
 from app.services.generation import AnswerGenerator
+from app.services.qa_cache import AnswerCache, CacheEntry
 from app.services.retrieval import RetrievalService
 
 logger = structlog.get_logger("answering")
@@ -33,14 +36,20 @@ logger = structlog.get_logger("answering")
 
 @dataclass(slots=True)
 class AnswerRunResult:
-    """一次问答的结果:查询日志 + 对外引用。"""
+    """一次问答的结果:查询日志 + 对外引用;命中缓存时 cache_hit 为真。"""
 
     log: QueryLog
     citations: list[Citation]
+    cache_hit: bool = False
 
 
 class AnswerService:
-    """把用户问题变成有据回答,并保证每次问答都有可追溯日志。"""
+    """把用户问题变成有据回答,并保证每次问答都有可追溯日志。
+
+    相同问题(归一化同题)在缓存 TTL 内直接复用答档(T15):生成链路整段
+    跳过,延迟显著降低、上游零消耗;命中仍各留一条查询日志,命中 / 未命中
+    情况在结构日志中可见。
+    """
 
     def __init__(
         self,
@@ -50,12 +59,14 @@ class AnswerService:
         query_log_repository: QueryLogRepository,
         generator: AnswerGenerator,
         settings: Settings,
+        answer_cache: AnswerCache | None = None,
     ) -> None:
         self._retrieval = retrieval_service
         self._documents = document_repository
         self._query_logs = query_log_repository
         self._generator = generator
         self._settings = settings
+        self._cache = answer_cache
 
     async def ask(
         self,
@@ -68,7 +79,31 @@ class AnswerService:
         """问答一次:top-k 检索、低分拒答、编号上下文与引用,全程留痕。"""
         effective_top_k = top_k if top_k is not None else self._settings.qa_top_k
         min_score = self._settings.qa_min_score
+        filters_effective = (filters or ChunkFilter()).effective()
         started = time.perf_counter()
+
+        cache_key = self._cache_key(
+            question=question,
+            top_k=effective_top_k,
+            min_score=min_score,
+            filters_effective=filters_effective,
+        )
+        if cache_key is not None:
+            entry = self._cache.get(cache_key)
+            if entry is None:
+                stats = self._cache.stats()
+                logger.info(
+                    "qa_cache_miss",
+                    trace_id=trace_id,
+                    question_chars=len(question),
+                    cache_hits=stats.hits,
+                    cache_misses=stats.misses,
+                    cache_hit_rate=stats.hit_rate,
+                )
+            else:
+                return self._answered_from_cache(
+                    entry, question=question, trace_id=trace_id, started=started
+                )
 
         outcome = await self._retrieval.retrieve(
             question, top_k=effective_top_k, filters=filters
@@ -108,7 +143,7 @@ class AnswerService:
             refused=refused,
             refusal_reason=reason,
             hits=_query_hits(hits, used=used),
-            filters=(filters or ChunkFilter()).effective(),
+            filters=filters_effective,
             top_k=effective_top_k,
             min_score=min_score,
             latency_ms=latency_ms,
@@ -118,6 +153,8 @@ class AnswerService:
             expanded_questions=outcome.expanded_questions,
         )
         self._query_logs.add(log)
+        if cache_key is not None:
+            self._cache.put(cache_key, log=log, citations=citations)
         logger.info(
             "qa_completed",
             query_id=log.query_id,
@@ -135,8 +172,63 @@ class AnswerService:
             total_tokens=usage.total_tokens,
             rewritten_question=outcome.rewritten_question,
             expanded_queries=len(outcome.expanded_questions),
+            cache_hit=False,
         )
         return AnswerRunResult(log=log, citations=citations)
+
+    def _answered_from_cache(
+        self,
+        entry: CacheEntry,
+        *,
+        question: str,
+        trace_id: str,
+        started: float,
+    ) -> AnswerRunResult:
+        """命中答档:复制成新的查询日志留痕,再测延迟,生成链路整段跳过。"""
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        log = entry.log.model_copy(
+            deep=True,
+            update={
+                "query_id": f"qry_{uuid4().hex[:12]}",
+                "trace_id": trace_id,
+                # 留痕以本次请求为准:问题原文记调用方的,答档只贡献答案与证据
+                "question": question,
+                "latency_ms": latency_ms,
+                "created_at": datetime.now(UTC),
+            },
+        )
+        self._query_logs.add(log)
+        citations = [citation.model_copy(deep=True) for citation in entry.citations]
+        stats = self._cache.stats()
+        logger.info(
+            "qa_cache_hit",
+            query_id=log.query_id,
+            latency_ms=latency_ms,
+            cached_answer_chars=len(log.answer),
+            cache_hits=stats.hits,
+            cache_misses=stats.misses,
+            cache_hit_rate=stats.hit_rate,
+        )
+        return AnswerRunResult(log=log, citations=citations, cache_hit=True)
+
+    def _cache_key(
+        self,
+        *,
+        question: str,
+        top_k: int,
+        min_score: float,
+        filters_effective: dict[str, str],
+    ) -> str | None:
+        """缓存键=None 表示缓存未启用;键覆盖归一化问题与全部过程口径。"""
+        if self._cache is None:
+            return None
+        return self._cache.make_key(
+            question=question,
+            top_k=top_k,
+            min_score=min_score,
+            filters=filters_effective,
+            generator=self._generator.kind.value,
+        )
 
     def _sources_of(self, hits: list[ScoredChunk]) -> list[ContextSource]:
         """把命中转成编号来源;同一文档的文件名只查一次。"""

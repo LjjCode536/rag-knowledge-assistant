@@ -22,7 +22,8 @@ curl -H "X-Request-ID: demo-trace-0001" http://127.0.0.1:8000/health
 {
   "code": "OK",
   "message": "ok",
-  "data": {"status": "ok", "version": "0.1.0", "environment": "local", "upstream_configured": true},
+  "data": {"status": "ok", "version": "0.1.0", "environment": "local", "upstream_configured": true,
+           "qa_cache": {"enabled": true, "hits": 12, "misses": 40, "hit_rate": 0.2308}},
   "details": null,
   "trace_id": "demo-trace-0001",
   "timestamp": "2026-10-28T09:00:00Z"
@@ -131,13 +132,15 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
         "score": 0.79
       }
     ],
-    "latency_ms": 4.21
+    "latency_ms": 4.21,
+    "cache_hit": false
   }
 }
 ```
 
 - 资料不足时统一拒答(`refused=true`、`refusal_reason` 为 `no_hits` / `low_score` / `generator_refused`),答案固定为 `根据当前资料无法确认。`,且不返回引用。
 - 拒答阈值由 `QA_MIN_SCORE` 配置(默认 `0.35`);默认 `QA_TOP_K=3`。
+- 问答答档缓存(T15,ADR-0013):相同问题(空白归一化、忽略大小写,连同 top_k / 阈值 / 过滤 / 生成器口径一致)在 `QA_CACHE_TTL_SECONDS`(默认 300s)内直接复用上次的回答与引用,响应带 `cache_hit=true`,秒级延迟降为亚毫秒且不消耗上游;文档向量化、版本退位与删除即刻清空缓存,答档不落后于知识库变化;命中率随 `qa_cache_hit` / `qa_cache_miss` 日志事件与 `/health` 的 `qa_cache` 字段可查,`QA_CACHE_ENABLED=false` 可整体关闭。
 - 查询日志:`GET /api/v1/query-logs?limit=20`(最近优先)与 `GET /api/v1/query-logs/{query_id}`,含原始问题与改写 / 扩展后的问题、命中 / 分数、是否进入证据、拒答原因、生成器种类(`generator`=`rule_based` / `llm`)、Token 用量(`token_usage`)与延迟。
 - 回答生成器默认真实 LLM 有据生成(`QA_GENERATOR=llm`,默认模型 `Qwen/Qwen3-8B`,经 `LLM_MODEL` 可换):
 
@@ -145,6 +148,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
   - 上下文为空直接拒答,不触上游;上游超时 / 限流等错误经统一客户端转为 `UPSTREAM_TIMEOUT` / `UPSTREAM_RATE_LIMITED` 等稳定错误码;
   - `QA_GENERATOR=rule` 可切回规则版基线(不触网、零 Token),两种模式在 `generator` 字段上可观测;
   - 真实上游验证:`uv run python scripts/check_upstream.py`(需密钥、会计费)。
+- 上游调用限速保护(T15,ADR-0013):`LLM_MIN_INTERVAL_SECONDS` 设置相邻两次上游发送的最小间隔(默认 `0` 不限速;免费档配额紧张时调大),并发请求持锁串行取节拍;上游 429 的 `Retry-After` 头(秒数或 HTTP 日期)被直接采纳为重试等待,无头部时按 `LLM_RETRY_BACKOFF_SECONDS` 指数退避,`upstream_throttled` / `upstream_call_retry` 事件全程留痕。
 
 ### 检索评估(T06)
 
@@ -193,6 +197,7 @@ uv run pytest                   # 全量测试,不触网
 uv run ruff check .             # lint
 uv run python scripts/evaluate.py         # 黄金数据集检索指标(默认无密钥)
 uv run python scripts/benchmark_ingestion.py # 入库形态上传阻塞时长(同步 vs 异步)
+uv run python scripts/benchmark_qa_cache.py  # 同题二次询问延迟(缓存关 vs 开,T15)
 uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会计费)
 ```
 
@@ -220,6 +225,7 @@ evaluation/                  # 黄金数据集(v1 YAML)与评估语料
 tests/                       # 按接缝组织的测试
 scripts/evaluate.py          # 检索指标评估器(默认无密钥)
 scripts/benchmark_ingestion.py # 入库形态上传阻塞时长基准(同步 vs 异步)
+scripts/benchmark_qa_cache.py  # 同题二次询问延迟基准(缓存关 vs 开,T15)
 scripts/init_pg.py           # 幂等建表 / 迁移(pgvector 生产持久化)
 scripts/check_upstream.py    # 需要密钥的连通性脚本
 docker-compose.yml           # PostgreSQL 16 + pgvector 一键拉起
@@ -239,5 +245,6 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0009](docs/adr/0009-document-supersession-and-deletion.md):文档版本退位与删除:清理先行、状态机后置
 - [ADR-0011](docs/adr/0011-pgvector-production-persistence.md):生产持久化切 pgvector;六张生产表;无 Docker 回退口径
 - [ADR-0012](docs/adr/0012-async-ingestion-background-tasks.md):异步 ingestion:上传即时返回任务句柄;同步形态显式配置
+- [ADR-0013](docs/adr/0013-qa-answer-cache-and-upstream-throttle.md):问答答档缓存与上游限速:进程内快答档,检索面变化即整体失效
 - [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)

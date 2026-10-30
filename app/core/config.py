@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
     llm_retry_backoff_seconds: float = Field(default=0.5, ge=0)
+    # 跨请求限速:相邻两次上游发送之间的最小间隔(秒);0 = 不限速(T15)。
+    # 429 退避遵循上游 Retry-After 头,无头部时按 llm_retry_backoff_seconds 指数退避
+    llm_min_interval_seconds: float = Field(default=0.0, ge=0)
 
     # ===== 文档入库 =====
     # 上传文件落盘目录(运行时产物,已被 gitignore;不落库)
@@ -74,6 +77,14 @@ class Settings(BaseSettings):
     # (默认 Qwen/Qwen3-8B,llm_model 可换;需 SILICONFLOW_API_KEY,
     # 上游超时 / 限流统一转为 UPSTREAM_* 错误码)
     qa_generator: Literal["rule", "llm"] = "llm"
+
+    # ===== 在线问答缓存(T15)=====
+    # 相同问题(空白归一化 + 忽略大小写,连同 top_k / 阈值 / 过滤 / 生成器口径)
+    # 在 ttl 内直接复用上次答档:二次同题延迟显著下降,不再消耗上游配额。
+    # 文档向量化 / 退位 / 删除即清空缓存,答档不落后于知识库变化。
+    qa_cache_enabled: bool = True
+    qa_cache_ttl_seconds: float = Field(default=300.0, gt=0)
+    qa_cache_maxsize: int = Field(default=128, ge=1)
 
     # ===== 向量库后端(M3 三级存储:memory → chroma → pgvector)=====
     # memory = 进程内存基线(默认,重启即失忆,测试 / CI 指标口径);

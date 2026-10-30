@@ -21,6 +21,7 @@ from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.repositories import ChunkRepository, DocumentRepository
 from app.domain.retrieval import KeywordIndex, VectorStore
 from app.domain.state_machine import ensure_transition
+from app.services.qa_cache import AnswerCache
 from app.services.storage import LocalDocumentStorage
 
 logger = structlog.get_logger("lifecycle")
@@ -37,12 +38,14 @@ class DocumentLifecycleService:
         vector_store: VectorStore,
         keyword_index: KeywordIndex,
         storage: LocalDocumentStorage,
+        answer_cache: AnswerCache | None = None,
     ) -> None:
         self._documents = document_repository
         self._chunks = chunk_repository
         self._vectors = vector_store
         self._keyword_index = keyword_index
         self._storage = storage
+        self._answer_cache = answer_cache
 
     def supersede(self, previous: DocumentRecord) -> None:
         """旧版本退位:清理两条检索通道的旧版本数据后,状态迁移到 superseded。
@@ -53,6 +56,9 @@ class DocumentLifecycleService:
         started = datetime.now(UTC)
         try:
             self._cleanup_retrieval_channels(previous.id)
+            # 旧版本退出检索面:答档缓存整体失效(新版本入库前旧答档不再可信)
+            if self._answer_cache is not None:
+                self._answer_cache.clear(reason="document_superseded")
         except Exception as exc:
             self._record_failure(previous, exc)
             raise DocumentSupersedeError(
@@ -90,6 +96,9 @@ class DocumentLifecycleService:
         started = datetime.now(UTC)
         try:
             self._cleanup_retrieval_channels(document_id)
+            # 检索通道先清:文档内容退出检索面,答档缓存同刻失效(T15)
+            if self._answer_cache is not None:
+                self._answer_cache.clear(reason="document_deleted")
             # 向量与关键词通道先清:即便后续步骤失败,检索面也不再返回该文档的切片
             self._chunks.delete(document_id)
             self._storage.delete(document_id, file_name=record.file_name)

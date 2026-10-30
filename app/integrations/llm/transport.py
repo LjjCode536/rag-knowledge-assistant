@@ -11,10 +11,15 @@ import httpx
 
 @dataclass(frozen=True, slots=True)
 class TransportResponse:
-    """与 httpx 解耦的响应快照。"""
+    """与 httpx 解耦的响应快照。
+
+    ``headers`` 供上游指令类头部(如 429 的 Retry-After)透传给客户端策略,
+    按需填充;测试替身与旧调用可继续省略。
+    """
 
     status_code: int
     body: dict[str, Any] | None
+    headers: Mapping[str, str] | None = None
 
 
 class UpstreamTransport(Protocol):
@@ -65,7 +70,11 @@ class HttpxTransport:
             headers=headers,
             timeout=timeout,
         )
-        return TransportResponse(status_code=response.status_code, body=_decode_body(response))
+        return TransportResponse(
+            status_code=response.status_code,
+            body=_decode_body(response),
+            headers=dict(response.headers),
+        )
 
     async def aclose(self) -> None:
         if self._client is not None and self._owns_client:
