@@ -1,0 +1,339 @@
+# 黄金数据集:v1(2026-10-29)
+#
+# - 先移植内部教材第 44 章的 7 条样例,再扩展到 20+ 条;
+# - expected_chunks 用「文档 + 文内唯一锚点」定位,评估器在索引后解析成真实 chunk_id,
+#   避免把每次入库都会变化的 uuid 写死进仓库;
+# - forbidden_documents 用于权限边界用例:主查询必须挡住禁读文档,同时评估器会跑一次
+#   无过滤对照,证明该文档确实会被检索到;
+# - should_refuse 用例不参与 Recall/MRR/NDCG 均值,单独计算拒答正确率。
+name: enterprise-kb-retrieval
+version: 1
+
+corpus:
+  - path: corpus/employee_handbook.md
+    tenant: acme
+    department: 人力部
+    doc_type: 制度
+    version: v3
+  - path: corpus/it_security.md
+    tenant: acme
+    department: 信息技术部
+    doc_type: 手册
+    version: v2
+  - path: corpus/after_sales.md
+    tenant: acme
+    department: 客户服务部
+    doc_type: 制度
+    version: v1
+  - path: corpus/finance_invoice.md
+    tenant: acme
+    department: 财务部
+    doc_type: 制度
+    version: v2
+  - path: corpus/product_faq.md
+    tenant: acme
+    department: 产品部
+    doc_type: FAQ
+    version: v1
+  # 跨租户干扰语料:只用于权限边界用例与无过滤对照
+  - path: corpus/globex_handbook.md
+    tenant: globex
+    department: 人力部
+    doc_type: 制度
+    version: v1
+
+cases:
+  # ===== 教材第 44 章 7 条样例(移植)=====
+  - id: refund_unshipped
+    question: "没发货可以退钱吗？"
+    category: refund
+    difficulty: easy
+    expected_chunks:
+      - document: after_sales.md
+        anchor: 订单尚未发货时
+    expected_answer_keywords: [未发货, 退款]
+    filters: {tenant: acme}
+    notes: 教材样例 case_refund_001:口语化退款问题
+
+  - id: refund_shipped
+    question: "已经发货了还能直接退款吗？"
+    category: refund
+    difficulty: medium
+    expected_chunks:
+      - document: after_sales.md
+        anchor: 订单已经发货后
+    expected_answer_keywords: [已发货, 退货, 质量问题]
+    filters: {tenant: acme}
+    notes: 教材样例 case_refund_002:已发货退款规则
+
+  - id: logistics_delay
+    question: "快递超过七天没动怎么办？"
+    category: logistics
+    difficulty: easy
+    expected_chunks:
+      - document: after_sales.md
+        anchor: 超过七天没有更新
+    expected_answer_keywords: [物流, 七天, 客服]
+    filters: {tenant: acme}
+    notes: 教材样例 case_logistics_001:物流异常
+
+  - id: invoice_enterprise
+    question: "企业发票需要填写什么？"
+    category: invoice
+    difficulty: easy
+    expected_chunks:
+      - document: finance_invoice.md
+        anchor: 公司名称、纳税人识别号
+    expected_answer_keywords: [企业发票, 公司名称, 纳税人识别号]
+    filters: {tenant: acme}
+    notes: 教材样例 case_invoice_001:发票规则
+
+  - id: leave_annual_tenure
+    question: "入职多久可以申请年假？"
+    category: leave
+    difficulty: easy
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 入职满一年
+    expected_answer_keywords: [入职满一年, 年假]
+    filters: {tenant: acme}
+    notes: 教材样例 case_leave_001:HR 年假制度
+
+  - id: reimbursement_materials
+    question: "差旅报销要提交哪些材料？"
+    category: reimbursement
+    difficulty: easy
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 发票、行程单和审批记录
+    expected_answer_keywords: [差旅报销, 发票, 行程单, 审批记录]
+    filters: {tenant: acme}
+    notes: 教材样例 case_reimbursement_001:财务报销制度
+
+  - id: reimbursement_full_process
+    question: "差旅报销要交哪些材料,最晚什么时候交？"
+    category: reimbursement
+    difficulty: medium
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 发票、行程单和审批记录
+      - document: employee_handbook.md
+        anchor: 十五个工作日内
+    expected_answer_keywords: [差旅报销, 发票, 行程单, 审批记录, 十五个工作日]
+    filters: {tenant: acme}
+    notes: 同文档多切片用例:同时覆盖材料与提交时限
+
+  - id: unknown_shuttle
+    question: "公司班车路线是什么？"
+    category: unknown
+    difficulty: medium
+    expected_chunks: []
+    expected_answer_keywords: [无法确认]
+    filters: {tenant: acme}
+    should_refuse: true
+    notes: 教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底
+
+  # ===== 扩展:HR / 财务 =====
+  - id: leave_sick_report
+    question: "身体不舒服请假要提前通知谁？"
+    category: leave
+    difficulty: easy
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 当天上午十点前
+    expected_answer_keywords: [病假, 报备, 医院证明]
+    filters: {tenant: acme}
+    notes: 病假报备时限
+
+  - id: leave_overtime_comp
+    question: "调休有效期是几个月？"
+    category: leave
+    difficulty: medium
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 三个月内
+    expected_answer_keywords: [加班, 调休, 三个月]
+    filters: {tenant: acme}
+    notes: 调休有效期
+
+  - id: hr_resignation_notice
+    question: "辞职要提前几天说？"
+    category: hr
+    difficulty: easy
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 提前三十天
+    expected_answer_keywords: [离职, 三十天, 交接]
+    filters: {tenant: acme}
+    notes: 离职通知期
+
+  - id: hr_training_budget
+    question: "公司给个人学习经费吗？额度多少？"
+    category: hr
+    difficulty: easy
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 五千元
+    expected_answer_keywords: [培训预算, 五千元, 审批]
+    filters: {tenant: acme}
+    notes: 培训预算额度
+
+  - id: offboarding_cross_doc
+    question: "离职要提前多久申请,账号什么时候回收？"
+    category: hr
+    difficulty: hard
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 提前三十天
+      - document: it_security.md
+        anchor: 两个工作日内
+    expected_answer_keywords: [离职, 三十天, 账号回收, 两个工作日]
+    filters: {tenant: acme}
+    notes: 跨文档多切片用例:同时覆盖离职通知期与账号回收
+
+  - id: reimbursement_deadline
+    question: "报销单最晚什么时候交？"
+    category: reimbursement
+    difficulty: medium
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 十五个工作日内
+    expected_answer_keywords: [报销, 十五个工作日]
+    filters: {tenant: acme}
+    notes: 报销提交时限
+
+  - id: invoice_payment_terms
+    question: "给供应商打款要等多少天？"
+    category: invoice
+    difficulty: easy
+    expected_chunks:
+      - document: finance_invoice.md
+        anchor: 验收合格后的三十天
+    expected_answer_keywords: [付款账期, 三十天, 审批]
+    filters: {tenant: acme}
+    notes: 供应商付款账期
+
+  # ===== 扩展:IT / 安全 =====
+  - id: it_vpn_access
+    question: "在家办公怎么连公司系统？"
+    category: it
+    difficulty: easy
+    expected_chunks:
+      - document: it_security.md
+        anchor: 公司 VPN
+    expected_answer_keywords: [VPN, 远程办公, 内网]
+    filters: {tenant: acme}
+    notes: 远程接入方式
+
+  - id: security_password_rotation
+    question: "登录口令有有效期吗？"
+    category: security
+    difficulty: easy
+    expected_chunks:
+      - document: it_security.md
+        anchor: 每九十天
+    expected_answer_keywords: [密码, 九十天, 特殊符号]
+    filters: {tenant: acme}
+    notes: 密码轮换周期
+
+  - id: security_device_software
+    question: "公司电脑能自己装软件吗？"
+    category: security
+    difficulty: medium
+    expected_chunks:
+      - document: it_security.md
+        anchor: 不得安装未经审批的软件
+    expected_answer_keywords: [笔记本, 磁盘加密, 未经审批]
+    filters: {tenant: acme}
+    notes: 终端软件管理
+
+  - id: security_incident_report
+    question: "怀疑邮箱被盗了第一步做什么？"
+    category: security
+    difficulty: medium
+    expected_chunks:
+      - document: it_security.md
+        anchor: 立即断开网络
+    expected_answer_keywords: [钓鱼邮件, 断开网络, 信息安全]
+    filters: {tenant: acme}
+    notes: 安全事件响应
+
+  - id: it_account_recovery
+    question: "人走了系统权限什么时候停？"
+    category: it
+    difficulty: medium
+    expected_chunks:
+      - document: it_security.md
+        anchor: 两个工作日内
+    expected_answer_keywords: [账号回收, 离职, 两个工作日]
+    filters: {tenant: acme}
+    notes: 离职账号回收
+
+  # ===== 扩展:产品 =====
+  - id: product_trial
+    question: "企业版能免费用多久？"
+    category: product
+    difficulty: easy
+    expected_chunks:
+      - document: product_faq.md
+        anchor: 三十天免费试用
+    expected_answer_keywords: [企业版, 试用, 三十天]
+    filters: {tenant: acme}
+    notes: 企业版试用期
+
+  - id: product_data_export
+    question: "怎么把知识库里的东西备份下来？"
+    category: product
+    difficulty: easy
+    expected_chunks:
+      - document: product_faq.md
+        anchor: 控制台导出
+    expected_answer_keywords: [管理员, 导出, 七天]
+    filters: {tenant: acme}
+    notes: 数据导出方式
+
+  - id: product_sso
+    question: "能用公司账号登录系统吗？"
+    category: product
+    difficulty: easy
+    expected_chunks:
+      - document: product_faq.md
+        anchor: SAML 2.0
+    expected_answer_keywords: [单点登录, SAML, 公司账号]
+    filters: {tenant: acme}
+    notes: SSO 支持
+
+  - id: product_sla
+    question: "标准版会不会经常宕机？"
+    category: product
+    difficulty: easy
+    expected_chunks:
+      - document: product_faq.md
+        anchor: 百分之九十九点九
+    expected_answer_keywords: [标准版, 可用性, 百分之九十九点九]
+    filters: {tenant: acme}
+    notes: 服务等级
+
+  # ===== 权限边界 =====
+  - id: permission_tenant_isolation
+    question: "入职多久可以申请年假,满半年还是满一年？"
+    category: permission
+    difficulty: hard
+    expected_chunks:
+      - document: employee_handbook.md
+        anchor: 入职满一年
+    expected_answer_keywords: [入职满一年, 年假]
+    forbidden_documents: [globex_handbook.md]
+    filters: {tenant: acme}
+    notes: globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档
+
+  # ===== 扩展:拒答 =====
+  - id: unknown_gym
+    question: "公司健身房开放到几点？"
+    category: unknown
+    difficulty: medium
+    expected_chunks: []
+    expected_answer_keywords: [无法确认]
+    filters: {tenant: acme}
+    should_refuse: true
+    notes: 知识库不存在的问题,验证低分兜底

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.fake_embedder import DeterministicEmbedder
+from app.integrations.llm.deterministic import DeterministicEmbedder
 from tests.test_embeddings_api import (
     ALPHA_TEXT,
     BETA_TEXT,

@@ -12,8 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.qa import AnswerContext
+from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
-from tests.fake_embedder import DeterministicEmbedder
 from tests.fake_pdf import build_pdf
 
 DOCUMENTS_URL = "/api/v1/documents"

@@ -11,9 +11,11 @@ uv sync                                        # 安装依赖(含 dev)
 uv run pytest                                  # 全量测试(不读 .env、不触网)
 uv run ruff check .                            # lint
 uv run python -m uvicorn app.asgi:app --reload # 本地启动
+uv run python scripts/evaluate.py              # 黄金数据集检索指标(默认无密钥)
 ```
 
-真实上游连通性检查需密钥且会计费:`uv run python scripts/check_upstream.py`。
+真实上游连通性检查需密钥且会计费:`uv run python scripts/check_upstream.py`。真实上游评估用
+`uv run python scripts/evaluate.py --embedder upstream`(或 `--base-url`),报告中会注明 embedder。
 
 ## Agent skills
 

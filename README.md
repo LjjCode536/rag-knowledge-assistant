@@ -2,7 +2,7 @@
 
 生产级企业知识库服务的迭代式实践:后端 FastAPI + 自建领域层,框架层以 LangChain 成熟组件当零件库,模型服务统一走硅基流动(OpenAI 兼容)。开发遵循"评估驱动迭代",每个里程碑都产出可复现的前后指标对比。
 
-> 当前进度:**M3 向量化与最小问答链路**(批量向量化 / 内存向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
+> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座**(批量向量化 / 内存向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 黄金数据集 + 检索指标);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
 
 ## 快速开始
 
@@ -116,6 +116,22 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
 - 查询日志:`GET /api/v1/query-logs?limit=20`(最近优先)与 `GET /api/v1/query-logs/{query_id}`,含原始问题、命中 / 分数、是否进入证据、拒答原因与延迟。
 - 生成器当前为规则版基线(教材第 45 章 stub),T08(M5)换真实 LLM 时只替换 `AnswerGenerator` 实现。
 
+### 检索评估(T06)
+
+一条命令跑黄金数据集,产出 Recall@K / MRR / NDCG@K 与逐用例报告(教材第 44 章):
+
+```bash
+uv run python scripts/evaluate.py
+```
+
+- 数据集:`evaluation/golden_dataset.yaml`(v1,26 条;含 2 条拒答、1 条租户权限边界、2 条多切片用例);语料在 `evaluation/corpus/`。
+- 报告:`docs/iterations/0001-t06-retrieval-baseline.md`(人读)与同名 `.json`(CI / 后续对比);逐用例列出预期锚点、`文档#index`、top-k 命中与指标。
+- 默认在进程内启动应用并注入 1024 维确定性向量替身,**无密钥环境(CI)可跑**;报告会写明 `embedder=deterministic-lexical-1024d`。
+- 评估走 HTTP 主缝(上传 → 切片 → 向量化 → 检索),与真实用户路径一致;不用服务层内部捷径。
+- 连接真实服务:`uv run python scripts/evaluate.py --base-url http://127.0.0.1:8000 --min-score 0.35 --embedder-label BAAI/bge-m3`;外部模式必须显式给出服务端口径,且建议对专用 / 重启后的服务跑,避免重复入库污染指标。
+- 后续迭代用 `--iteration 0002 --slug t07-advanced-retrieval --run-name "T07 高级检索"` 生成新报告,不要覆盖基线。
+- 预期切片用「文档 + 文内唯一锚点」定位,评估时解析成真实 `chunk_id` 参与计算;报告中用稳定的 `文档#index` 定位,随机 uuid 不写进数据集与报告。
+
 ## 工程约定
 
 - **统一响应信封**:`code / message / data / details / trace_id / timestamp`,成功与失败同形。
@@ -145,12 +161,14 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
 ```bash
 uv run pytest                   # 全量测试,不触网
 uv run ruff check .             # lint
+uv run python scripts/evaluate.py         # 黄金数据集检索指标(默认无密钥)
 uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会计费)
 ```
 
 测试从预先约定的接缝进入:
 
 - **HTTP API 层**:健康检查、错误映射、trace_id 一致性、堆栈不外泄;文档解析链路(五种格式、失败状态、落盘配置);向量化 / 检索;在线问答(有据回答 + 引用、低分拒答、查询日志),上游以确定性假向量与可注入生成器替身。
+- **评估主缝**:黄金数据集经同一组 HTTP 端点入库并检索,断言逐用例可追溯、权限边界与拒答用例生效、报告可重复渲染;无密钥、不触网。
 - **统一 LLM 客户端的窄接缝**:假传输层注入超时 / 429 / 5xx,验证错误映射与用量解析。
 
 ## 目录结构
@@ -167,9 +185,12 @@ app/
   integrations/              # 实现层零件
     llm/                     #   统一 LLM 客户端与可注入传输层
     parsing/                 #   五种格式解析器与工厂(ADR-0002)
+evaluation/                  # 黄金数据集(v1 YAML)与评估语料
 tests/                       # 按接缝组织的测试
+scripts/evaluate.py          # 检索指标评估器(默认无密钥)
 scripts/check_upstream.py    # 需要密钥的连通性脚本
 docs/adr/                    # 架构决策记录
+docs/iterations/             # 指标基线 / 前后对比报告
 GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 ```
 
@@ -180,4 +201,6 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0002](docs/adr/0002-lightweight-parsing-libs.md):文档解析用轻量解析库,不引入 langchain-community loader
 - [ADR-0003](docs/adr/0003-failure-semantics-and-memory-vector-baseline.md):向量化失败不落 failed;内存向量库为 M3 基线
 - [ADR-0004](docs/adr/0004-grounded-answer-refusal-baseline.md):有据回答基线:规则生成器、低分拒答与内存查询日志
+- [ADR-0005](docs/adr/0005-evaluation-foundation.md):评估基座:锚点定位、API 主缝与无密钥检索指标
+- [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)

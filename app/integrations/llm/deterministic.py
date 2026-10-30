@@ -1,6 +1,7 @@
-"""确定性假向量替身:词面哈希进 64 维,同词面 → 相同向量,重叠多 → 更相似。
+"""确定性向量替身:词面哈希进 64 维,同词面 → 相同向量,重叠多 → 更相似。
 
-不触网、不计费,供 API 主接缝的所有向量化 / 检索测试注入 create_app。
+不触网、不计费,供评估器在无密钥环境(CI)复现检索指标;测试也从这里注入。
+它只是评估与测试的向量来源,生产检索仍由统一 LLM 客户端调用真实 embedding 模型。
 """
 
 from __future__ import annotations
@@ -12,6 +13,9 @@ from collections.abc import Sequence
 from app.integrations.llm.client import EmbedResult, TokenUsage
 
 DIM = 64
+# 评估基线用 1024 维:与生产 bge-m3 的向量维度对齐,同时把哈希碰撞压到可忽略;
+# 测试仍用 64 维的轻量默认值,只关心相对排序,不关心维度。
+EVALUATION_DIM = 1024
 _LATIN = re.compile(r"[A-Za-z0-9]+")
 _CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
 

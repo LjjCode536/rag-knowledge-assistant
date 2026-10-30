@@ -12,10 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.errors import UpstreamTimeoutError
+from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.services.chunking import ChunkingService
 from app.services.embedding import EmbeddingService
-from tests.fake_embedder import DeterministicEmbedder
 from tests.support import json_log_entries
 
 DOCUMENTS_URL = "/api/v1/documents"
