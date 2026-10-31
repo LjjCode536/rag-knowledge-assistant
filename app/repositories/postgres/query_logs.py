@@ -9,14 +9,9 @@ from __future__ import annotations
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from app.domain.qa import (
-    GenerationUsage,
-    GeneratorKind,
-    QueryHit,
-    QueryLog,
-    RefusalReason,
-)
+from app.domain.qa import QueryLog
 from app.repositories.postgres.base import PgDatabase, placeholder_sql
+from app.repositories.postgres.rows import query_log_from_row
 
 _COLUMNS = (
     "query_id, trace_id, question, answer, refused, refusal_reason, hits, filters, "
@@ -53,24 +48,8 @@ def _row_values(log: QueryLog) -> tuple:
 
 
 def _log_from_row(row: dict) -> QueryLog:
-    return QueryLog(
-        query_id=row["query_id"],
-        trace_id=row["trace_id"],
-        question=row["question"],
-        answer=row["answer"],
-        refused=row["refused"],
-        refusal_reason=RefusalReason(row["refusal_reason"]) if row["refusal_reason"] else None,
-        hits=[QueryHit.model_validate(hit) for hit in (row["hits"] or [])],
-        filters=dict(row["filters"] or {}),
-        top_k=row["top_k"],
-        min_score=row["min_score"],
-        latency_ms=row["latency_ms"],
-        generator=GeneratorKind(row["generator"]),
-        token_usage=GenerationUsage.model_validate(row["token_usage"] or {}),
-        rewritten_question=row["rewritten_question"],
-        expanded_questions=list(row["expanded_questions"] or []),
-        created_at=row["created_at"],
-    )
+    """行 → 查询日志:映射口径收口在 :mod:`app.repositories.postgres.rows`。"""
+    return query_log_from_row(row)
 
 
 class PgQueryLogRepository:

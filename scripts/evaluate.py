@@ -82,6 +82,38 @@ DEFAULT_GATE_THRESHOLDS: dict[str, float] = {
     "permission_pass_rate": 1.0,
 }
 
+# 门禁阈值 CLI 旗标 → 报告字段;与 DEFAULT_GATE_THRESHOLDS 同序
+GATE_FLAG_HELP: dict[str, str] = {
+    "recall": "Recall@K 下限(缺省用门禁默认值)",
+    "mrr": "MRR 下限",
+    "ndcg": "NDCG@K 下限",
+    "hit_rate": "HitRate@K 下限",
+    "faithfulness": "忠实度(规则法)下限",
+    "citation_accuracy": "引用准确率(规则法)下限",
+    "refusal_correctness": "拒答正确率(生成口径·双向)下限",
+    "permission_pass_rate": "权限边界通过率下限",
+}
+_GATE_FLAGS = tuple(GATE_FLAG_HELP)
+
+_TOGGLE_SPECS: dict[str, dict[str, str]] = {
+    # Settings 开关字段 → CLI 属性名与开关;快照、覆盖与组合复现命令共用,
+    # 避免清单在多处漂移。
+    "use_query_rewrite": {"attr": "rewrite", "flag": "--rewrite"},
+    "use_multi_query": {"attr": "multi_query", "flag": "--multi-query"},
+    "use_hybrid": {"attr": "hybrid", "flag": "--hybrid"},
+    "use_mmr": {"attr": "mmr", "flag": "--mmr"},
+    "use_rerank": {"attr": "rerank", "flag": "--rerank"},
+}
+_RETRIEVAL_PARAM_FIELDS = (
+    "retrieval_vector_weight",
+    "retrieval_keyword_weight",
+    "retrieval_candidate_k",
+    "retrieval_multi_query_count",
+    "retrieval_mmr_lambda",
+)
+# 需要真实上游的开关:无密钥时不得进评估(会变成静默降级数据)
+_UPSTREAM_KEYED_FIELDS = ("use_query_rewrite", "use_multi_query", "use_rerank")
+
 # 进程内评估固定同步入库口径(T14,ADR-0012):语料切片参数由数据集逐文档
 # 显式指定,异步管线的默认参数自动入库会打乱指标可比性。
 INGESTION_SYNC_UPDATES: dict[str, Any] = {"ingestion_async": False}
@@ -97,14 +129,6 @@ ABLATION_COMBOS: list[tuple[str, dict[str, bool]]] = [
     ("G 混合+重排+多查询扩展", {"use_hybrid": True, "use_rerank": True, "use_multi_query": True}),
     ("H 重排+查询改写(混合关)", {"use_rerank": True, "use_query_rewrite": True}),
 ]
-
-_TOGGLE_FIELDS = (
-    "use_query_rewrite",
-    "use_multi_query",
-    "use_hybrid",
-    "use_mmr",
-    "use_rerank",
-)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -243,39 +267,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "或应用配置);报告文件照旧落盘,留档供跨迭代追溯",
     )
     return parser.parse_args(argv)
-
-
-_TOGGLE_SPECS: dict[str, dict[str, str]] = {
-    # Settings 开关字段 → CLI 属性名与开关;快照、覆盖与组合复现命令共用,
-    # 避免清单在多处漂移。
-    "use_query_rewrite": {"attr": "rewrite", "flag": "--rewrite"},
-    "use_multi_query": {"attr": "multi_query", "flag": "--multi-query"},
-    "use_hybrid": {"attr": "hybrid", "flag": "--hybrid"},
-    "use_mmr": {"attr": "mmr", "flag": "--mmr"},
-    "use_rerank": {"attr": "rerank", "flag": "--rerank"},
-}
-_RETRIEVAL_PARAM_FIELDS = (
-    "retrieval_vector_weight",
-    "retrieval_keyword_weight",
-    "retrieval_candidate_k",
-    "retrieval_multi_query_count",
-    "retrieval_mmr_lambda",
-)
-# 需要真实上游的开关:无密钥时不得进评估(会变成静默降级数据)
-_UPSTREAM_KEYED_FIELDS = ("use_query_rewrite", "use_multi_query", "use_rerank")
-
-# 门禁阈值 CLI 旗标 → 报告字段;与 DEFAULT_GATE_THRESHOLDS 同序
-GATE_FLAG_HELP: dict[str, str] = {
-    "recall": "Recall@K 下限(缺省用门禁默认值)",
-    "mrr": "MRR 下限",
-    "ndcg": "NDCG@K 下限",
-    "hit_rate": "HitRate@K 下限",
-    "faithfulness": "忠实度(规则法)下限",
-    "citation_accuracy": "引用准确率(规则法)下限",
-    "refusal_correctness": "拒答正确率(生成口径·双向)下限",
-    "permission_pass_rate": "权限边界通过率下限",
-}
-_GATE_FLAGS = tuple(GATE_FLAG_HELP)
 
 
 def gate_thresholds(args: argparse.Namespace) -> dict[str, float]:
@@ -449,7 +440,7 @@ async def _run(
         }
         if not args.verbose:
             updates.update({"log_level": "WARNING", "log_format": "console"})
-        settings = base.model_copy(update=updates)
+        settings = base.with_overrides(**updates)
         embedder = None
         if args.embedder == "deterministic":
             embedder = DeterministicEmbedder(dim=EVALUATION_DIM)
@@ -491,7 +482,7 @@ async def _run_ablation(
             )
             continue
         combo_updates = {**toggle_zero_base, **overrides}
-        settings = base.model_copy(update=combo_updates)
+        settings = base.with_overrides(**combo_updates)
         combo_config = EvaluationConfig(
             k=args.k,
             top_k=args.top_k,
@@ -541,7 +532,7 @@ async def _run_combo(
         }
         updates.setdefault("log_level", "WARNING")
         updates.setdefault("log_format", "console")
-        settings = base.model_copy(update=updates)
+        settings = base.with_overrides(**updates)
         app = create_app(settings, embedder=DeterministicEmbedder(dim=EVALUATION_DIM))
         transport = httpx.ASGITransport(app=app)
         try:

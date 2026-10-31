@@ -3,6 +3,9 @@
 进程内 TTL + 容量上限;键覆盖"影响一次回答的一切过程口径"——归一化问题、
 top_k、拒答阈值、检索前过滤与生成器种类。知识库内容变化(向量化 / 退位 /
 删除)即整体清空,答档不落后于检索面。
+
+LRU + TTL 的淘汰机制由 cachetools 的 TTLCache 承担(不自己造轮子);
+键的构成口径、整体失效时机与命中统计是本项目的领域契约。
 """
 
 from __future__ import annotations
@@ -11,11 +14,11 @@ import hashlib
 import json
 import threading
 import time
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import structlog
+from cachetools import TTLCache
 
 from app.domain.qa import Citation, QueryLog
 
@@ -30,7 +33,6 @@ class CacheEntry:
 
     log: QueryLog
     citations: tuple[Citation, ...]
-    created_at: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +56,10 @@ class AnswerCache:
     ) -> None:
         self._ttl_seconds = ttl_seconds
         self._maxsize = maxsize
-        self._clock = clock
-        self._entries: OrderedDict[str, CacheEntry] = OrderedDict()
+        # TTLCache 负责 LRU 淘汰与 TTL 过期;timer 注入让时钟可离线控制
+        self._entries: TTLCache[str, CacheEntry] = TTLCache(
+            maxsize=maxsize, ttl=ttl_seconds, timer=clock
+        )
         self._lock = threading.Lock()
         self._hits = 0
         self._misses = 0
@@ -92,26 +96,18 @@ class AnswerCache:
     def get(self, key: str) -> CacheEntry | None:
         """命中返回条目(顺带刷新 LRU 位次),未命中 / 过期计入 miss。"""
         with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
+            try:
+                entry = self._entries[key]
+            except KeyError:
                 self._misses += 1
                 return None
-            if self._clock() - entry.created_at >= self._ttl_seconds:
-                del self._entries[key]
-                self._misses += 1
-                return None
-            self._entries.move_to_end(key)
             self._hits += 1
             return entry
 
     def put(self, key: str, *, log: QueryLog, citations: list[Citation]) -> None:
         """写入答档:超出容量时冻结最旧条目。"""
         with self._lock:
-            while len(self._entries) >= self._maxsize:
-                self._entries.popitem(last=False)
-            self._entries[key] = CacheEntry(
-                log=log, citations=tuple(citations), created_at=self._clock()
-            )
+            self._entries[key] = CacheEntry(log=log, citations=tuple(citations))
 
     def clear(self, *, reason: str) -> int:
         """知识库检索面变化时整体失效;返回被清掉的条目数便于日志留痕。"""

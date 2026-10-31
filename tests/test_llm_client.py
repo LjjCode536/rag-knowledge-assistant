@@ -269,7 +269,9 @@ async def test_rate_limit_is_retried_then_succeeds(settings):
 
     assert result.content == "按工龄计算。"
     assert len(transport.calls) == 2
-    assert sleep.delays == [0.5]
+    assert len(sleep.delays) == 1
+    # 退避 = 指数底数 x 上界内抖动(无 Retry-After 时的退避口径)
+    assert 0.5 <= sleep.delays[0] < 1.0
 
 
 async def test_exhausted_retries_raise_last_error(settings):
@@ -285,7 +287,7 @@ async def test_exhausted_retries_raise_last_error(settings):
         await client.chat(MESSAGES)
 
     assert len(transport.calls) == 2
-    assert sleep.delays == [0.5]
+    assert len(sleep.delays) == 1
 
 
 async def test_client_error_is_not_retried(settings):
@@ -414,4 +416,6 @@ async def test_429_without_retry_after_keeps_exponential_backoff(settings):
     await client.chat(MESSAGES)
 
     assert len(transport.calls) == 3
-    assert sleep.delays == [0.5, 1.0]
+    # 两次重试各按指数底数递增(0.5 → 1.0),抖动不跨量级
+    assert 0.5 <= sleep.delays[0] < 1.0
+    assert 1.0 <= sleep.delays[1] < 2.0

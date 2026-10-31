@@ -25,6 +25,7 @@ from app.domain.retrieval import (
     Reranker,
     ScoredChunk,
     VectorStore,
+    cosine_similarity,
 )
 from app.services.embedding import Embedder
 
@@ -69,15 +70,15 @@ def _minmax(scores: list[float]) -> list[float]:
 def _cosine_between(
     a: list[float] | None, b: list[float] | None
 ) -> float:
-    """M4 阶段多样性计算的余弦;向量缺失按 0 处理,不作惩罚也不作奖励。"""
-    if not a or not b or len(a) != len(b):
+    """M4 阶段多样性计算的余弦;向量缺失按 0 处理,不作惩罚也不作奖励。
+
+    与领域层 :func:`~app.domain.retrieval.cosine_similarity` 同源:
+    缺失向量按 0 分(而不是"跳过该候选"),保证 MMR 打分口径与
+    向量库排序口径一致。
+    """
+    if not a or not b:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+    return cosine_similarity(a, b)
 
 
 class RetrievalService:

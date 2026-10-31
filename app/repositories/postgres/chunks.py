@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 
 from app.domain.chunks import Chunk
 from app.repositories.postgres.base import PgDatabase, placeholder_sql
+from app.repositories.postgres.rows import chunk_from_row
 
 _COLUMNS = (
     "chunk_id, document_id, chunk_index, content, tenant, department, doc_type, "
@@ -41,20 +42,8 @@ def _row_values(chunk: Chunk) -> tuple:
 
 
 def _chunk_from_row(row: dict) -> Chunk:
-    return Chunk(
-        chunk_id=row["chunk_id"],
-        document_id=row["document_id"],
-        index=row["chunk_index"],
-        content=row["content"],
-        tenant=row["tenant"],
-        department=row["department"],
-        doc_type=row["doc_type"],
-        version=row["version"],
-        page_number=row["page_number"],
-        title=row["title"],
-        element_index_start=row["element_index_start"],
-        element_index_end=row["element_index_end"],
-    )
+    """行 → 切片:映射口径收口在 :mod:`app.repositories.postgres.rows`。"""
+    return chunk_from_row(row)
 
 
 class PgChunkRepository:

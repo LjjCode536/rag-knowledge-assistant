@@ -13,14 +13,9 @@ from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from app.domain.chunks import ChunkQualityWarning
-from app.domain.documents import (
-    DocumentFormat,
-    DocumentRecord,
-    DocumentStatus,
-    ParsedDocument,
-)
+from app.domain.documents import DocumentRecord
 from app.repositories.postgres.base import PgDatabase, placeholder_sql
+from app.repositories.postgres.rows import document_from_row
 
 _COLUMNS = (
     "id, file_name, file_type, size_bytes, status, error_message, is_latest, "
@@ -89,35 +84,8 @@ def _row_values(record: DocumentRecord) -> tuple:
 
 
 def _record_from_row(row: dict) -> DocumentRecord:
-    parsed = row["parsed"]
-    return DocumentRecord(
-        id=row["id"],
-        file_name=row["file_name"],
-        file_type=DocumentFormat(row["file_type"]),
-        size_bytes=row["size_bytes"],
-        status=DocumentStatus(row["status"]),
-        error_message=row["error_message"],
-        is_latest=row["is_latest"],
-        superseded_at=row["superseded_at"],
-        deleted_at=row["deleted_at"],
-        tenant=row["tenant"],
-        department=row["department"],
-        doc_type=row["doc_type"],
-        version=row["version"],
-        page_count=row["page_count"],
-        element_count=row["element_count"],
-        parsed=ParsedDocument.model_validate(parsed) if parsed is not None else None,
-        chunk_count=row["chunk_count"],
-        chunk_warnings=[
-            ChunkQualityWarning.model_validate(warning)
-            for warning in (row["chunk_warnings"] or [])
-        ],
-        created_at=row["created_at"],
-        parsed_at=row["parsed_at"],
-        chunked_at=row["chunked_at"],
-        indexed_at=row["indexed_at"],
-        failed_at=row["failed_at"],
-    )
+    """行 → 档案:映射口径收口在 :mod:`app.repositories.postgres.rows`。"""
+    return document_from_row(row)
 
 
 class PgDocumentRepository:

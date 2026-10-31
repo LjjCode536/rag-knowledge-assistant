@@ -2,13 +2,15 @@
 
 LLM 与 JSON 解析都只是召回质量的增强;任何失败(解析 / 上游)都回退
 原查询并留告警日志,检索链路绝不因规划能力挂掉。
+
+JSON 解析由 pydantic 承担(模型校验 + 别名),剥 ``` 围栏后直接校验;
+降级语义(失败即回退原查询)是本项目的领域契约,不由框架决定。
 """
 
 from __future__ import annotations
 
-import json
-
 import structlog
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import UpstreamError
 from app.domain.retrieval import QueryPlan
@@ -23,7 +25,19 @@ _PROMPT_TEMPLATE = """你负责企业知识库的检索查询规划。对下面�
 问题:{question}"""
 
 
+class _PlanPayload(BaseModel):
+    """规划产物:改写(可选)+ 变体数组。
+
+    ``variants`` 里的 null 项按"无此变体"跳过;``rewritten`` 缺字段或为
+    null 都视为"没改写"。类型不符则整个响应判为畸形。
+    """
+
+    rewritten: str | None = None
+    variants: list[str | None] = Field(default_factory=list)
+
+
 def _strip_code_fence(content: str) -> str:
+    """剥掉模型可能加的 ``` 围栏(含 ```json 语言标记)。"""
     text = content.strip()
     if text.startswith("```"):
         parts = text.split("```")
@@ -45,22 +59,14 @@ def _dedupe_variants(variants: list[str]) -> list[str]:
 
 
 def _parse_plan(content: str) -> tuple[str | None, list[str]] | None:
-    stripped = _strip_code_fence(content)
+    """解析规划 JSON;畸形响应返回 None(调用方回退原查询)。"""
     try:
-        parsed = json.loads(stripped)
-    except json.JSONDecodeError:
+        payload = _PlanPayload.model_validate_json(_strip_code_fence(content))
+    except ValidationError:
         return None
-    if not isinstance(parsed, dict):
-        return None
-    rewritten = parsed.get("rewritten")
-    variants = parsed.get("variants")
-    if rewritten is not None and not isinstance(rewritten, str):
-        return None
-    if not isinstance(variants, list) or any(
-        variant is not None and not isinstance(variant, str) for variant in variants
-    ):
-        return None
-    return (rewritten or None), [variant for variant in variants if variant is not None]
+    rewritten = payload.rewritten.strip() if payload.rewritten else None
+    variants = [variant for variant in payload.variants if variant is not None]
+    return (rewritten or None), variants
 
 
 class SiliconFlowQueryPlanner:

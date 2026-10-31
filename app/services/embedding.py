@@ -15,7 +15,13 @@ from typing import Protocol
 
 import structlog
 
-from app.core.errors import AppError, InvalidDocumentStateError, NotFoundError
+from app.core.errors import (
+    AppError,
+    InvalidDocumentStateError,
+    NotFoundError,
+    UpstreamBadResponseError,
+)
+from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.repositories import ChunkRepository, DocumentRepository
 from app.domain.retrieval import KeywordIndex, VectorStore
@@ -45,6 +51,17 @@ class EmbeddingRunResult:
     latency_ms: float
 
 
+@dataclass(slots=True)
+class EmbeddingBatchResult:
+    """分批向量化的汇总:向量、用量、累计延迟与批次数。"""
+
+    vectors: list[list[float]]
+    model: str
+    usage: TokenUsage
+    latency_ms: float
+    batches: int
+
+
 class EmbeddingService:
     """把一个已切片文档的全部切片批量向量化并写入向量库与关键词索引。"""
 
@@ -57,6 +74,7 @@ class EmbeddingService:
         embedder: Embedder,
         keyword_index: KeywordIndex | None = None,
         answer_cache: AnswerCache | None = None,
+        batch_size: int = 20,
     ) -> None:
         self._documents = document_repository
         self._chunks = chunk_repository
@@ -64,11 +82,13 @@ class EmbeddingService:
         self._embedder = embedder
         self._keyword_index = keyword_index
         self._answer_cache = answer_cache
+        # 单批切片数上限:整篇文档一次打给上游会超请求体 / 触发批量上限
+        self._batch_size = max(batch_size, 1)
 
     async def embed_document(
         self, document_id: str, *, model: str | None = None
     ) -> EmbeddingRunResult:
-        """向量化一次:整个文档的切片批量送向量模型,成功后文档落 indexed。"""
+        """向量化一次:整个文档的切片分批送向量模型,成功后文档落 indexed。"""
         record = self._documents.get(document_id)
         if record is None:
             raise NotFoundError("知识库文档不存在", details={"document_id": document_id})
@@ -85,9 +105,7 @@ class EmbeddingService:
 
         started = datetime.now(UTC)
         try:
-            result = await self._embedder.embed(
-                [chunk.content for chunk in chunks], model=model
-            )
+            result = await self._embed_in_batches(chunks, model=model)
         except AppError as exc:
             # 失败侧也留用量与延迟基线;文档停在 chunked,可直接重试(ADR-0003)
             logger.warning(
@@ -140,6 +158,50 @@ class EmbeddingService:
             chunk_count=len(chunks),
             usage=result.usage,
             latency_ms=result.latency_ms,
+        )
+
+    async def _embed_in_batches(
+        self, chunks: Sequence[Chunk], *, model: str | None
+    ) -> EmbeddingBatchResult:
+        """分批向量化:每批不超过批上限,批次向量按批序拼接与切片严格对齐。
+
+        上游失败(超时 / 限流 / 不可用)原样上抛:文档停在 chunked 可重试,
+        已有批次不回写 —— 向量库整组替换,半批向量不落库(ADR-0003)。
+        """
+        contents = [chunk.content for chunk in chunks]
+        vectors: list[list[float]] = []
+        usage = TokenUsage()
+        latency_ms = 0.0
+        model_name = model or ""
+        batches = 0
+        for start in range(0, len(contents), self._batch_size):
+            batch = contents[start : start + self._batch_size]
+            result = await self._embedder.embed(batch, model=model)
+            # 批次向量数必须与该批输入数对齐:错位即静默数据损坏
+            if len(result.vectors) != len(batch):
+                raise UpstreamBadResponseError(
+                    provider="siliconflow",
+                    operation="embed",
+                    details={
+                        "expected": len(batch),
+                        "received": len(result.vectors),
+                    },
+                )
+            vectors.extend(result.vectors)
+            usage = TokenUsage(
+                prompt_tokens=usage.prompt_tokens + result.usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens + result.usage.completion_tokens,
+                total_tokens=usage.total_tokens + result.usage.total_tokens,
+            )
+            latency_ms += result.latency_ms
+            model_name = result.model
+            batches += 1
+        return EmbeddingBatchResult(
+            vectors=vectors,
+            model=model_name,
+            usage=usage,
+            latency_ms=round(latency_ms, 2),
+            batches=batches,
         )
 
     @staticmethod

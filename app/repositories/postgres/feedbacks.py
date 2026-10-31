@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.repositories.postgres.base import PgDatabase, placeholder_sql
+from app.repositories.postgres.rows import feedback_from_row
 
 _COLUMNS = "feedback_id, query_id, trace_id, verdict, comment, created_at"
 _SET_COLUMNS = (
@@ -39,14 +40,8 @@ def _row_values(record: FeedbackRecord) -> tuple:
 
 
 def _record_from_row(row: dict) -> FeedbackRecord:
-    return FeedbackRecord(
-        feedback_id=row["feedback_id"],
-        query_id=row["query_id"],
-        trace_id=row["trace_id"],
-        verdict=FeedbackVerdict(row["verdict"]),
-        comment=row["comment"],
-        created_at=row["created_at"],
-    )
+    """行 → 回答反馈:映射口径收口在 :mod:`app.repositories.postgres.rows`。"""
+    return feedback_from_row(row)
 
 
 class PgFeedbackRepository:

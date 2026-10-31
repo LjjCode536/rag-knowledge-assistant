@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     # 跨请求限速:相邻两次上游发送之间的最小间隔(秒);0 = 不限速(T15)。
     # 429 退避遵循上游 Retry-After 头,无头部时按 llm_retry_backoff_seconds 指数退避
     llm_min_interval_seconds: float = Field(default=0.0, ge=0)
+    # 向量化单批切片数:整篇文档的切片一次打给上游会超请求体 / 触发批量上限,
+    # 按此上限分批调用;批次向量顺序与切片顺序严格对齐(错位即静默数据损坏)。
+    embedding_batch_size: int = Field(default=20, ge=1, le=500)
+    # 上游熔断:连续失败达到该次数即打开,冷却期内直接快速失败(不再付满
+    # 重试阶梯);冷却期满放一次探测请求,成功即恢复。0 = 熔断关闭。
+    llm_circuit_breaker_failures: int = Field(default=5, ge=0, le=50)
+    llm_circuit_breaker_reset_seconds: float = Field(default=30.0, ge=0)
 
     # ===== 文档入库 =====
     # 上传文件落盘目录(运行时产物,已被 gitignore;不落库)
@@ -168,6 +175,15 @@ class Settings(BaseSettings):
     @property
     def upstream_configured(self) -> bool:
         return bool(self.siliconflow_api_key)
+
+    def with_overrides(self, **overrides: Any) -> Settings:
+        """带覆盖的新配置:**重跑校验器**(model_copy 不重跑 model_validator)。
+
+        脚本层(评估器 / 基准)用它做参数覆盖:跨字段不变量(如
+        "pgvector 模式必须给 database_url")在覆盖后依然生效,不会因为
+        绕过了校验而带着非法配置跑完整轮评估。
+        """
+        return Settings.model_validate({**self.model_dump(), **overrides})
 
 
 @lru_cache

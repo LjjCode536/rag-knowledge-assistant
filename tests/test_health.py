@@ -15,6 +15,7 @@ def test_health_returns_unified_envelope(client):
         "version": "0.1.0",
         "environment": "test",
         "upstream_configured": False,
+        "upstream": {"circuit_breaker": "closed"},
         "qa_cache": {"enabled": True, "hits": 0, "misses": 0, "hit_rate": None},
     }
     assert body["details"] is None

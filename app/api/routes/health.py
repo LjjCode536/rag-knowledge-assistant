@@ -1,4 +1,4 @@
-"""健康检查端点,附在线问答缓存的命中率统计(T15)。"""
+"""健康检查端点,附在线问答缓存的命中率统计与上游熔断状态(T15)。"""
 
 from __future__ import annotations
 
@@ -22,11 +22,18 @@ class QaCacheStats(BaseModel):
     hit_rate: float | None = None
 
 
+class UpstreamStats(BaseModel):
+    """上游模型服务的可观测状态:熔断状态(closed / open / half-open)。"""
+
+    circuit_breaker: str
+
+
 class HealthData(BaseModel):
     status: str
     version: str
     environment: str
     upstream_configured: bool
+    upstream: UpstreamStats
     qa_cache: QaCacheStats
 
 
@@ -41,6 +48,13 @@ def _qa_cache_stats(request: Request) -> QaCacheStats:
     )
 
 
+def _upstream_stats(request: Request) -> UpstreamStats:
+    """熔断状态:上游硬挂时 /health 可见(closed / open / half-open)。"""
+    client = getattr(request.app.state, "llm_client", None)
+    state = getattr(client, "circuit_breaker_state", "closed")
+    return UpstreamStats(circuit_breaker=state)
+
+
 @router.get("/health", response_model=ApiEnvelope[HealthData], summary="健康检查")
 async def health(request: Request) -> ApiEnvelope[HealthData]:
     settings: Settings = request.app.state.settings
@@ -49,6 +63,7 @@ async def health(request: Request) -> ApiEnvelope[HealthData]:
         version=settings.app_version,
         environment=settings.environment,
         upstream_configured=settings.upstream_configured,
+        upstream=_upstream_stats(request),
         qa_cache=_qa_cache_stats(request),
     )
     return success_envelope(data, trace_id=trace_id_of(request))

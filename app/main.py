@@ -221,6 +221,7 @@ def create_app(
         embedder=effective_embedder,
         keyword_index=effective_keyword_index,
         answer_cache=answer_cache,
+        batch_size=settings.embedding_batch_size,
     )
     ingestion_pipeline = IngestionPipeline(
         ingestion_service=ingestion_service,

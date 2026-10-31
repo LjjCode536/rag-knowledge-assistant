@@ -37,19 +37,36 @@ _SEARCH_COLUMNS = (
     "e.element_index_start, e.element_index_end, e.embedding"
 )
 
-# 过滤字段 → chunks / embeddings 列名:契约字段名同名直取
+# 过滤字段 → chunks / embeddings 列名:契约字段名同名直取。
+# 字段集由领域模型推导 —— 给 ChunkFilter 加字段时不会静默漏掉 SQL 条件
+# (推导式会直接报出"无对应列"的程序错误,而不是运行时 KeyError)。
 _FILTER_COLUMNS = {
-    "tenant": "tenant",
-    "department": "department",
-    "doc_type": "doc_type",
-    "version": "version",
-    "document_id": "document_id",
+    field: field
+    for field in ChunkFilter.model_fields
+    if field in {
+        "tenant",
+        "department",
+        "doc_type",
+        "version",
+        "document_id",
+    }
 }
+# 领域模型里有、但 embeddings 表没有对应列的过滤字段:程序错误(装配期暴露)
+_UNMAPPED_FILTER_FIELDS = set(ChunkFilter.model_fields) - set(_FILTER_COLUMNS)
+if _UNMAPPED_FILTER_FIELDS:
+    raise RuntimeError(
+        "ChunkFilter 存在无对应列的过滤字段(embeddings 表缺列):"
+        + ", ".join(sorted(_UNMAPPED_FILTER_FIELDS))
+    )
 
 
 def _to_pg_vector(vector: Sequence[float]) -> str:
-    """float 序列 → pgvector 文本形态 ``[a,b,c]``(repr 不丢精度,cast 入列)。"""
-    return "[" + ",".join(repr(float(component)) for component in vector) + "]"
+    """float 序列 → pgvector 文本形态 ``[a,b,c]``(cast 入列)。
+
+    文本形态是 psycopg3 走 pgvector 的既定通道(``::vector`` cast);
+    浮点用 ``str`` 输出为最短往返表示,精度不丢。
+    """
+    return "[" + ",".join(str(float(component)) for component in vector) + "]"
 
 
 def _as_vector(stored: str | None) -> list[float] | None:
