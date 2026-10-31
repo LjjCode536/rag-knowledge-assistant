@@ -88,6 +88,34 @@ class DocumentStatus(StrEnum):
     DELETED = "deleted"
 
 
+class DocumentFilter(BaseModel):
+    """知识库文档清单的筛选与分页条件(T17)。
+
+    清单端点的查询口径收口在本模型:路由层把查询参数装配成它,仓储实现
+    只认它 —— 内存实现与 PostgreSQL 实现因此共享同一套口径(ADR-0001:
+    换实现只换实现)。
+
+    字段语义:
+
+    - ``tenant`` / ``department`` / ``doc_type``:精确匹配(缺省不限);
+    - ``status``:状态精确匹配(缺省不限);
+    - ``keyword``:命中文件名的子串,**大小写不敏感**;
+    - ``latest_only``:只列现行版本(``is_latest = true``),缺省为 ``True``
+      —— 退位的旧版本与已删除的文档不进默认清单;给 ``False`` 可查历史;
+    - ``limit`` / ``offset``:分页;``limit`` 缺省为 50,``offset`` 缺省为 0。
+      ``offset`` 超出总数时返回空清单(不报错),``total`` 仍是符合条件的总数。
+    """
+
+    tenant: str | None = None
+    status: DocumentStatus | None = None
+    keyword: str | None = None
+    department: str | None = None
+    doc_type: str | None = None
+    latest_only: bool = True
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
 class DocumentRecord(BaseModel):
     """知识库文档档案:状态机当前位置、失败原因、业务元数据与解析产物。"""
 

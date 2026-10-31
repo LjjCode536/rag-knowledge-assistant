@@ -42,6 +42,7 @@ from app.repositories.memory import (
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.answering import AnswerService
 from app.services.chunking import ChunkingService
+from app.services.document_catalog import DocumentCatalogService
 from app.services.embedding import Embedder, EmbeddingService
 from app.services.feedback import FeedbackService
 from app.services.generation import (
@@ -249,6 +250,10 @@ def create_app(
         repository=persistence.stats,
         settings=settings,
     )
+    # 知识库文档清单(T17):只读端点,让知识库能列举自己的文档(ADR-0015)
+    document_catalog_service = DocumentCatalogService(
+        repository=document_repository,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -281,6 +286,7 @@ def create_app(
     app.state.query_log_repository = query_log_repository
     app.state.feedback_service = feedback_service
     app.state.stats_service = stats_service
+    app.state.document_catalog_service = document_catalog_service
     app.state.vector_store = effective_vector_store
     app.state.lifecycle_service = lifecycle_service
     # pgvector 模式的共享连接池(memory / chroma 恒为 None),运维与测试清理用

@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from app.domain.chunks import Chunk
-from app.domain.documents import DocumentRecord, DocumentStatus
+from app.domain.documents import DocumentFilter, DocumentRecord, DocumentStatus
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
@@ -57,6 +57,22 @@ class InMemoryDocumentRepository:
         if not candidates:
             return None
         return max(candidates, key=lambda record: record.created_at)
+
+    def list(self, filters: DocumentFilter) -> list[DocumentRecord]:
+        """按筛选条件列出档案(T17);口径与 PostgreSQL 实现一致。"""
+        with self._lock:
+            records = list(self._records.values())
+        matched = _match_documents(records, filters)
+        # 分页前先排序:created_at 倒序,同刻按 id 兜底(次序确定,不看插入序)
+        matched.sort(key=lambda record: (record.created_at, record.id), reverse=True)
+        start = filters.offset
+        return matched[start : start + filters.limit]
+
+    def count(self, filters: DocumentFilter) -> int:
+        """符合筛选条件的档案总数(T17);与 list 同一套筛选条件。"""
+        with self._lock:
+            records = list(self._records.values())
+        return len(_match_documents(records, filters))
 
 
 class InMemoryChunkRepository:
@@ -283,6 +299,39 @@ class InMemoryStatsRepository:
             if _in_range(log.created_at, start=start, end=end)
         ]
         return sorted(selected, key=lambda log: log.created_at)
+
+
+def _match_documents(
+    records: list[DocumentRecord], filters: DocumentFilter
+) -> list[DocumentRecord]:
+    """按筛选条件过滤档案(T17)。
+
+    口径与 PostgreSQL 实现逐条对齐:
+
+    - ``latest_only`` 只留现行版本(``is_latest``);
+    - 租户 / 状态 / 部门 / 文档类型精确匹配;
+    - ``keyword`` 命中文件名子串,大小写不敏感;
+    - 多个条件按"与"组合。
+
+    过滤条件里的空串按"未提供"处理(与路由层的空值归一口径一致)。
+    """
+    keyword = filters.keyword.strip().lower() if filters.keyword else None
+    matched = []
+    for record in records:
+        if filters.latest_only and not record.is_latest:
+            continue
+        if filters.tenant is not None and record.tenant != filters.tenant:
+            continue
+        if filters.status is not None and record.status != filters.status:
+            continue
+        if filters.department is not None and record.department != filters.department:
+            continue
+        if filters.doc_type is not None and record.doc_type != filters.doc_type:
+            continue
+        if keyword is not None and keyword not in record.file_name.lower():
+            continue
+        matched.append(record)
+    return matched
 
 
 def _in_range(

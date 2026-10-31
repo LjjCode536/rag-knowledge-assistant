@@ -1,16 +1,27 @@
-"""知识库文档端点:上传登记任务句柄,解析 → 切片 → 入库的进度由状态机可查(M7 异步 ingestion)。"""
+"""知识库文档端点:上传登记任务句柄,解析 → 切片 → 入库的进度由状态机可查(M7 异步 ingestion)。
+
+端点一览:
+
+- ``POST   /api/v1/documents``        上传(登记,后台入库);
+- ``GET    /api/v1/documents``        **文档清单**(T17):按租户 / 状态 / 关键字 /
+  部门 / 文档类型筛选,分页返回并给出总数;
+- ``GET    /api/v1/documents/{id}``   查询文档状态(入库进度);
+- ``GET    /api/v1/documents/{id}/elements``  查询解析产物;
+- ``DELETE /api/v1/documents/{id}``   删除文档(切片与向量连带清理)。
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
+from app.services.document_catalog import DocumentCatalogService
 from app.services.ingestion import IngestionService
 from app.services.lifecycle import DocumentLifecycleService
 
@@ -81,9 +92,24 @@ class ElementView(BaseModel):
 
 
 class ElementsView(BaseModel):
+    """解析产物视图:文档 id、页数与元素。"""
+
     document_id: str
     page_count: int | None = None
     elements: list[ElementView]
+
+
+class DocumentListView(BaseModel):
+    """知识库文档清单:符合条件的总数 + 当前页条数。
+
+    ``total`` 是**符合筛选条件的总数**(不受分页影响),故前端能据此算出
+    总页数;``items`` 是当前页的文档档案。
+    """
+
+    total: int
+    limit: int
+    offset: int
+    items: list[DocumentView]
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -136,6 +162,60 @@ def upload_document(
         # 同步形态:与异步管线共用同一 parse,落点与失败语义一致(ADR-0012)
         record = service.parse(record.id)
     return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))
+
+
+@router.get(
+    "",
+    response_model=ApiEnvelope[DocumentListView],
+    summary="知识库文档清单(按创建时间倒序,支持筛选与分页)",
+)
+def list_documents(
+    request: Request,
+    tenant: Annotated[str | None, Query(description="按租户精确匹配")] = None,
+    status: Annotated[DocumentStatus | None, Query(description="按状态精确匹配")] = None,
+    keyword: Annotated[
+        str | None, Query(description="按文件名子串匹配(大小写不敏感)")
+    ] = None,
+    department: Annotated[str | None, Query(description="按部门精确匹配")] = None,
+    doc_type: Annotated[str | None, Query(description="按文档类型精确匹配")] = None,
+    include_history: Annotated[
+        bool, Query(description="含退位与已删除的旧版本(默认只列现行版本)")
+    ] = False,
+    limit: Annotated[int, Query(ge=1, le=200, description="每页条数")] = 50,
+    offset: Annotated[int, Query(ge=0, description="偏移量")] = 0,
+) -> ApiEnvelope[DocumentListView]:
+    """列出知识库文档,并给出符合筛选条件的总数。
+
+    默认**只列现行版本**:退位的旧版本与已删除的文档不进清单,给
+    ``include_history=true`` 可查历史(ADR-0015 的显式例外:知识库服务
+    必须能列举自己的文档)。
+
+    排序固定为创建时间倒序(最新在前);创建时间相同时按 id 兜底,次序
+    确定,不依赖存储实现的偶然顺序。
+
+    筛选条件按"与"组合:租户 / 状态 / 关键字 / 部门 / 文档类型;关键字
+    命中文件名子串且大小写不敏感。
+
+    分页越界(偏移超出总数)返回空清单与正确总数,不报错。
+    """
+    service: DocumentCatalogService = request.app.state.document_catalog_service
+    page = service.list_documents(
+        tenant=tenant,
+        status=status,
+        keyword=keyword,
+        department=department,
+        doc_type=doc_type,
+        latest_only=not include_history,
+        limit=limit,
+        offset=offset,
+    )
+    data = DocumentListView(
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+        items=[DocumentView.of(record) for record in page.items],
+    )
+    return success_envelope(data, trace_id=trace_id_of(request))
 
 
 @router.get("/{document_id}", response_model=ApiEnvelope[DocumentView], summary="查询文档状态")

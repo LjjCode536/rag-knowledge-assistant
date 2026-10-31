@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.domain.chunks import Chunk
-from app.domain.documents import DocumentRecord
+from app.domain.documents import DocumentFilter, DocumentRecord
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
@@ -37,6 +37,31 @@ class DocumentRepository(Protocol):
 
         T10 版本退位的登记依据:同一知识库文档的各版本共用这一标识;
         若出现多余候选(不变量被破坏),取 created_at 最新的一条防御性兜底。
+        """
+        ...
+
+    def list(self, filters: DocumentFilter) -> list[DocumentRecord]:
+        """按筛选条件列出知识库文档档案(T17)。
+
+        口径收口在 :class:`~app.domain.documents.DocumentFilter`:
+
+        - 默认只列现行版本(``is_latest = true``)—— 退位的旧版本与已删除的
+          文档不进默认清单,给 ``latest_only=False`` 可查历史;
+        - 默认按 ``created_at`` 倒序(最新在前);``created_at`` 相同时按
+          ``id`` 兜底排序,保证次序确定、不依赖存储实现的偶然顺序;
+        - 过滤条件按"与"组合;``keyword`` 命中文件名子串且大小写不敏感;
+        - 分页由 ``limit`` / ``offset`` 表达;``offset`` 超出总数时返回空列表
+          (不报错)。
+
+        ``count`` 走同一套筛选条件,故总数与清单口径必然一致。
+        """
+        ...
+
+    def count(self, filters: DocumentFilter) -> int:
+        """返回符合筛选条件的知识库文档总数(T17)。
+
+        与 :meth:`list` 同一套筛选条件(分页除外),故 ``total`` 与清单口径
+        必然一致。
         """
         ...
 
