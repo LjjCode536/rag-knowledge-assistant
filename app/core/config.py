@@ -103,6 +103,16 @@ class Settings(BaseSettings):
     # postgresql://rag:<密码>@<主机>:5432/rag
     database_url: str | None = None
 
+    # ===== 成本统计(T16)=====
+    # Token 单价(元 / 千 Token),用于把查询日志里的 Token 用量折算成
+    # 估算成本;默认值按 Qwen/Qwen3-8B 量级给出占位值,换模型只改配置。
+    # 这是**估算**口径,不是上游账单金额。
+    cost_prompt_price_per_1k: float = Field(default=0.002, ge=0)
+    cost_completion_price_per_1k: float = Field(default=0.006, ge=0)
+    cost_currency: str = "CNY"
+    # 统计分桶的默认粒度:hour / day
+    stats_default_bucket: Literal["hour", "day"] = "day"
+
     # ===== 高级检索(教材第 43 章 RetrievalConfig 的逐项开关模式)=====
     # 默认组合以 T07 消融数据为准(docs/iterations/0002-t07-advanced-retrieval):
     # 重排 + 查询改写 Recall@3 0.7917 → 1.0000 / MRR 0.7500 → 1.0000,且拒答

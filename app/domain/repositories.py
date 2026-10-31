@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 
 from app.domain.chunks import Chunk
@@ -10,6 +11,7 @@ from app.domain.documents import DocumentRecord
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
+from app.domain.stats import BucketAggregate, StatsBucketKind, TokenUsageSummary
 
 
 class DocumentRepository(Protocol):
@@ -124,4 +126,73 @@ class EvaluationRunRepository(Protocol):
 
     def count(self) -> int:
         """返回已留档的评估运行总数。"""
+        ...
+
+
+class StatsRepository(Protocol):
+    """运营统计与成本统计的聚合契约(T16)。
+
+    统计口径全部落在"已持久化的查询日志"上:问答量、拒答数、平均延迟与
+    Token 用量都从查询日志聚合而来,进程重启不丢(memory 模式随进程失忆,
+    与向量库口径一致;生产形态走 PostgreSQL 的 query_logs 表)。
+
+    时间区间口径统一为**闭区间起点 / 开区间终点**(:attr:`start` 含,
+    :attr:`end` 不含);``None`` 表示该侧不设界(至今全部)。
+    """
+
+    def count_documents(self, *, latest_only: bool = True) -> int:
+        """返回文档数;``latest_only`` 只数 ``is_latest`` 的现行版本。
+
+        现行版本 = 未退位且未删除的版本(``is_latest=true``);已入库
+        (``indexed``)与否不在本口径内 —— 那是
+        :meth:`count_indexed_documents` 的事。
+        """
+        ...
+
+    def count_indexed_documents(self, *, latest_only: bool = True) -> int:
+        """返回已向量化入库(indexed)的文档数。
+
+        ``latest_only`` 同样只数 ``is_latest`` 的现行版本。
+        """
+        ...
+
+    def count_chunks(self) -> int:
+        """返回切片总数(全部文档的切片合计)。"""
+        ...
+
+    def count_queries(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> int:
+        """返回统计区间内的问答量(查询日志条数)。"""
+        ...
+
+    def count_refusals(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> int:
+        """返回统计区间内的拒答量。"""
+        ...
+
+    def avg_latency_ms(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> float | None:
+        """返回统计区间内的端到端延迟均值;无问答时返回 None。"""
+        ...
+
+    def sum_token_usage(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> TokenUsageSummary:
+        """返回统计区间内的 Token 用量合计(prompt / completion / total)。"""
+        ...
+
+    def bucket_queries(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        bucket: StatsBucketKind = StatsBucketKind.DAY,
+    ) -> list[BucketAggregate]:
+        """按分桶粒度返回统计区间内的问答聚合(按桶起点升序)。
+
+        空区间返回空列表;没有问答的桶不出现(不补零桶)。
+        """
         ...

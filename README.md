@@ -2,7 +2,7 @@
 
 生产级企业知识库服务的迭代式实践:后端 FastAPI + 自建领域层,框架层以 LangChain 成熟组件当零件库,模型服务统一走硅基流动(OpenAI 兼容)。开发遵循"评估驱动迭代",每个里程碑都产出可复现的前后指标对比。
 
-> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座** + **T13 生产持久化**(批量向量化 / 三级向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 反馈闭环 / 黄金数据集 + 检索指标 / PostgreSQL + pgvector 六张生产表);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
+> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座** + **T13 生产持久化**(批量向量化 / 三级向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 反馈闭环 / 黄金数据集 + 检索指标 / PostgreSQL + pgvector 六张生产表)+ **T16 运营统计与成本统计**(/stats 一屏 + Token 用量与估算成本);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
 
 ## 快速开始
 
@@ -150,6 +150,38 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
   - 真实上游验证:`uv run python scripts/check_upstream.py`(需密钥、会计费)。
 - 上游调用限速保护(T15,ADR-0013):`LLM_MIN_INTERVAL_SECONDS` 设置相邻两次上游发送的最小间隔(默认 `0` 不限速;免费档配额紧张时调大),并发请求持锁串行取节拍;上游 429 的 `Retry-After` 头(秒数或 HTTP 日期)被直接采纳为重试等待,无头部时按 `LLM_RETRY_BACKOFF_SECONDS` 指数退避,`upstream_throttled` / `upstream_call_retry` 事件全程留痕。
 
+### 运营统计与成本统计(T16)
+
+`/stats` 一屏看清系统健康度,成本明细按时间段查询:
+
+```bash
+curl "http://127.0.0.1:8000/api/v1/stats?bucket=day"
+curl "http://127.0.0.1:8000/api/v1/stats/cost?start=2026-10-01T00:00:00Z&end=2026-11-01T00:00:00Z"
+```
+
+```json
+{
+  "code": "OK",
+  "data": {
+    "document_count": 12,
+    "indexed_document_count": 12,
+    "chunk_count": 268,
+    "qa": {"query_count": 143, "refused_count": 21, "refusal_rate": 0.146853,
+           "avg_latency_ms": 812.44,
+           "token_usage": {"prompt_tokens": 98012, "completion_tokens": 15430, "total_tokens": 113442}},
+    "cost": {"prompt_cost": 0.196024, "completion_cost": 0.09258, "total_cost": 0.288604, "currency": "CNY"},
+    "buckets": [{"bucket_start": "2026-10-30T00:00:00Z", "bucket_end": "2026-10-31T00:00:00Z", "qa": {}}],
+    "start": null, "end": null, "bucket_kind": "day"
+  }
+}
+```
+
+- **核心指标**:文档数 / 已索引文档数 / 切片数 / 问答量 / 拒答数 / 拒答率 / 平均延迟 / Token 用量;分桶时间序列按 `bucket=hour|day` 切分(UTC 自然边界,没有问答的桶不出现)。
+- **区间口径**:起点闭区间 / 终点开区间,`start` / `end` 可选(缺省即"至今全部");起点不早于终点返回 400 `BAD_REQUEST`。
+- **拒答率是线上实际拒答占比**(拒答数 / 问答量),问答量为 0 时为 `null`(无样本 ≠ 0);与评估器的"拒答正确率"是两种口径,不可互相替代。
+- **估算成本**:Token 用量按配置单价(元 / 千 Token)折算,`COST_PROMPT_PRICE_PER_1K` / `COST_COMPLETION_PRICE_PER_1K` 配置;换模型只改配置。这是**估算**而非上游账单,且当前只覆盖回答生成步的 Token(embedding / 规划 / 重排的用量只在结构化日志里),属全链路成本的下界;答档缓存命中时零上游消耗,日志记零 Token,不会重复计入。
+- **统计来自持久化数据**:pgvector 模式读生产表,重启容器不丢;memory 与 chroma 模式的统计随进程失忆(数据仓储仍是进程内存实现,chroma 只持久化**向量**,不持久化统计)。详见 [ADR-0014](docs/adr/0014-operational-stats-and-cost-estimation.md)。
+
 ### 检索评估(T06)
 
 一条命令跑黄金数据集,产出 Recall@K / MRR / NDCG@K 与逐用例报告(教材第 44 章):
@@ -178,7 +210,7 @@ uv run python scripts/evaluate.py
 | 错误码 | HTTP | 含义 |
 | --- | --- | --- |
 | `INTERNAL_ERROR` | 500 | 未预期的服务内部错误 |
-| `BAD_REQUEST` | 400 | 请求参数不合法 |
+| `BAD_REQUEST` | 400 | 请求参数不合法(如统计区间起点不早于终点) |
 | `VALIDATION_ERROR` | 422 | 请求校验失败 |
 | `NOT_FOUND` | 404 | 资源 / 接口不存在 |
 | `METHOD_NOT_ALLOWED` | 405 | 请求方法不允许 |
@@ -198,6 +230,7 @@ uv run ruff check .             # lint
 uv run python scripts/evaluate.py         # 黄金数据集检索指标(默认无密钥)
 uv run python scripts/benchmark_ingestion.py # 入库形态上传阻塞时长(同步 vs 异步)
 uv run python scripts/benchmark_qa_cache.py  # 同题二次询问延迟(缓存关 vs 开,T15)
+uv run python scripts/benchmark_stats.py   # 统计口径与成本折算核对(T16)
 uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会计费)
 ```
 
@@ -226,6 +259,7 @@ tests/                       # 按接缝组织的测试
 scripts/evaluate.py          # 检索指标评估器(默认无密钥)
 scripts/benchmark_ingestion.py # 入库形态上传阻塞时长基准(同步 vs 异步)
 scripts/benchmark_qa_cache.py  # 同题二次询问延迟基准(缓存关 vs 开,T15)
+scripts/benchmark_stats.py    # 运营统计与成本折算核对基准(T16)
 scripts/init_pg.py           # 幂等建表 / 迁移(pgvector 生产持久化)
 scripts/check_upstream.py    # 需要密钥的连通性脚本
 docker-compose.yml           # PostgreSQL 16 + pgvector 一键拉起
@@ -246,5 +280,6 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0011](docs/adr/0011-pgvector-production-persistence.md):生产持久化切 pgvector;六张生产表;无 Docker 回退口径
 - [ADR-0012](docs/adr/0012-async-ingestion-background-tasks.md):异步 ingestion:上传即时返回任务句柄;同步形态显式配置
 - [ADR-0013](docs/adr/0013-qa-answer-cache-and-upstream-throttle.md):问答答档缓存与上游限速:进程内快答档,检索面变化即整体失效
+- [ADR-0014](docs/adr/0014-operational-stats-and-cost-estimation.md):运营统计与成本统计:查询日志为唯一统计来源,成本按配置单价估算
 - [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)

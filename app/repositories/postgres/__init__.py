@@ -24,6 +24,7 @@ from app.repositories.postgres.documents import PgDocumentRepository
 from app.repositories.postgres.evaluation_runs import PgEvaluationRunRepository
 from app.repositories.postgres.feedbacks import PgFeedbackRepository
 from app.repositories.postgres.query_logs import PgQueryLogRepository
+from app.repositories.postgres.stats import PgStatsRepository
 
 __all__ = (
     "PgChunkRepository",
@@ -32,5 +33,6 @@ __all__ = (
     "PgEvaluationRunRepository",
     "PgFeedbackRepository",
     "PgQueryLogRepository",
+    "PgStatsRepository",
     "PgUnavailableError",
 )

@@ -184,7 +184,14 @@ class AnswerService:
         trace_id: str,
         started: float,
     ) -> AnswerRunResult:
-        """命中答档:复制成新的查询日志留痕,再测延迟,生成链路整段跳过。"""
+        """命中答档:复制成新的查询日志留痕,再测延迟,生成链路整段跳过。
+
+        命中时**本次请求不消耗任何上游 Token**(生成链路整段跳过),因此
+        复制出的日志把 ``token_usage`` 归零 —— 否则统计会把首发请求的
+        Token 用量重复计入每次命中,让"估算成本"高于实际支出。
+        答档的来源口径(原请求用了多少 Token)由缓存条目自身保留,不进
+        本次日志。
+        """
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
         log = entry.log.model_copy(
             deep=True,
@@ -194,6 +201,8 @@ class AnswerService:
                 # 留痕以本次请求为准:问题原文记调用方的,答档只贡献答案与证据
                 "question": question,
                 "latency_ms": latency_ms,
+                # 命中零上游消耗:Token 用量归零(否则统计重复计入首发请求的用量)
+                "token_usage": GenerationUsage(),
                 "created_at": datetime.now(UTC),
             },
         )

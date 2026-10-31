@@ -17,6 +17,7 @@ from app.api.routes.feedback import router as feedback_router
 from app.api.routes.health import router as health_router
 from app.api.routes.query_logs import router as query_logs_router
 from app.api.routes.search import router as search_router
+from app.api.routes.stats import router as stats_router
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
@@ -26,6 +27,7 @@ from app.domain.repositories import (
     DocumentRepository,
     FeedbackRepository,
     QueryLogRepository,
+    StatsRepository,
 )
 from app.domain.retrieval import KeywordIndex, QueryPlanner, VectorStore
 from app.integrations.llm.client import UnifiedLLMClient
@@ -35,6 +37,7 @@ from app.repositories.memory import (
     InMemoryDocumentRepository,
     InMemoryFeedbackRepository,
     InMemoryQueryLogRepository,
+    InMemoryStatsRepository,
 )
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.answering import AnswerService
@@ -53,6 +56,7 @@ from app.services.qa_cache import AnswerCache
 from app.services.query_planning import SiliconFlowQueryPlanner
 from app.services.reranking import Reranker, SiliconFlowReranker
 from app.services.retrieval import RetrievalService
+from app.services.stats import StatsService
 from app.services.storage import LocalDocumentStorage
 
 if TYPE_CHECKING:
@@ -85,6 +89,7 @@ class _Persistence:
     chunks: ChunkRepository
     query_logs: QueryLogRepository
     feedbacks: FeedbackRepository
+    stats: StatsRepository
     store: VectorStore
     # pgvector 模式下四仓储与向量库共用;memory / chroma 模式恒为 None
     pg: PgDatabase | None = None
@@ -96,6 +101,9 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
     memory / chroma 模式:四个数据仓储保持进程内存实现(测试 / 无 Docker 开发);
     pgvector 模式:四仓储 + 向量库全部切到 PostgreSQL,共用一个连接池,
     构造即跑幂等建库(六张表),库不可达在此显式失败,绝不静默回退。
+
+    统计仓储(T16)在四仓储之上做聚合,两种模式都随之切换:memory 形态随
+    进程失忆,pgvector 形态读真库,重启不丢。
     """
     if settings.vector_store == "pgvector":
         from app.repositories.postgres import (
@@ -104,24 +112,35 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
             PgDocumentRepository,
             PgFeedbackRepository,
             PgQueryLogRepository,
+            PgStatsRepository,
         )
         from app.repositories.vector_pgvector import PgVectorStore
 
         pg_database = PgDatabase(settings.database_url)
+        documents = PgDocumentRepository(pg_database)
+        chunks = PgChunkRepository(pg_database)
+        query_logs = PgQueryLogRepository(pg_database)
         return _Persistence(
-            documents=PgDocumentRepository(pg_database),
-            chunks=PgChunkRepository(pg_database),
-            query_logs=PgQueryLogRepository(pg_database),
+            documents=documents,
+            chunks=chunks,
+            query_logs=query_logs,
             feedbacks=PgFeedbackRepository(pg_database),
+            stats=PgStatsRepository(db=pg_database),
             store=vector_store if vector_store is not None else PgVectorStore(pg_database),
             pg=pg_database,
         )
     # memory / chroma:数据仓储零依赖进程内存实现(M2 / M4 基线)
+    documents = InMemoryDocumentRepository()
+    chunks = InMemoryChunkRepository()
+    query_logs = InMemoryQueryLogRepository()
     return _Persistence(
-        documents=InMemoryDocumentRepository(),
-        chunks=InMemoryChunkRepository(),
-        query_logs=InMemoryQueryLogRepository(),
+        documents=documents,
+        chunks=chunks,
+        query_logs=query_logs,
         feedbacks=InMemoryFeedbackRepository(),
+        stats=InMemoryStatsRepository(
+            documents=documents, chunks=chunks, query_logs=query_logs
+        ),
         store=vector_store if vector_store is not None else _build_vector_store(settings),
     )
 
@@ -224,6 +243,11 @@ def create_app(
         settings=settings,
         answer_cache=answer_cache,
     )
+    # 运营统计与成本统计(T16):统计仓储在四仓储之上做聚合,服务层折算成本
+    stats_service = StatsService(
+        repository=persistence.stats,
+        settings=settings,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -255,6 +279,7 @@ def create_app(
     app.state.answer_cache = answer_cache
     app.state.query_log_repository = query_log_repository
     app.state.feedback_service = feedback_service
+    app.state.stats_service = stats_service
     app.state.vector_store = effective_vector_store
     app.state.lifecycle_service = lifecycle_service
     # pgvector 模式的共享连接池(memory / chroma 恒为 None),运维与测试清理用
@@ -270,4 +295,5 @@ def create_app(
     app.include_router(chat_router)
     app.include_router(query_logs_router)
     app.include_router(feedback_router)
+    app.include_router(stats_router)
     return app

@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Sequence
+from datetime import datetime
 
 from app.domain.chunks import Chunk
-from app.domain.documents import DocumentRecord
+from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.domain.qa import QueryLog
+from app.domain.stats import (
+    BucketAggregate,
+    StatsBucketKind,
+    TokenUsageSummary,
+    as_utc,
+    bucket_start_of,
+)
 
 
 class InMemoryDocumentRepository:
@@ -165,3 +173,123 @@ class InMemoryEvaluationRunRepository:
     def count(self) -> int:
         with self._lock:
             return len(self._runs)
+
+
+class InMemoryStatsRepository:
+    """统计聚合的内存实现:在文档 / 切片 / 查询日志三个仓储之上做聚合(T16)。
+
+    与 PostgreSQL 实现同契约:区间口径为闭区间起点 / 开区间终点,
+    拒答率与成本折算不在本层(服务层做),本层只数原始量。
+    """
+
+    def __init__(
+        self,
+        *,
+        documents: InMemoryDocumentRepository,
+        chunks: InMemoryChunkRepository,
+        query_logs: InMemoryQueryLogRepository,
+    ) -> None:
+        self._documents = documents
+        self._chunks = chunks
+        self._query_logs = query_logs
+
+    def count_documents(self, *, latest_only: bool = True) -> int:
+        """文档数;``latest_only`` 只数现行版本(退位 / 删除的版本不计)。"""
+        with self._documents._lock:
+            records = list(self._documents._records.values())
+        if latest_only:
+            records = [record for record in records if record.is_latest]
+        return len(records)
+
+    def count_indexed_documents(self, *, latest_only: bool = True) -> int:
+        """已向量化入库(indexed)的文档数。"""
+        with self._documents._lock:
+            records = list(self._documents._records.values())
+        records = [
+            record for record in records if record.status == DocumentStatus.INDEXED
+        ]
+        if latest_only:
+            records = [record for record in records if record.is_latest]
+        return len(records)
+
+    def count_chunks(self) -> int:
+        """切片总数:全部文档的切片合计。"""
+        with self._chunks._lock:
+            return sum(len(chunks) for chunks in self._chunks._chunks.values())
+
+    def count_queries(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> int:
+        return len(self._logs_in_range(start=start, end=end))
+
+    def count_refusals(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> int:
+        return sum(1 for log in self._logs_in_range(start=start, end=end) if log.refused)
+
+    def avg_latency_ms(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> float | None:
+        logs = self._logs_in_range(start=start, end=end)
+        if not logs:
+            return None
+        return round(sum(log.latency_ms for log in logs) / len(logs), 2)
+
+    def sum_token_usage(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> TokenUsageSummary:
+        logs = self._logs_in_range(start=start, end=end)
+        return TokenUsageSummary().accumulate(log.token_usage for log in logs)
+
+    def bucket_queries(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        bucket: StatsBucketKind = StatsBucketKind.DAY,
+    ) -> list[BucketAggregate]:
+        """按自然小时 / 自然日切桶;没有问答的桶不出现(不补零桶)。"""
+        logs = self._logs_in_range(start=start, end=end)
+        buckets: dict[datetime, list[QueryLog]] = {}
+        for log in logs:
+            buckets.setdefault(bucket_start_of(log.created_at, bucket), []).append(log)
+        aggregates = []
+        for bucket_start in sorted(buckets):
+            entries = buckets[bucket_start]
+            total_latency = sum(log.latency_ms for log in entries)
+            aggregates.append(
+                BucketAggregate(
+                    bucket_start=bucket_start,
+                    bucket_end=bucket_start + bucket.delta,
+                    query_count=len(entries),
+                    refused_count=sum(1 for log in entries if log.refused),
+                    avg_latency_ms=round(total_latency / len(entries), 2),
+                    token_usage=TokenUsageSummary().accumulate(
+                        log.token_usage for log in entries
+                    ),
+                )
+            )
+        return aggregates
+
+    def _logs_in_range(
+        self, *, start: datetime | None = None, end: datetime | None = None
+    ) -> list[QueryLog]:
+        """区间内的查询日志(闭区间起点 / 开区间终点),按时间升序。"""
+        with self._query_logs._lock:
+            logs = list(self._query_logs._logs.values())
+        selected = [
+            log
+            for log in logs
+            if _in_range(log.created_at, start=start, end=end)
+        ]
+        return sorted(selected, key=lambda log: log.created_at)
+
+
+def _in_range(
+    moment: datetime, *, start: datetime | None, end: datetime | None
+) -> bool:
+    """闭区间起点 / 开区间终点的时间归属判定。"""
+    normalized = as_utc(moment)
+    if start is not None and normalized < start:
+        return False
+    return not (end is not None and normalized >= end)

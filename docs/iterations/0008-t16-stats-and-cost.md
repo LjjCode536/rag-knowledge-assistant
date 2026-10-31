@@ -1,0 +1,171 @@
+# 迭代 0008:T16 运营统计与成本统计(M7·收口)
+
+**工单**:issue #17(T16,父 #1) · **ADR**:ADR-0014 · **基准脚本**:`uv run python scripts/benchmark_stats.py`
+
+## 背景与可控指标
+
+M7 到收口时,系统已有逐条查询日志(`GET /api/v1/query-logs`),但没有**聚合
+面**:问答量、拒答率、平均延迟、Token 合计全靠调用方把日志拉回去自己数;
+成本更是无处可查(教材第 45 章"生产环境还缺哪些能力"清单里的第 12 项
+**成本统计**与第 13 项 **LLM 调用日志**)。`/health` 只报应用存活,不报业务
+健康度。
+
+本迭代的可控指标:
+
+1. **一屏口径**:核心指标(文档数 / 问答量 / 拒答率 / 平均延迟)是否一次取全,
+   区间与分桶是否可控;
+2. **成本折算**:Token 用量 × 配置单价 = 估算成本,公式是否与手算一致;
+3. **统计来源**:是否来自持久化数据(重启不丢)。
+
+## 做法
+
+- **统计的唯一来源是已持久化的查询日志**:`StatsRepository` 契约
+  (`app/domain/repositories.py`)挂在 documents / chunks / query_logs 三张生产
+  表之上;内存实现(`InMemoryStatsRepository`)与 PostgreSQL 实现
+  (`PgStatsRepository`)同契约。pgvector 模式读真库,重启容器不丢;memory 模式
+  随进程失忆(与向量库口径一致,ADR-0011)。
+- **聚合下推 SQL**:`count` / `avg` / `sum` / `date_trunc` 全在数据库侧完成,
+  不在 Python 侧拉全量日志再算 —— 查询日志是唯一统计来源,量级随线上流量
+  增长。
+- **区间口径统一为闭区间起点 / 开区间终点**(`created_at >= start AND
+  created_at < end`),`None` 即"至今全部";相邻区间可无缝拼接、不重不漏。
+- **分桶按 UTC 自然小时 / 自然日**(`date_trunc`),没有问答的桶不出现(不补
+  零桶);桶边界是自然边界而非滑动窗口,跨机器口径一致。
+- **没有样本时比率是 `None` 不是 0**:问答量为 0 时拒答率与平均延迟返回
+  `null` —— 0 拒答率与"没有问答"是两件事。
+- **成本是按配置单价的估算**:单价(元 / 千 Token)是配置项
+  (`COST_PROMPT_PRICE_PER_1K` / `COST_COMPLETION_PRICE_PER_1K`),prompt /
+  completion 分段计价;换模型只改配置。
+- **SQL 拼装收口在纯函数**(`build_range_clause` / `build_bucket_query` /
+  `build_sum_query`):SQL 文本与占位 / 参数顺序可离线断言 —— 真库不可达的
+  环境仍能守住"区间闭开边界"与"占位错位"这两个最易错的点。
+
+## 峰值指标(benchmark_stats,进程内真实 uvicorn)
+
+### 运行环境
+
+- 进程内真实 uvicorn(临时端口),端到端延迟自含 HTTP 与事件循环成本;
+- 1 份员工手册(20 章 + 休假制度条款)入库,21 切片;确定性向量替身;
+- 问答流量:40 次可回答 + 20 次不可回答(拒答)= 60 次问答;
+- 生成器:固定 Token 用量的替身(每次 1200 prompt / 300 completion),用于离线
+  核对折算公式;单价 0.002 / 0.006 元每千 Token。
+
+### 一屏核心指标(`GET /api/v1/stats`)
+
+| 指标 | 值 |
+| --- | ---: |
+| 文档数 | 1 |
+| 已索引文档数 | 1 |
+| 切片数 | 21 |
+| 问答量 | 60 |
+| 拒答数 | 20 |
+| 拒答率 | 0.3333 |
+| 平均延迟 | 0.06 ms |
+| 分桶数 | 1 |
+
+拒答率 20 / 60 = 0.3333,与手算一致;拒答问答**不产生 Token 消耗**(资料不足
+直接拒答,不触生成),答档缓存命中同样零消耗(日志记零 Token)—— 这两条是
+成本口径不虚高的关键。
+
+### 成本折算核对(`GET /api/v1/stats/cost`)
+
+| 项 | 端点返回 | 手算(独立公式) | 一致 |
+| --- | ---: | ---: | :---: |
+| prompt 成本 | 0.096000 | 0.096000 | ✓ |
+| completion 成本 | 0.072000 | 0.072000 | ✓ |
+| 总成本 | 0.168000 | 0.168000 | ✓ |
+
+手算列独立于被测代码:40 次可回答 × 1200 prompt × 0.002 / 千 = 0.096,
+40 × 300 completion × 0.006 / 千 = 0.072,合计 0.168 —— 与端点逐位一致。
+
+### 答档缓存命中不计成本(ADR-0013 / ADR-0014)
+
+| 形态 | 问答量 | 计费生成次数 | 估算总成本 |
+| --- | ---: | ---: | ---: |
+| 缓存关闭(上表口径) | 60 | 40 | 0.168000 |
+| 缓存开启(同题问 40 次) | 60 | 1 | 0.004200 |
+
+缓存命中时生成链路整段跳过(零上游消耗),查询日志记零 Token —— 成本只算
+真正发生的生成。同样的 60 次问答,缓存把成本从 0.168 降到 0.0042(40x),
+且**统计口径与实际支出一致**(不把首发请求的 Token 重复计入 39 次命中)。
+
+### 读统计的代价(端点延迟)
+
+| 形态 | 平均 | 中位 | 最快 | 最慢 |
+| --- | ---: | ---: | ---: | ---: |
+| 聚合统计 `/stats` | 3.87 ms | 3.11 ms | 2.27 ms | 15.23 ms |
+| 逐条日志 `/query-logs`(100 条) | 6.88 ms | — | — | — |
+| 成本明细 `/stats/cost` | 2.32 ms | — | — | — |
+
+- **形态 A(before)**:只能逐条翻查询日志,拿到的是**单条**记录;聚合口径
+  (拒答率 / 平均延迟 / Token 合计)需调用方自行在应用侧汇总,且分页上限
+  意味着完整统计根本取不全。
+- **形态 B(after)**:一次请求给全核心指标 + 成本 + 分桶序列,2–4 ms 级,
+  比"翻 100 条日志"(6 ms)更快,且拿到的是**全量**而非样本。
+
+## 验收(issue #17 逐条)
+
+- [x] `/stats` 返回文档数 / 问答量 / 拒答率 / 平均延迟等核心指标 ——
+      `tests/test_stats_api.py::test_stats_reports_query_volume_and_refusal_rate`、
+      `test_stats_on_empty_system_reports_zero_scale`
+- [x] Token 用量与估算成本可按时间段查询 ——
+      `tests/test_stats_api.py::test_cost_endpoint_reports_token_usage_and_estimate`、
+      `test_cost_endpoint_prices_tokens_with_configured_rates`、
+      `tests/test_stats_service.py::test_cost_estimate_applies_configured_prices`
+- [x] 统计来自持久化数据,重启不丢 ——
+      `tests/test_stats_pg.py::test_pg_stats_survives_application_restart`
+      (真库可达时验证;本机 Postgres 后端进程在 Windows 上无法启动,该用例
+      与既有 PG 用例同样跳过)
+- [x] API 主缝测试全绿 —— 全量 `uv run pytest` 291 passed / 33 skipped
+      (基线 267 passed / 26 skipped,新增 24 passed + 7 skipped)
+
+## 评审修复(两轴评审后)
+
+评审(Standards / Spec 双轴)发现并已修:
+
+1. **区间校验的时区混用 → 500**:API 层用裸 `start >= end` 比较,带时区与
+   不带时区的时间混用时抛 `TypeError` 落成 500。校验收口到服务层(统一抛
+   `BadRequestError`),API 层不再重复实现;新增
+   `test_stats_accepts_mixed_naive_and_aware_time_range` 两处守住。
+2. **答档缓存命中重复计入 Token**:命中时复制出的查询日志沿用首发请求的
+   `token_usage`,统计会把同一笔 Token 计入每次命中,让估算成本**高于**
+   实际支出。命中时记零 Token;新增
+   `test_cost_excludes_cached_answers_from_token_usage` 守住(基准表里的
+   40x 成本差即此修复的可观测后果)。
+3. **`/cost` 收 `bucket` 参数但不用**:成本是区间汇总值,同一个参数在两个
+   端点含义不同会误导调用方 —— 参数移除。
+4. **PG 统计仓储的三个死构造参数**:全部聚合走 SQL 下推,不接其他仓储,
+   参数与字段一并移除。
+5. **分桶粒度映射两份**:小时 / 日 ↔ 桶长的对应关系收口到
+   `StatsBucketKind` 自身(`trunc_unit` / `delta`),内存与 PG 实现共用。
+6. **视图层逐字段手抄**:改用 `of()` 惯用法(与 `query_logs.py` 一致),
+   领域模型加字段不会被静默漏掉。
+7. **死配置 `stats_default_bucket`**:接进服务层默认值,`/stats` 的
+   `bucket` 缺省取配置。
+
+## 口径(ADR-0014)
+
+- **拒答率**是线上实际拒答占比(查询日志里 `refused=true` 的比例);评估器的
+  **拒答正确率**是黄金数据集上的判定准确率 —— 后者是质量指标,前者是运行
+  指标,两者不可互相替代(T09 口径)。
+- **估算成本不是上游账单金额**,是 Token 用量按配置单价的折算;换模型改配置。
+- **区间**:起点闭 / 终点开;起点不早于终点返回 400 `BAD_REQUEST`。
+- **没有样本**:拒答率与平均延迟为 `null`,不伪造 0。
+- **分桶**:UTC 自然小时 / 自然日,没有问答的桶不出现。
+
+## 已知边界与后续
+
+- **成本只覆盖生成步**:查询日志记的是 `GenerationUsage`(回答生成消耗的
+  Token),不含 embedding / 检索规划 / 重排的上游消耗 —— 那几段的用量目前
+  只在结构化日志里。因此当前成本是**全链路成本的下界**;把上游各段用量
+  一并落进查询日志(`token_usage` jsonb 已能承载扩展结构)是自然扩展点。
+- **单机多实例天然聚合**:统计读的是同一个库,多实例共享同一份数据 —— 这是
+  "统计来自持久化数据"相对"进程内计数"的结构性优势。
+- **真库验证待补**:本机 Postgres 后端进程无法启动(Windows 环境下
+  `0xC0000142` DLL 初始化失败,与本迭代无关),`tests/test_stats_pg.py` 与
+  既有 PG 用例一并跳过;SQL 拼装层已有离线用例(`tests/test_stats_pg_sql.py`)
+  守住区间口径与占位顺序。**在有 Docker 的环境跑一次
+  `docker compose up -d db && uv run pytest tests/test_stats_pg.py` 即可补齐
+  真库断言**。
+- **管理后台与安全审计**仍在"生产环境还缺的能力"清单里(第 15 / 16 项):
+  本迭代只交付统计端点与口径,不做看板界面与审计日志。

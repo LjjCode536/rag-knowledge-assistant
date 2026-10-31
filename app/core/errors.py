@@ -67,6 +67,14 @@ class NotFoundError(AppError):
     default_message = "资源不存在"
 
 
+class BadRequestError(AppError):
+    """请求参数语义不合法(如统计区间起点晚于终点),返回 400。"""
+
+    code = ErrorCode.BAD_REQUEST
+    status_code = 400
+    default_message = "请求参数不合法"
+
+
 class UpstreamError(AppError):
     """上游(模型服务)调用失败的基类。"""
 
