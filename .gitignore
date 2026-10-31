@@ -31,6 +31,17 @@ dist/
 .coverage
 htmlcov/
 
+# ===== 前端(独立工程,不入 Python 依赖体系)=====
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+frontend/stats.html
+frontend/*.tsbuildinfo
+*.local
+
 # ===== IDE / 系统 =====
 .idea/
 .vscode/

@@ -1,0 +1,101 @@
+/**
+ * 全局基础样式:仅布局骨架与 Element Plus 之外的少量补充。
+ *
+ * 视觉语言以 Element Plus 为准(ADR-0015:不用第二套样式体系),此处只做
+ * 骨架尺寸与窄屏折叠的落点。
+ */
+:root {
+  --app-sidebar-width: 220px;
+  --app-header-height: 56px;
+  --app-content-padding: 16px;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial,
+    sans-serif;
+  background-color: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+}
+
+.app-layout {
+  height: 100%;
+}
+
+.app-sidebar {
+  border-right: 1px solid var(--el-border-color-light);
+  background-color: var(--el-bg-color);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.app-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--app-header-height);
+  padding: 0 16px;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.app-sidebar__tenant {
+  padding: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-header {
+  height: var(--app-header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--app-content-padding);
+  border-bottom: 1px solid var(--el-border-color-light);
+  background-color: var(--el-bg-color);
+  flex: 0 0 auto;
+}
+
+.app-header__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--app-content-padding);
+}
+
+.page-section {
+  margin-bottom: 16px;
+}
+
+.page-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.trace-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}

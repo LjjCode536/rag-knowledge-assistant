@@ -1,8 +1,8 @@
 # 企业 AI 知识库(生产级 RAG)
 
-生产级企业知识库服务的迭代式实践:后端 FastAPI + 自建领域层,框架层以 LangChain 成熟组件当零件库,模型服务统一走硅基流动(OpenAI 兼容)。开发遵循"评估驱动迭代",每个里程碑都产出可复现的前后指标对比。
+生产级企业知识库服务的迭代式实践:后端 FastAPI + 自建领域层,框架层以 LangChain 成熟组件当零件库,模型服务统一走硅基流动(OpenAI 兼容)。前端是独立的 Vue 3 SPA,置于 `frontend/` 子目录。开发遵循"评估驱动迭代",每个里程碑都产出可复现的前后指标对比。
 
-> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座** + **T13 生产持久化**(批量向量化 / 三级向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 反馈闭环 / 黄金数据集 + 检索指标 / PostgreSQL + pgvector 六张生产表)+ **T16 运营统计与成本统计**(/stats 一屏 + Token 用量与估算成本);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
+> 当前进度:**M3 向量化与最小问答链路** + **T06 评估基座** + **T13 生产持久化**(批量向量化 / 三级向量库 / 检索前过滤 / 有据回答 + 引用 / 低分拒答 / 查询日志 / 反馈闭环 / 黄金数据集 + 检索指标 / PostgreSQL + pgvector 六张生产表)+ **T16 运营统计与成本统计**(/stats 一屏 + Token 用量与估算成本)+ **T17 知识库文档列表端点** + **T18 前端工作台骨架**(Vue 3 SPA + API 客户端层);M0–M2 已就位。路线图见 [issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)。
 
 ## 快速开始
 
@@ -32,6 +32,31 @@ curl -H "X-Request-ID: demo-trace-0001" http://127.0.0.1:8000/health
 
 响应头 `X-Request-ID`、响应体 `trace_id` 与全部日志共享同一个值;调用方传入则透传,缺失或格式非法时服务生成。
 
+### 前端工作台(T18)
+
+独立的 Vue 3 SPA,置于 `frontend/` 子目录,**不进入 Python 依赖体系**(`uv` / `pyproject.toml` 不感知前端):
+
+```bash
+cd frontend
+pnpm install
+pnpm dev            # http://localhost:5173
+```
+
+- **后端零改动、零 CORS**:开发期靠 Vite dev server 的 proxy 把 `/api` 与
+  `/health` 转发到后端 `127.0.0.1:8000`,浏览器视角下前端与接口同源;生产期用
+  同一域名反代同时服务静态产物与接口,后端仍然不需要 CORS。前端**不挂进
+  FastAPI**(不 `StaticFiles`、不 `Jinja2Templates`)。
+- **六个页面**:问答(默认首页)/ 知识库文档 / 检索 / 运营统计 / 查询日志 / 反馈;
+  左侧边栏导航,窄屏侧边栏折叠为抽屉。
+- **请求收口一处**:所有 HTTP 调用经 `api/` 层唯一的底层请求函数(发请求 →
+  拆响应信封 → 按错误码抛类型化错误 → 带上 `trace_id`)。**页面组件只调
+  `api/` 层的函数,不得直接发请求。**
+- **如实呈现后端的能力边界**:后端当前**没有用户、没有会话、没有鉴权**,界面上的
+  租户切换**不是**权限控制,只是一个筛选维度;`/chat` 无流式,第一版用"请求
+  完成后打字机动画"的假流式。
+- 详见 [ADR-0015](docs/adr/0015-frontend-stack-and-boundary.md) 与
+  [`frontend/README.md`](frontend/README.md)。
+
 ### 文档入库(M1 同步 → M7 异步)
 
 上传立即返回任务句柄(文档档案),解析 / 切片 / 向量化默认转后台任务(M7·上,ADR-0012);进度由状态机可查:
@@ -56,6 +81,10 @@ curl -F "file=@退费政策.pdf" http://127.0.0.1:8000/api/v1/documents
   (`uploaded → parsing → parsed → chunking → chunked → embedding → indexed`,
   任一步失败进入 `failed` 并带 `error_message`);到 `indexed` 即可检索与问答。
 - `GET /api/v1/documents/{id}/elements`:解析产物,元素带类型与页码 / 行号 / 标题层级等定位元数据。
+- `GET /api/v1/documents`:知识库文档清单(T17),按创建时间倒序,支持 `tenant` /
+  `status` / `keyword` / `department` / `doc_type` 筛选与 `limit` / `offset` 分页,
+  响应给 `total`。**默认只列现行版本**(退位的旧版本与已删除的文档不进清单),
+  `include_history=true` 可查历史。
 - 解析 / 切片失败不静默吞错:档案照常建立,`status=failed`、原因可查,重传同标识文件即重试;上游向量化失败停在 `chunked`,经向量化端点重试;不认识的扩展名返回 `415 UNSUPPORTED_FORMAT`,不生成档案。
 - 切分参数排查 / 固定口径:设 `INGESTION_ASYNC=false` 回到请求内同步形态(与异步共用同一服务,行为一致)。
 - 落盘位置由 `UPLOAD_DIR` 配置(默认 `data/uploaded_docs`),运行时产物不入库。
@@ -234,11 +263,23 @@ uv run python scripts/benchmark_stats.py   # 统计口径与成本折算核对(T
 uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会计费)
 ```
 
+前端是**独立的工程**,有与后端对等的质量门槛(不塞进 `uv run pytest`):
+
+```bash
+cd frontend
+pnpm typecheck    # vue-tsc,零错误
+pnpm lint         # eslint,零 error
+pnpm test         # vitest:API 客户端层 + 组件行为
+pnpm build        # 生产构建
+```
+
 测试从预先约定的接缝进入:
 
-- **HTTP API 层**:健康检查、错误映射、trace_id 一致性、堆栈不外泄;文档解析链路(五种格式、失败状态、落盘配置);异步入库管线(上传立即返回、状态机进度、失败重试);向量化 / 检索;在线问答(有据回答 + 引用、低分拒答、查询日志),上游以确定性假向量与可注入生成器替身。
+- **HTTP API 层**:健康检查、错误映射、trace_id 一致性、堆栈不外泄;文档解析链路(五种格式、失败状态、落盘配置);文档清单(默认只列现行版本、筛选维度、分页与总数、排序口径);异步入库管线(上传立即返回、状态机进度、失败重试);向量化 / 检索;在线问答(有据回答 + 引用、低分拒答、查询日志),上游以确定性假向量与可注入生成器替身。
 - **评估主缝**:黄金数据集经同一组 HTTP 端点入库并检索,断言逐用例可追溯、权限边界与拒答用例生效、报告可重复渲染;无密钥、不触网。
 - **统一 LLM 客户端的窄接缝**:假传输层注入超时 / 429 / 5xx,验证错误映射与用量解析。
+- **前端 API 客户端层**:断言信封拆解取到数据、错误码映射到带 trace_id 的错误、CSV 端点返回原始文本、请求参数与后端契约一致。
+- **前端组件行为**:断言用户可见的行为(有据回答渲染引用、拒答时不渲染引用列表、反馈状态回显、状态标签呈现、错误详情展示可复制的 trace_id),不测组件内部状态变量。
 
 ## 目录结构
 
@@ -246,14 +287,19 @@ uv run python scripts/check_upstream.py   # 真实上游连通性(需密钥,会�
 app/
   asgi.py                    # ASGI 入口(只装配,供 uvicorn)
   main.py                    # 应用工厂 create_app
-  api/routes/                # HTTP 路由(健康检查 / 文档)
+  api/routes/                # HTTP 路由(健康检查 / 文档 / 问答 / 统计 / 反馈)
   core/                      # 配置 / 异常 / 信封 / 日志 / trace_id / 异常处理器
   domain/                    # 领域层:ParsedDocument schema / 状态机 / 仓储接口(权威契约)
-  services/                  # 应用服务:入库编排 / 落盘存储
+  services/                  # 应用服务:入库编排 / 落盘存储 / 文档清单
   repositories/              # 仓储实现(内存基线 / Chroma / PG 生产持久化)
   integrations/              # 实现层零件
     llm/                     #   统一 LLM 客户端与可注入传输层
     parsing/                 #   五种格式解析器与工厂(ADR-0002)
+frontend/                    # 前端工作台(独立 Vue 3 工程,不进 Python 依赖体系)
+  src/api/                   #   HTTP 收口层(全站唯一发请求处)
+  src/views/                 #   六个页面
+  src/types/                 #   手写的响应类型(以契约为准)
+  src/stores/                #   Pinia(当前租户等跨页面状态)
 evaluation/                  # 黄金数据集(v1 YAML)与评估语料
 tests/                       # 按接缝组织的测试
 scripts/evaluate.py          # 检索指标评估器(默认无密钥)
@@ -281,5 +327,6 @@ GLOSSARY.md                  # 领域术语表(唯一权威词汇)
 - [ADR-0012](docs/adr/0012-async-ingestion-background-tasks.md):异步 ingestion:上传即时返回任务句柄;同步形态显式配置
 - [ADR-0013](docs/adr/0013-qa-answer-cache-and-upstream-throttle.md):问答答档缓存与上游限速:进程内快答档,检索面变化即整体失效
 - [ADR-0014](docs/adr/0014-operational-stats-and-cost-estimation.md):运营统计与成本统计:查询日志为唯一统计来源,成本按配置单价估算
+- [ADR-0015](docs/adr/0015-frontend-stack-and-boundary.md):前端栈与边界:独立 Vue 3 SPA 置于 `frontend/`,后端零改动、零 CORS
 - [T06 检索指标基线](docs/iterations/0001-t06-retrieval-baseline.md):24 条黄金用例,含逐用例追溯与后续对比约定
 - 里程碑与验收标准:[issue #1](https://github.com/LjjCode536/rag-knowledge-assistant/issues/1)

@@ -1,0 +1,16 @@
+/**
+ * 企业蓝主题:只用 Element Plus 自带设计语言做 SCSS 变量覆盖,
+ * **不引入第二套样式体系**(ADR-0015)。
+ *
+ * 组件按需引入后,主题变量需在入口处显式引入 Element Plus 的 SCSS 源。
+ */
+@use 'element-plus/theme-chalk/src/common/var.scss' as * with (
+  $colors: (
+    'primary': ('base': #1f5eff),
+  ),
+  $border-radius: (
+    'base': 6px,
+    'small': 4px,
+    'round': 20px,
+  ),
+);
