@@ -103,6 +103,25 @@ M7 到收口时,系统已有逐条查询日志(`GET /api/v1/query-logs`),但没�
 - **形态 B(after)**:一次请求给全核心指标 + 成本 + 分桶序列,2–4 ms 级,
   比"翻 100 条日志"(6 ms)更快,且拿到的是**全量**而非样本。
 
+### 真库核对(PostgreSQL 16.15 + pgvector 0.8.6)
+
+内存基线的数字必须在真库上复现一遍 —— 聚合下推 SQL 后,分桶边界与 jsonb
+取值都换了一套实现:
+
+| 核对项 | 内存基线 | 真库 | 一致 |
+| --- | --- | --- | :---: |
+| 拒答率(1 拒答 / 3 问答) | 0.333333 | 0.333333 | ✓ |
+| 小时桶起点(UTC 自然边界) | 08:00 → 09:00 | 12:00 → 13:00 | ✓ |
+| 日桶起点(UTC 自然日) | 00:00 → 次日 00:00 | 00:00 → 次日 00:00 | ✓ |
+| 区间查询(最近 1 小时)命中桶数 | 1 | 1 | ✓ |
+| Token 用量合计(2 × 1234 / 567) | 2468 / 1134 | 2468 / 1134 | ✓ |
+| 估算成本(单价 0.002 / 0.006) | 0.011740 | 0.011740 | ✓ |
+| 分桶 Token 与区间总量一致 | ✓ | ✓ | ✓ |
+
+真库的 Token 用量经 `token_usage` 的 jsonb 取值(`->>'prompt_tokens'`),
+注入固定用量(1234 / 567)的生成器替身验证:2 次问答聚合为 2468 / 1134 /
+3602,成本 0.004936 + 0.006804 = 0.011740,与手算逐位一致。
+
 ## 验收(issue #17 逐条)
 
 - [x] `/stats` 返回文档数 / 问答量 / 拒答率 / 平均延迟等核心指标 ——
@@ -114,10 +133,11 @@ M7 到收口时,系统已有逐条查询日志(`GET /api/v1/query-logs`),但没�
       `tests/test_stats_service.py::test_cost_estimate_applies_configured_prices`
 - [x] 统计来自持久化数据,重启不丢 ——
       `tests/test_stats_pg.py::test_pg_stats_survives_application_restart`
-      (真库可达时验证;本机 Postgres 后端进程在 Windows 上无法启动,该用例
-      与既有 PG 用例同样跳过)
-- [x] API 主缝测试全绿 —— 全量 `uv run pytest` 291 passed / 33 skipped
-      (基线 267 passed / 26 skipped,新增 24 passed + 7 skipped)
+      (真库 PostgreSQL 16 + pgvector 0.8.6 上验证:两个独立应用实例挂同库,
+      第二个实例内存态全清零,统计仍在)
+- [x] API 主缝测试全绿 —— 全量 `uv run pytest` **324 passed / 0 skipped**
+      (基线 267 passed / 26 skipped;真库可达后既有的 26 个 PG 跳过用例
+      也一并跑通,新增 24 例全绿)
 
 ## 评审修复(两轴评审后)
 
@@ -161,11 +181,15 @@ M7 到收口时,系统已有逐条查询日志(`GET /api/v1/query-logs`),但没�
   一并落进查询日志(`token_usage` jsonb 已能承载扩展结构)是自然扩展点。
 - **单机多实例天然聚合**:统计读的是同一个库,多实例共享同一份数据 —— 这是
   "统计来自持久化数据"相对"进程内计数"的结构性优势。
-- **真库验证待补**:本机 Postgres 后端进程无法启动(Windows 环境下
-  `0xC0000142` DLL 初始化失败,与本迭代无关),`tests/test_stats_pg.py` 与
-  既有 PG 用例一并跳过;SQL 拼装层已有离线用例(`tests/test_stats_pg_sql.py`)
-  守住区间口径与占位顺序。**在有 Docker 的环境跑一次
-  `docker compose up -d db && uv run pytest tests/test_stats_pg.py` 即可补齐
-  真库断言**。
+- **真库验证已补齐**:在 Docker 的 PostgreSQL 16.15 + pgvector 0.8.6 上,
+  `tests/test_stats_pg.py` 7 例全绿,并做了两处**变异验证**确认断言真的
+  有效(不是恒过的摆设):
+  - 把 jsonb 取值键改错(`prompt_tokens` → `WRONG_prompt_tokens`)→
+    `test_pg_stats_sums_token_usage_from_jsonb` 断言失败(真库上读到 0);
+  - 把 pgvector 模式下的统计仓储换回内存实现 →
+    `test_pg_stats_survives_application_restart` 失败(重启后统计丢失)。
+  即"统计来自持久化数据"这条验收标准在真库上被证伪过,不是靠构造数据通过。
+  另有一处离线兜底:`tests/test_stats_pg_sql.py` 守住 SQL 拼装的区间口径与
+  占位顺序 —— 真库不可达的环境(无 Docker)仍能回归这两处。
 - **管理后台与安全审计**仍在"生产环境还缺的能力"清单里(第 15 / 16 项):
   本迭代只交付统计端点与口径,不做看板界面与审计日志。

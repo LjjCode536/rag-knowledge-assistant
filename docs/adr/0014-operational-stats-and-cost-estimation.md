@@ -61,7 +61,10 @@ M7·收口(spec,issue #17)要求:LLM 用量聚合(Token / 延迟 / 估算成本)
   的 Token 用量重复计入每次命中,让估算成本**高于**实际支出。
 - **SQL 拼装收口在纯函数**(`build_range_clause` / `build_bucket_query` /
   `build_sum_query`):SQL 文本与**占位 / 参数顺序**可离线断言 —— 真库不可达
-  的环境(无 Docker)仍能守住"区间闭开边界"与"占位错位"这两个最容易出错的点。
+  的环境(无 Docker)仍能守住区间闭开边界与占位错位这两个最容易出错的点。
+  真库可达时另有 `tests/test_stats_pg.py` 在 PostgreSQL 16 + pgvector 上
+  验证真实聚合行为,两层互补:离线层不依赖外部服务,真库层证伪恒过的断言
+  (把 jsonb 取值键改错 / 把统计仓储换回内存实现,两种变异都会被用例抓住)。
 
 ## Consequences
 

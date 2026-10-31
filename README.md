@@ -180,7 +180,7 @@ curl "http://127.0.0.1:8000/api/v1/stats/cost?start=2026-10-01T00:00:00Z&end=202
 - **区间口径**:起点闭区间 / 终点开区间,`start` / `end` 可选(缺省即"至今全部");起点不早于终点返回 400 `BAD_REQUEST`。
 - **拒答率是线上实际拒答占比**(拒答数 / 问答量),问答量为 0 时为 `null`(无样本 ≠ 0);与评估器的"拒答正确率"是两种口径,不可互相替代。
 - **估算成本**:Token 用量按配置单价(元 / 千 Token)折算,`COST_PROMPT_PRICE_PER_1K` / `COST_COMPLETION_PRICE_PER_1K` 配置;换模型只改配置。这是**估算**而非上游账单,且当前只覆盖回答生成步的 Token(embedding / 规划 / 重排的用量只在结构化日志里),属全链路成本的下界;答档缓存命中时零上游消耗,日志记零 Token,不会重复计入。
-- **统计来自持久化数据**:pgvector 模式读生产表,重启容器不丢;memory 与 chroma 模式的统计随进程失忆(数据仓储仍是进程内存实现,chroma 只持久化**向量**,不持久化统计)。详见 [ADR-0014](docs/adr/0014-operational-stats-and-cost-estimation.md)。
+- **统计来自持久化数据**:pgvector 模式读生产表,重启容器不丢(真库验证:`tests/test_stats_pg.py`);memory 与 chroma 模式的统计随进程失忆(数据仓储仍是进程内存实现,chroma 只持久化**向量**,不持久化统计)。详见 [ADR-0014](docs/adr/0014-operational-stats-and-cost-estimation.md)。
 
 ### 检索评估(T06)
 
