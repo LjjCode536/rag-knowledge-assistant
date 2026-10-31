@@ -12,11 +12,15 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import TenantSelector from '@/components/TenantSelector.vue'
+import { useTenantOptions } from '@/composables/useTenantOptions'
 import { navItems } from '@/router'
 
 const MOBILE_BREAKPOINT = 768
 
 const route = useRoute()
+
+// 租户选项取自后端文档清单的真实租户维度(应用级,不挂在某个页面上)
+useTenantOptions()
 
 /** 窄屏:侧边栏折叠为抽屉。 */
 const isNarrow = ref(false)

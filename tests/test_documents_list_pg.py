@@ -36,13 +36,17 @@ def _document(file_name: str, *, minutes_ago: int = 0, **overrides):
 
 
 def _seed() -> list:
-    """一组覆盖各种口径的档案:版本退位、异租户、异状态、不同创建时间。
+    """一组覆盖各种口径的档案:版本退位、文档删除、异租户、异状态、不同创建时间。
 
     返回值按创建时间从早到晚,便于断言排序。
 
     注:``handbook.txt`` 有两条现行版本(40 分钟前与 0 分钟前)看似违反
     "同一标识只留一个现行版本"的业务不变量,但仓储契约只按 ``is_latest``
     标志过滤,不校验该不变量 —— 这里刻意保留,验证契约边界不被悄然扩大。
+
+    退位版本(``is_latest=False`` + ``superseded``)与已删除文档(``is_latest=False``
+    + ``deleted``)都靠 ``is_latest`` 退出默认清单 —— 后者与
+    :meth:`app.services.lifecycle.DocumentLifecycleService.delete` 的落点一致。
     """
     return [
         _document("handbook.txt", minutes_ago=40, tenant="acme", department="人力部"),
@@ -54,6 +58,13 @@ def _seed() -> list:
             tenant="acme",
             is_latest=False,
             status=DocumentStatus.SUPERSEDED,
+        ),
+        _document(
+            "obsolete.txt",
+            minutes_ago=5,
+            tenant="acme",
+            is_latest=False,
+            status=DocumentStatus.DELETED,
         ),
         _document("handbook.txt", minutes_ago=0, tenant="acme"),
     ]
@@ -124,10 +135,22 @@ def test_pg_list_default_hides_superseded_and_deleted(test_pg_database):
             "handbook.txt",
         ]
         assert all(item.is_latest for item in latest)
+        # 退位版本与已删除文档都不在默认清单里
+        assert all(
+            item.status not in (DocumentStatus.SUPERSEDED, DocumentStatus.DELETED)
+            for item in latest
+        )
 
         history = pg.list(DocumentFilter(latest_only=False))
-        assert len(history) == 5
-        assert pg.count(DocumentFilter(latest_only=False)) == 5
+        assert len(history) == 6
+        assert pg.count(DocumentFilter(latest_only=False)) == 6
+        # 历史里能看到退位版本与已删除文档
+        assert sum(
+            1 for item in history if item.status == DocumentStatus.SUPERSEDED
+        ) == 1
+        assert sum(
+            1 for item in history if item.status == DocumentStatus.DELETED
+        ) == 1
     finally:
         db.close()
 

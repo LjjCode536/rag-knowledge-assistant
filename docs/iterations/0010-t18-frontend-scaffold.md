@@ -54,6 +54,9 @@
 | 运营统计 | ✅ 文档数 1 / 已索引 1 / 切片 1 / 问答量 2 / 拒答率 0 / 平均延迟 / 估算成本 / 分桶趋势,全部真实数据 |
 | 查询日志 | ✅ 两条真实问答记录(延迟 33283.98 ms 与 0.09 ms) |
 | 窄屏侧边栏折叠 | ✅ 侧边栏消失、出现「菜单」按钮、抽屉可打开、内容区 `scrollWidth == clientWidth`(无横向溢出) |
+| 租户选项来自后端 | ✅ 下拉显示服务端真实租户(`beta` / `acme`)+ 全部租户;选中 `acme` 后文档清单只剩该租户的文档(共 1 条) |
+| Element Plus 中文语言包 | ✅ 分页显示「共 N 条 / N条/页」(官方 zh-cn 语言包) |
+| 分桶趋势图(ECharts) | ✅ 画布 713×350,柱(问答量)+ 双线(拒答率 / 平均延迟) |
 
 真实上游(SiliconFlow)在实测中确实被调用:`BAAI/bge-m3` 向量化 1400 ms、
 `Qwen/Qwen3-8B` 生成 19861 ms、`BAAI/bge-reranker-v2-m3` 重排 85 ms。
@@ -112,6 +115,37 @@
 页面**时才被依赖优化器发现,会触发「优化 → 强制 reload → 打断路由的动态导入」,
 页面首访白屏。修法是在 `vite.config.ts` 的 `optimizeDeps.include` 里显式预打包
 `element-plus`,让优化在 dev server 启动时一次做完。
+
+## 两轴评审后的修复(Standards / Spec)
+
+评审(Standards 与 Spec 两轴并行)发现并已修:
+
+1. **界面文案用了 GLOSSARY 的 `_Avoid_` 同义词「文件」**:表单标签、表格列头、
+   详情项都是**界面文案**(不是 API 字段名透传),改为「知识库文档」/「文档名」。
+2. **Element Plus 中文语言包缺失**(issue #20 明确要求「配中文语言包」):
+   `main.ts` 装 `element-plus` + 官方 `zh-cn` 语言包,分页 / 表格 / 选择器的内置
+   文案走中文,不在各组件里各写一份。
+3. **ECharts 装了却没用**(issue #18 要求「图表用 ECharts」):运营统计页接入
+   `vue-echarts`,分桶趋势画成图(问答量柱 + 拒答率线 + 平均延迟线);
+   **无样本时给 `null` 断开该点,不补 0**(把"没有问答"画成"零拒答"是撒谎)。
+4. **租户选项的数据源缺失**(issue #18 要求「选项来自后端文档清单返回的真实租户
+   集合,不在前端另存一份」):新增 `composables/useTenantOptions.ts`,挂在**应用
+   外壳**这一层(不是某个页面 —— 挂在页面上会让没进过那个页面的其他页面看不到
+   租户选项),选项取自不受当前筛选影响的一份文档清单。
+5. **`api/qa.ts` 的 `listChunks` / `retryEmbedding` 是死导出**:接进知识库文档详情
+   抽屉 —— 切片预览(可展开看切片原文)与「重试向量化」入口(文档停在 `chunked` 时
+   单独重试,不必重传整份知识库文档)。
+6. **`api/stats.ts` 的 `bucket?: string` 是原始类型**:改为 `StatsBucketKind`
+   (`'hour' | 'day'`),与后端枚举同形。
+7. **`memory.py` 的 docstring 夸大了保证**:原文声称"过滤条件里的空串按未提供
+   处理",但函数只对 `keyword` 做 `strip`;改为如实陈述契约,并写明**空值归一由
+   服务层负责**。
+8. **真库测试名不副实**:`test_pg_list_default_hides_superseded_and_deleted` 原本
+   没播种已删除的文档,"已删除"那句是空洞成立的;补上 `status=deleted` 的档案,并
+   断言历史清单里能分别数出退位版本与已删除文档各一条。
+9. **`buildQuery` 的 docstring 没说清 `false` 怎么处理**:补明「`false` 不跳过」——
+   `false` 是有意义的布尔取值(如 `include_history=false` 表示只列现行版本),
+   与"没传"不是一回事。
 
 ## 口径(ADR-0015)
 

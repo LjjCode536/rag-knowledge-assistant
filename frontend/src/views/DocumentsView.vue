@@ -10,7 +10,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 
-import { deleteDocument, getDocument, listDocuments, uploadDocument } from '@/api'
+import {
+  deleteDocument,
+  getDocument,
+  listChunks,
+  listDocuments,
+  retryEmbedding,
+  uploadDocument,
+} from '@/api'
 import ErrorDetails from '@/components/ErrorDetails.vue'
 import { useTenantStore } from '@/stores/tenant'
 import type { DocumentStatus, DocumentView } from '@/types/documents'
@@ -66,6 +73,13 @@ const detailQuery = useQuery({
   refetchInterval: computed(() => (detailId.value ? 2000 : false)),
 })
 
+/** 切片预览:抽屉打开且文档已切片时取全量切片。 */
+const chunksQuery = useQuery({
+  queryKey: computed(() => ['document', detailId.value, 'chunks'] as const),
+  queryFn: () => listChunks(detailId.value!),
+  enabled: computed(() => Boolean(detailId.value)),
+})
+
 const uploadMutation = useMutation({
   mutationFn: (file: File) =>
     uploadDocument(file, {
@@ -88,14 +102,16 @@ const uploadVersion = ref('v1')
 /** 支持的扩展名:上传前就校验,不让用户白等一次上传失败。 */
 const SUPPORTED_EXTENSIONS = ['txt', 'md', 'markdown', 'html', 'htm', 'docx', 'pdf']
 
-/** 前端选文件时就拦下不受支持的扩展名。 */
+/** 扩展名不受支持时的提示(界面文案用规范术语:知识库文档)。 */
 const extensionError = computed<string>(() => {
   const file = uploadFile.value
   if (!file) {
     return ''
   }
   const suffix = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : ''
-  return SUPPORTED_EXTENSIONS.includes(suffix) ? '' : `不支持的文件扩展名:.${suffix || '(无)'}`
+  return SUPPORTED_EXTENSIONS.includes(suffix)
+    ? ''
+    : `不支持的知识库文档格式:.${suffix || '(无扩展名)'}`
 })
 
 function onFileChange(file: { raw?: File } | undefined): void {
@@ -113,6 +129,15 @@ function onUpload(): void {
 const deleteMutation = useMutation({
   mutationFn: (documentId: string) => deleteDocument(documentId),
   onSuccess: () => {
+    void queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+})
+
+/** 重试向量化:文档停在 `chunked` 时可单独重试,不必重传整份知识库文档。 */
+const embedMutation = useMutation({
+  mutationFn: (documentId: string) => retryEmbedding(documentId),
+  onSuccess: () => {
+    void queryClient.invalidateQueries({ queryKey: ['document', detailId.value] })
     void queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
 })
@@ -176,7 +201,7 @@ function isInProgress(status: DocumentStatus): boolean {
         label-width="90px"
         @submit.prevent="onUpload"
       >
-        <el-form-item label="文件">
+        <el-form-item label="知识库文档">
           <el-upload
             :auto-upload="false"
             :limit="1"
@@ -184,7 +209,7 @@ function isInProgress(status: DocumentStatus): boolean {
             :on-change="onFileChange"
             :on-remove="() => (uploadFile = null)"
           >
-            <el-button>选择文件</el-button>
+            <el-button>选择知识库文档</el-button>
           </el-upload>
           <div
             v-if="uploadFile"
@@ -256,7 +281,7 @@ function isInProgress(status: DocumentStatus): boolean {
         <el-input
           v-model="keyword"
           size="small"
-          placeholder="文件名关键字"
+          placeholder="文档名关键字"
           style="max-width: 200px"
           data-testid="documents-keyword"
           @keyup.enter="((page = 1), listQuery.refetch())"
@@ -298,7 +323,7 @@ function isInProgress(status: DocumentStatus): boolean {
       >
         <el-table-column
           prop="file_name"
-          label="文件名"
+          label="文档名"
           min-width="200"
         />
         <el-table-column
@@ -381,7 +406,7 @@ function isInProgress(status: DocumentStatus): boolean {
           :column="1"
           border
         >
-          <el-descriptions-item label="文件名">
+          <el-descriptions-item label="文档名">
             {{ detailQuery.data.value.file_name }}
           </el-descriptions-item>
           <el-descriptions-item label="状态">
@@ -416,6 +441,60 @@ function isInProgress(status: DocumentStatus): boolean {
             </span>
           </el-descriptions-item>
         </el-descriptions>
+
+        <!--
+          停在 chunked 的文档:上游向量化失败后停在这里,可单独重试,
+          不必重传整份知识库文档(后端的向量化端点)。
+        -->
+        <div
+          v-if="detailQuery.data.value.status === 'chunked'"
+          style="margin-top: 12px"
+        >
+          <el-button
+            type="primary"
+            :loading="embedMutation.isPending.value"
+            data-testid="documents-retry-embedding"
+            @click="embedMutation.mutate(detailQuery.data.value.id)"
+          >
+            重试向量化
+          </el-button>
+          <span
+            class="page-hint"
+            style="margin-left: 8px"
+          >
+            上次向量化未完成,文档已切片,重试即可入库
+          </span>
+        </div>
+        <ErrorDetails
+          v-if="embedMutation.isError.value"
+          :error="embedMutation.error.value"
+        />
+
+        <!-- 切片预览:确认切分粒度是否符合预期 -->
+        <el-divider content-position="left">
+          切片预览
+        </el-divider>
+        <div
+          v-if="chunksQuery.data.value && chunksQuery.data.value.chunks.length > 0"
+        >
+          <el-collapse>
+            <el-collapse-item
+              v-for="chunk in chunksQuery.data.value.chunks"
+              :key="chunk.chunk_id"
+              :title="`#${chunk.index}${chunk.title ? ` · ${chunk.title}` : ''}${chunk.page_number ? ` · 第 ${chunk.page_number} 页` : ''}`"
+            >
+              <pre
+                style="white-space: pre-wrap; margin: 0; font-size: 13px"
+              >{{ chunk.content }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+        <p
+          v-else
+          class="page-hint"
+        >
+          暂无切片
+        </p>
       </template>
       <ErrorDetails
         v-if="detailQuery.isError.value"

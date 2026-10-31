@@ -19,12 +19,20 @@ const selected = computed<string>({
   set: (value) => tenantStore.select(value),
 })
 
+/**
+ * 新建租户。
+ *
+ * 后端没有"租户注册表"这个概念 —— 租户是上传时自带的元数据,任何调用方都能
+ * 传任意 `tenant`(ADR-0015)。因此"新建"只是把一个**筛选条件**加进本地
+ * 选项集并选中它,不代表注册了什么;该租户真正存在与否,取决于后端是否
+ * 已有该租户的知识库文档。
+ */
 function onCreate(): void {
   const value = newTenant.value.trim()
   if (!value) {
     return
   }
-  tenantStore.create(value)
+  tenantStore.select(value)
   newTenant.value = ''
 }
 </script>

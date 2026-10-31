@@ -36,6 +36,9 @@ export interface StatsBucket {
   qa: QaStats
 }
 
+/** 分桶粒度:统计区间按固定粒度切成的时间片(UTC 自然小时 / 自然日)。 */
+export type StatsBucketKind = 'hour' | 'day'
+
 /** 运营统计一屏:知识库规模 + 问答健康度 + 成本 + 分桶序列。 */
 export interface KnowledgeBaseStats {
   document_count: number
@@ -46,7 +49,7 @@ export interface KnowledgeBaseStats {
   buckets: StatsBucket[]
   start: string | null
   end: string | null
-  bucket_kind: string
+  bucket_kind: StatsBucketKind
 }
 
 /** 成本明细:Token 用量 + 估算成本 + 统计区间。 */

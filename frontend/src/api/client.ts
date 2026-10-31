@@ -45,6 +45,10 @@ export interface EnvelopeResult<DataT> {
  *
  * 空串按"未提供"处理(与后端路由层的空值归一口径一致):前端表单里
  * 清空的输入框不应变成 `?keyword=` 这样的"匹配空字符串"约束。
+ *
+ * **`false` 不跳过**:`false` 是一个有意义的布尔取值(如 `include_history=false`
+ * 表示"只列现行版本"),与"没传"不是一回事 —— 后端两者的语义不同,省掉
+ * `false` 会让"显式关闭"退化成"用后端默认值"。
  */
 export function buildQuery(
   query: RequestOptions['query'],

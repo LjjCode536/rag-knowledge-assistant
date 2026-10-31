@@ -313,7 +313,12 @@ def _match_documents(
     - ``keyword`` 命中文件名子串,大小写不敏感;
     - 多个条件按"与"组合。
 
-    过滤条件里的空串按"未提供"处理(与路由层的空值归一口径一致)。
+    **空值归一由服务层负责**(:class:`DocumentCatalogService` 把空白串按
+    "未提供"处理),本函数只认"``None`` 表示不限"这一条:``tenant`` 等字段
+    传空串会精确匹配空串(匹配不到任何档案)。本函数额外对 ``keyword``
+    做 ``strip``,是因为空串关键字在两种实现里都应当退化为"不按关键字过滤"
+    —— 否则 PostgreSQL 侧的 ``ILIKE '%%'`` 会匹配全部档案,与内存侧的空串
+    语义相左。
     """
     keyword = filters.keyword.strip().lower() if filters.keyword else None
     matched = []

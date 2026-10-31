@@ -56,7 +56,7 @@ export async function listChunks(documentId: string) {
   return result.data
 }
 
-/** 重试向量化:文档停在 `chunked` 时可单独重试,不必重传整个文件。 */
+/** 重试向量化:文档停在 `chunked` 时可单独重试,不必重传整份知识库文档。 */
 export async function retryEmbedding(documentId: string) {
   const result = await request<EmbeddingRun>(`/api/v1/documents/${documentId}/embeddings`, {
     method: 'POST',
