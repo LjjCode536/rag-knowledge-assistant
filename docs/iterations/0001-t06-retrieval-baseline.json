@@ -12,6 +12,19 @@
   "embedder": "deterministic-lexical-1024d",
   "mode": "in-process",
   "command": "uv run python scripts/evaluate.py",
+  "vector_store": "memory",
+  "retrieval_config": {
+    "use_query_rewrite": false,
+    "use_multi_query": false,
+    "use_hybrid": false,
+    "use_mmr": false,
+    "use_rerank": false,
+    "retrieval_vector_weight": 0.7,
+    "retrieval_keyword_weight": 0.3,
+    "retrieval_candidate_k": 30,
+    "retrieval_multi_query_count": 3,
+    "retrieval_mmr_lambda": 0.7
+  },
   "cases_total": 26,
   "summary": {
     "recall_at_k": 0.791667,
@@ -107,6 +120,117 @@
   },
   "refusal_accuracy": 1.0,
   "permission_pass_rate": 1.0,
+  "generator": "rule_based",
+  "generation": {
+    "cases_total": 26,
+    "answered": 4,
+    "wrongly_refused": 20,
+    "answer_rate": 0.166667,
+    "faithfulness": 1.0,
+    "citation_accuracy": 1.0,
+    "refusal_correctness": 0.230769
+  },
+  "generation_categories": {
+    "hr": {
+      "cases_total": 3,
+      "answered": 0,
+      "wrongly_refused": 3,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "invoice": {
+      "cases_total": 2,
+      "answered": 1,
+      "wrongly_refused": 1,
+      "answer_rate": 0.5,
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "refusal_correctness": 0.5
+    },
+    "it": {
+      "cases_total": 2,
+      "answered": 0,
+      "wrongly_refused": 2,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "leave": {
+      "cases_total": 3,
+      "answered": 1,
+      "wrongly_refused": 2,
+      "answer_rate": 0.333333,
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "refusal_correctness": 0.333333
+    },
+    "logistics": {
+      "cases_total": 1,
+      "answered": 0,
+      "wrongly_refused": 1,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "permission": {
+      "cases_total": 1,
+      "answered": 1,
+      "wrongly_refused": 0,
+      "answer_rate": 1.0,
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "refusal_correctness": 1.0
+    },
+    "product": {
+      "cases_total": 4,
+      "answered": 1,
+      "wrongly_refused": 3,
+      "answer_rate": 0.25,
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "refusal_correctness": 0.25
+    },
+    "refund": {
+      "cases_total": 2,
+      "answered": 0,
+      "wrongly_refused": 2,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "reimbursement": {
+      "cases_total": 3,
+      "answered": 0,
+      "wrongly_refused": 3,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "security": {
+      "cases_total": 3,
+      "answered": 0,
+      "wrongly_refused": 3,
+      "answer_rate": 0.0,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 0.0
+    },
+    "unknown": {
+      "cases_total": 2,
+      "answered": 0,
+      "wrongly_refused": 0,
+      "answer_rate": null,
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "refusal_correctness": 1.0
+    }
+  },
   "case_results": [
     {
       "case_id": "refund_unshipped",
@@ -155,6 +279,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "教材样例 case_refund_001:口语化退款问题"
     },
     {
@@ -204,6 +335,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "教材样例 case_refund_002:已发货退款规则"
     },
     {
@@ -253,6 +391,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "教材样例 case_logistics_001:物流异常"
     },
     {
@@ -302,6 +447,18 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,企业发票需要填写公司名称和纳税人识别号。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "finance_invoice.md",
+          "index": 0
+        }
+      ],
       "notes": "教材样例 case_invoice_001:发票规则"
     },
     {
@@ -351,6 +508,18 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,员工入职满一年后,可以按照公司制度申请年假。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
       "notes": "教材样例 case_leave_001:HR 年假制度"
     },
     {
@@ -400,6 +569,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "教材样例 case_reimbursement_001:财务报销制度"
     },
     {
@@ -455,6 +631,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "同文档多切片用例:同时覆盖材料与提交时限"
     },
     {
@@ -497,6 +680,13 @@
       "refusal_ok": true,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "教材样例 case_unknown_001:知识库不存在的问题,用于测试兜底"
     },
     {
@@ -546,6 +736,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "病假报备时限"
     },
     {
@@ -595,6 +792,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "调休有效期"
     },
     {
@@ -644,6 +848,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "离职通知期"
     },
     {
@@ -693,6 +904,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "培训预算额度"
     },
     {
@@ -748,6 +966,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "跨文档多切片用例:同时覆盖离职通知期与账号回收"
     },
     {
@@ -797,6 +1022,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "报销提交时限"
     },
     {
@@ -846,6 +1078,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "供应商付款账期"
     },
     {
@@ -895,6 +1134,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "远程接入方式"
     },
     {
@@ -944,6 +1190,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "密码轮换周期"
     },
     {
@@ -993,6 +1246,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "终端软件管理"
     },
     {
@@ -1042,6 +1302,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "安全事件响应"
     },
     {
@@ -1091,6 +1358,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "离职账号回收"
     },
     {
@@ -1140,6 +1414,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "企业版试用期"
     },
     {
@@ -1189,6 +1470,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "数据导出方式"
     },
     {
@@ -1238,6 +1526,18 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,可以参考以下内容:企业版支持 SAML 2.0 单点登录,配置完成后员工可使用公司账号登录。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "product_faq.md",
+          "index": 2
+        }
+      ],
       "notes": "SSO 支持"
     },
     {
@@ -1287,6 +1587,13 @@
       "refusal_ok": null,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "服务等级"
     },
     {
@@ -1336,6 +1643,18 @@
       "refusal_ok": null,
       "permission_ok": true,
       "forbidden_best_rank": 2,
+      "refused": false,
+      "refusal_reason": null,
+      "answer": "根据知识库资料,员工入职满一年后,可以按照公司制度申请年假。",
+      "faithfulness": 1.0,
+      "citation_accuracy": 1.0,
+      "unsupported_claims": [],
+      "citations": [
+        {
+          "document": "employee_handbook.md",
+          "index": 0
+        }
+      ],
       "notes": "globex 手册有同主题的相反规定,租户过滤必须挡住;无过滤对照应能检索到禁读文档"
     },
     {
@@ -1378,6 +1697,13 @@
       "refusal_ok": true,
       "permission_ok": null,
       "forbidden_best_rank": null,
+      "refused": true,
+      "refusal_reason": "low_score",
+      "answer": "根据当前资料无法确认。",
+      "faithfulness": null,
+      "citation_accuracy": null,
+      "unsupported_claims": [],
+      "citations": [],
       "notes": "知识库不存在的问题,验证低分兜底"
     }
   ]
