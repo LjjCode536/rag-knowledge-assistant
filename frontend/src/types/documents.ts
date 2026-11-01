@@ -54,6 +54,30 @@ export interface DocumentView {
 }
 
 /**
+ * 解析元素类型:解析产物的结构化单元种类。
+ *
+ * 契约值取自后端 `ElementType` 枚举(title / paragraph / table / list / code)。
+ */
+export type ElementType = 'title' | 'paragraph' | 'table' | 'list' | 'code'
+
+/** 解析元素视图:类型 + 内容 + 定位元数据。 */
+export interface ElementView {
+  element_type: ElementType
+  content: string
+  order_index: number
+  page_number: number | null
+  heading_level: number | null
+  line: number | null
+}
+
+/** 解析产物视图:文档 id、页数与元素。 */
+export interface ElementsView {
+  document_id: string
+  page_count: number | null
+  elements: ElementView[]
+}
+
+/**
  * 知识库文档清单:符合条件的总数 + 当前页条数。
  *
  * `total` 是符合筛选条件的总数(不受分页影响),故可据此算总页数。

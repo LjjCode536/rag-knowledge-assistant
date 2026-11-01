@@ -7,7 +7,13 @@ export { ApiError, isApiError } from './errors'
 export { buildQuery, request, requestRaw, OK_CODE } from './client'
 export type { EnvelopeResult, RequestOptions } from './client'
 
-export { deleteDocument, getDocument, listDocuments, uploadDocument } from './documents'
+export {
+  deleteDocument,
+  getDocument,
+  getDocumentElements,
+  listDocuments,
+  uploadDocument,
+} from './documents'
 export { ask, listChunks, retryEmbedding, search } from './qa'
 export { getCost, getStats } from './stats'
 export {

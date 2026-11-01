@@ -3,7 +3,12 @@
  *
  * 页面组件只调本层(或其它 `api/` 层模块)的函数,**不得直接发请求**。
  */
-import type { DocumentList, DocumentListParams, DocumentView } from '@/types/documents'
+import type {
+  DocumentList,
+  DocumentListParams,
+  DocumentView,
+  ElementsView,
+} from '@/types/documents'
 
 import { request } from './client'
 
@@ -18,6 +23,12 @@ export async function listDocuments(params: DocumentListParams = {}) {
 /** 按 id 查询文档状态(即入库进度)。 */
 export async function getDocument(documentId: string) {
   const result = await request<DocumentView>(`${DOCUMENTS_PATH}/${documentId}`)
+  return result.data
+}
+
+/** 查询解析产物(结构化元素):详情抽屉的"解析元素"块用。 */
+export async function getDocumentElements(documentId: string) {
+  const result = await request<ElementsView>(`${DOCUMENTS_PATH}/${documentId}/elements`)
   return result.data
 }
 

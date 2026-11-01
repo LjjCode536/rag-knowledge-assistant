@@ -11,7 +11,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/api/errors'
 import { buildQuery, request, requestRaw } from '@/api/client'
-import { listDocuments, ask, search, submitFeedback } from '@/api'
+import {
+  deleteDocument,
+  getDocumentElements,
+  listDocuments,
+  ask,
+  retryEmbedding,
+  search,
+  submitFeedback,
+  uploadDocument,
+} from '@/api'
 
 /** 构造一个成功信封。 */
 function okEnvelope<T>(data: T, traceId = 'trace-test-0001'): string {
@@ -214,5 +223,82 @@ describe('api 客户端层', () => {
     const result = await request<{ id: string }>('/api/v1/documents/doc-1')
 
     expect(result.data.id).toBe('doc-1')
+  })
+
+  it('解析产物的请求路径与后端契约一致', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        okEnvelope({ document_id: 'doc-1', page_count: 3, elements: [] }),
+        { status: 200 },
+      ),
+    )
+
+    await getDocumentElements('doc-1')
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/v1/documents/doc-1/elements')
+    expect(init?.method).toBe('GET')
+  })
+
+  it('删除走 DELETE 方法并返回归档后的档案', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(okEnvelope({ id: 'doc-1', status: 'deleted' }), { status: 200 }),
+    )
+
+    const result = await deleteDocument('doc-1')
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/v1/documents/doc-1')
+    expect(init?.method).toBe('DELETE')
+    expect(result.status).toBe('deleted')
+  })
+
+  it('上传以 multipart 表单提交元数据字段', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(okEnvelope({ id: 'doc-1', status: 'uploaded' }), { status: 201 }),
+    )
+
+    await uploadDocument(new File(['x'], 'a.txt', { type: 'text/plain' }), {
+      tenant: 'acme',
+      department: 'HR',
+      doc_type: '制度',
+      version: 'v2',
+    })
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/v1/documents')
+    expect(init?.method).toBe('POST')
+    // multipart 不手动设 Content-Type,交由浏览器带 boundary
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+    const form = init?.body as FormData
+    expect(form.get('file')).toBeInstanceOf(File)
+    expect(form.get('tenant')).toBe('acme')
+    expect(form.get('department')).toBe('HR')
+    expect(form.get('doc_type')).toBe('制度')
+    expect(form.get('version')).toBe('v2')
+  })
+
+  it('上传时空的元数据字段不参与提交', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(okEnvelope({ id: 'doc-1', status: 'uploaded' }), { status: 201 }),
+    )
+
+    await uploadDocument(new File(['x'], 'a.txt'), { tenant: 'acme', department: '' })
+
+    const form = vi.mocked(fetch).mock.calls[0][1]?.body as FormData
+    expect(form.get('department')).toBeNull()
+    expect(form.get('doc_type')).toBeNull()
+  })
+
+  it('重试向量化的请求路径与后端契约一致', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(okEnvelope({ document: { id: 'doc-1', status: 'indexed' } }), { status: 200 }),
+    )
+
+    await retryEmbedding('doc-1')
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/v1/documents/doc-1/embeddings')
+    expect(init?.method).toBe('POST')
   })
 })
