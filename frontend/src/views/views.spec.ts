@@ -111,6 +111,24 @@ function documentView(overrides: Record<string, unknown> = {}): Record<string, u
   }
 }
 
+/**
+ * 等打字机动画把回答正文逐字显现完,再取角标。
+ *
+ * 回答以逐字显现的方式呈现(时长与后端真实耗时一致),组件测试里不能
+ * 假设正文一出现就是完整的。
+ */
+async function waitForBadge(
+  wrapper: Awaited<ReturnType<typeof mountView>>,
+  selector: string,
+) {
+  let badge = wrapper.find(selector)
+  await vi.waitFor(() => {
+    badge = wrapper.find(selector)
+    expect(badge.exists()).toBe(true)
+  })
+  return badge
+}
+
 /** 挂载组件:Pinia + TanStack Query 各给一个干净实例。 */
 function mountView(component: unknown, options: { props?: Record<string, unknown> } = {}) {
   const pinia = createPinia()
@@ -197,6 +215,403 @@ describe('组件行为', () => {
       expect(wrapper.find('[data-testid="chat-refusal"]').text()).toContain('未检索到相关资料')
       // 引用列表不渲染(空引用区不占位)
       expect(wrapper.find('[data-testid="chat-citations"]').exists()).toBe(false)
+    })
+
+    it('回答正文的编号角标可点击定位到对应引用', async () => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          return new Response(
+            okEnvelope(
+              chatAnswer({
+                query_id: 'qry-badge',
+                answer: '入职满一年可以申请年假[1]。',
+                citations: [
+                  {
+                    index: 1,
+                    chunk_id: 'chunk-1',
+                    document_id: 'doc-1',
+                    file_name: '员工手册.md',
+                    title: '休假制度',
+                    page_number: 3,
+                    score: 0.87,
+                  },
+                ],
+              }),
+            ),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+
+      // 正文里的编号被渲染成可点击角标(不再是纯文本 "[1]")
+      const badge = await waitForBadge(wrapper, '[data-testid="citation-badge-1"]')
+      expect(badge.text()).toBe('1')
+
+      // 点击角标 → 定位到下方对应的引用条目
+      await badge.trigger('click')
+      await vi.waitFor(() => {
+        const citation = wrapper.find('[data-testid="citation-1"]')
+        expect(citation.exists()).toBe(true)
+        expect(citation.attributes('data-highlighted')).toBe('true')
+      })
+    })
+
+    it('每条引用可展开查看切片原文', async () => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          return new Response(okEnvelope(chatAnswer({ query_id: 'qry-expand' })), {
+            status: 200,
+          })
+        }
+        if (url.includes('/api/v1/documents/doc-1/chunks')) {
+          return new Response(
+            okEnvelope({
+              document_id: 'doc-1',
+              status: 'indexed',
+              chunk_count: 1,
+              warnings: [],
+              chunks: [
+                {
+                  chunk_id: 'chunk-1',
+                  document_id: 'doc-1',
+                  index: 0,
+                  content: '年假:入职满一年后可申请,每年 5 天。',
+                  tenant: 'default',
+                  department: null,
+                  doc_type: null,
+                  version: 'v1',
+                  page_number: 3,
+                  title: '休假制度',
+                  element_index_start: 0,
+                  element_index_end: 2,
+                },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+
+      // 展开前不显示切片原文
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="chat-citations"]').exists()).toBe(true)
+      })
+      expect(wrapper.find('[data-testid="citation-text-1"]').exists()).toBe(false)
+
+      // 展开后显示切片原文(用户能亲眼核实答案不是编的)
+      await wrapper.find('[data-testid="citation-expand-1"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="citation-text-1"]').text()).toContain(
+          '入职满一年后可申请',
+        )
+      })
+    })
+
+    it('回答以逐字显现呈现且总时长与后端真实耗时一致', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.mocked(fetch).mockImplementation(async (input) => {
+          const url = String(input)
+          if (url.includes('/api/v1/chat')) {
+            return new Response(
+              okEnvelope(
+                chatAnswer({
+                  query_id: 'qry-typing',
+                  answer: '入职满一年可以申请年假。',
+                  latency_ms: 1000,
+                }),
+              ),
+              { status: 200 },
+            )
+          }
+          return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+        })
+
+        const wrapper = mountView(ChatView)
+        await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+        await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+
+        // 等待响应落地(打字机开始)
+        await vi.waitFor(() => {
+          expect(wrapper.find('[data-testid="chat-answer"]').exists()).toBe(true)
+        })
+
+        // 动画尚未走完:正文还没显现完
+        await vi.advanceTimersByTimeAsync(500)
+        const midway = wrapper.find('[data-testid="chat-answer"]').text()
+        expect(midway.length).toBeGreaterThan(0)
+        expect(midway.length).toBeLessThan('入职满一年可以申请年假。'.length)
+
+        // 走满后端真实耗时(1000 ms)后正文完整
+        await vi.advanceTimersByTimeAsync(600)
+        expect(wrapper.find('[data-testid="chat-answer"]').text()).toContain('入职满一年可以申请年假。')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('选「无用」时可附不超过 200 字的一句话说明', async () => {
+      const bodies: string[] = []
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          return new Response(okEnvelope(chatAnswer({ query_id: 'qry-comment' })), {
+            status: 200,
+          })
+        }
+        if (url.includes('/api/v1/feedback')) {
+          if (init?.body) {
+            bodies.push(String(init.body))
+          }
+          return new Response(okEnvelope(null), { status: 200 })
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="feedback-useless"]').exists()).toBe(true)
+      })
+
+      // 附一句话说明后提交「无用」
+      await wrapper.find('[data-testid="feedback-comment"]').setValue('回答没提到申请流程')
+      await wrapper.find('[data-testid="feedback-useless"]').trigger('click')
+
+      await vi.waitFor(() => {
+        expect(bodies.length).toBe(1)
+      })
+      const submitted = JSON.parse(bodies[0]) as {
+        query_id: string
+        verdict: string
+        comment: string | null
+      }
+      expect(submitted.query_id).toBe('qry-comment')
+      expect(submitted.verdict).toBe('useless')
+      expect(submitted.comment).toBe('回答没提到申请流程')
+    })
+
+    it('可设置过滤维度并展示后端回传的实际生效取值', async () => {
+      const bodies: string[] = []
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          if (init?.body) {
+            bodies.push(String(init.body))
+          }
+          return new Response(
+            okEnvelope(
+              chatAnswer({
+                query_id: 'qry-filters',
+                // 后端回传的是**实际生效**的口径(与界面发出的可能不同)
+                top_k: 3,
+                filters: { tenant: 'acme', department: '研发部' },
+              }),
+            ),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-filter-department"]').setValue('研发部')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+
+      await vi.waitFor(() => {
+        expect(bodies.length).toBe(1)
+      })
+      const submitted = JSON.parse(bodies[0]) as {
+        top_k: number
+        filters: Record<string, string>
+      }
+      expect(submitted.filters.department).toBe('研发部')
+
+      // 界面展示后端回传的实际生效取值(不是界面自己发的那份)
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="chat-effective-params"]').exists()).toBe(true)
+      })
+      const effective = wrapper.find('[data-testid="chat-effective-params"]').text()
+      expect(effective).toContain('3')
+      expect(effective).toContain('研发部')
+    })
+
+    it('侧栏列出最近的提问,点开可查看该次问答的完整结果', async () => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        const url = String(input)
+        // 单条查询日志(回看历史)与列表是两种形状,按路径分开应答
+        if (url.includes('/api/v1/query-logs/')) {
+          return new Response(
+            okEnvelope({
+              query_id: 'qry-old',
+              trace_id: 't-old',
+              question: '报销流程是什么?',
+              answer: '根据知识库资料,差旅报销需要提交发票、行程单和审批记录。',
+              refused: false,
+              refusal_reason: null,
+              hits: [
+                {
+                  rank: 1,
+                  chunk_id: 'chunk-9',
+                  document_id: 'doc-9',
+                  title: '差旅制度',
+                  page_number: 5,
+                  score: 0.81,
+                  used: true,
+                },
+              ],
+              filters: { tenant: 'acme' },
+              top_k: 5,
+              min_score: 0.35,
+              latency_ms: 88,
+              generator: 'rule_based',
+              token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+              rewritten_question: null,
+              expanded_questions: [],
+              created_at: '2026-10-31T09:00:00Z',
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/api/v1/query-logs')) {
+          return new Response(
+            okEnvelope({
+              total: 2,
+              limit: 20,
+              items: [
+                {
+                  query_id: 'qry-old',
+                  trace_id: 't-old',
+                  question: '报销流程是什么?',
+                  answer: '根据知识库资料,差旅报销需要提交发票、行程单和审批记录。',
+                  refused: false,
+                  refusal_reason: null,
+                  hits: [
+                    {
+                      rank: 1,
+                      chunk_id: 'chunk-9',
+                      document_id: 'doc-9',
+                      title: '差旅制度',
+                      page_number: 5,
+                      score: 0.81,
+                      used: true,
+                    },
+                  ],
+                  filters: { tenant: 'acme' },
+                  top_k: 5,
+                  min_score: 0.35,
+                  latency_ms: 88,
+                  generator: 'rule_based',
+                  token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                  rewritten_question: null,
+                  expanded_questions: [],
+                  created_at: '2026-10-31T09:00:00Z',
+                },
+                {
+                  query_id: 'qry-old2',
+                  trace_id: 't-old2',
+                  question: '量子计算怎么学?',
+                  answer: '根据当前资料无法确认。',
+                  refused: true,
+                  refusal_reason: 'no_hits',
+                  hits: [],
+                  filters: {},
+                  top_k: 5,
+                  min_score: 0.35,
+                  latency_ms: 12,
+                  generator: 'rule_based',
+                  token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                  rewritten_question: null,
+                  expanded_questions: [],
+                  created_at: '2026-10-31T08:00:00Z',
+                },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+
+      // 侧栏列出最近的提问
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="recent-questions"]').text()).toContain(
+          '报销流程是什么?',
+        )
+      })
+      const sidebar = wrapper.find('[data-testid="recent-questions"]')
+      expect(sidebar.text()).toContain('报销流程是什么?')
+
+      // 点开 → 看到该次问答的完整结果(回答 + 命中)
+      await wrapper.find('[data-testid="recent-question-qry-old"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="chat-answer"]').exists()).toBe(true)
+      })
+      expect(wrapper.find('[data-testid="chat-answer"]').text()).toContain('差旅报销需要提交发票')
+      // 该次问答的命中也看得到
+      expect(wrapper.find('[data-testid="chat-hits"]').text()).toContain('差旅制度')
+    })
+
+    it('打开已有问答时回显既有反馈的判定与说明', async () => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          return new Response(okEnvelope(chatAnswer({ query_id: 'qry-existing' })), {
+            status: 200,
+          })
+        }
+        if (url.includes('/api/v1/feedback')) {
+          return new Response(
+            okEnvelope({
+              total: 1,
+              limit: 20,
+              items: [
+                {
+                  feedback_id: 'fb-9',
+                  query_id: 'qry-existing',
+                  trace_id: 't-9',
+                  verdict: 'useless',
+                  comment: '答非所问',
+                  created_at: '2026-10-31T08:00:00Z',
+                },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="feedback-state"]').exists()).toBe(true)
+      })
+      // 既有判定与既有说明都回显
+      expect(wrapper.find('[data-testid="feedback-state"]').text()).toContain('无用')
+      expect(wrapper.find('[data-testid="feedback-state"]').text()).toContain('答非所问')
+      // 输入框预填既有说明(用户改写再提交即覆盖)
+      expect(
+        (wrapper.find('[data-testid="feedback-comment"]').element as HTMLInputElement).value,
+      ).toBe('答非所问')
     })
 
     it('提交过反馈时按钮回显选中态', async () => {
