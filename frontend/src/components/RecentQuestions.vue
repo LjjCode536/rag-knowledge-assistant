@@ -93,3 +93,69 @@ const recentLogs = computed(() => logsQuery.data.value?.items ?? [])
     </p>
   </aside>
 </template>
+
+<style scoped>
+/** 最近提问侧栏:窄屏下落到主列上方。 */
+.recent-questions {
+  flex: 0 0 240px;
+  max-width: 240px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  background-color: var(--el-bg-color);
+}
+
+.recent-questions__header {
+  margin-bottom: 8px;
+}
+
+.recent-questions__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-questions__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-questions__item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.recent-questions__item--current {
+  background-color: var(--el-color-primary-light-9);
+}
+
+.recent-questions__question {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-questions__meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+@media (width <= 900px) {
+  .recent-questions {
+    flex: 1 1 auto;
+    max-width: none;
+    width: 100%;
+  }
+}
+</style>

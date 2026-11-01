@@ -218,48 +218,62 @@ describe('组件行为', () => {
     })
 
     it('回答正文的编号角标可点击定位到对应引用', async () => {
-      vi.mocked(fetch).mockImplementation(async (input) => {
-        const url = String(input)
-        if (url.includes('/api/v1/chat')) {
+      const scrolled: string[] = []
+      // jsdom 没有 scrollIntoView:用替身记录"滚到了哪个元素"
+      const originalScroll = Element.prototype.scrollIntoView
+      Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+        scrolled.push(this.id)
+      }
+      try {
+        vi.mocked(fetch).mockImplementation(async (input) => {
+          const url = String(input)
+          if (url.includes('/api/v1/chat')) {
+            return new Response(
+              okEnvelope(
+                chatAnswer({
+                  query_id: 'qry-badge',
+                  answer: '入职满一年可以申请年假[1]。',
+                  citations: [
+                    {
+                      index: 1,
+                      chunk_id: 'chunk-1',
+                      document_id: 'doc-1',
+                      file_name: '员工手册.md',
+                      title: '休假制度',
+                      page_number: 3,
+                      score: 0.87,
+                    },
+                  ],
+                }),
+              ),
+              { status: 200 },
+            )
+          }
           return new Response(
-            okEnvelope(
-              chatAnswer({
-                query_id: 'qry-badge',
-                answer: '入职满一年可以申请年假[1]。',
-                citations: [
-                  {
-                    index: 1,
-                    chunk_id: 'chunk-1',
-                    document_id: 'doc-1',
-                    file_name: '员工手册.md',
-                    title: '休假制度',
-                    page_number: 3,
-                    score: 0.87,
-                  },
-                ],
-              }),
-            ),
+            okEnvelope({ total: 0, limit: 20, items: [] }),
             { status: 200 },
           )
-        }
-        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
-      })
+        })
 
-      const wrapper = mountView(ChatView)
-      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
-      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+        const wrapper = mountView(ChatView)
+        await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+        await wrapper.find('[data-testid="chat-submit"]').trigger('click')
 
-      // 正文里的编号被渲染成可点击角标(不再是纯文本 "[1]")
-      const badge = await waitForBadge(wrapper, '[data-testid="citation-badge-1"]')
-      expect(badge.text()).toBe('1')
+        // 正文里的编号被渲染成可点击角标(不再是纯文本 "[1]")
+        const badge = await waitForBadge(wrapper, '[data-testid="citation-badge-1"]')
+        expect(badge.text()).toBe('1')
 
-      // 点击角标 → 定位到下方对应的引用条目
-      await badge.trigger('click')
-      await vi.waitFor(() => {
-        const citation = wrapper.find('[data-testid="citation-1"]')
-        expect(citation.exists()).toBe(true)
-        expect(citation.attributes('data-highlighted')).toBe('true')
-      })
+        // 点击角标 → 定位到下方对应的引用条目(真的滚过去了)
+        await badge.trigger('click')
+        await vi.waitFor(() => {
+          const citation = wrapper.find('[data-testid="citation-1"]')
+          expect(citation.exists()).toBe(true)
+          expect(citation.attributes('data-highlighted')).toBe('true')
+        })
+        expect(scrolled).toContain('citation-1')
+      } finally {
+        Element.prototype.scrollIntoView = originalScroll
+      }
     })
 
     it('每条引用可展开查看切片原文', async () => {
@@ -612,6 +626,114 @@ describe('组件行为', () => {
       expect(
         (wrapper.find('[data-testid="feedback-comment"]').element as HTMLInputElement).value,
       ).toBe('答非所问')
+    })
+
+    it('回看历史提问时,引用的文档名按文档档案补上', async () => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes('/api/v1/query-logs/qry-hist')) {
+          return new Response(
+            okEnvelope({
+              query_id: 'qry-hist',
+              trace_id: 't-hist',
+              question: '报销流程是什么?',
+              answer: '差旅报销需要提交发票、行程单和审批记录。',
+              refused: false,
+              refusal_reason: null,
+              hits: [
+                {
+                  rank: 1,
+                  chunk_id: 'chunk-9',
+                  document_id: 'doc-9',
+                  title: '差旅制度',
+                  page_number: 5,
+                  score: 0.81,
+                  used: true,
+                },
+              ],
+              filters: {},
+              top_k: 5,
+              min_score: 0.35,
+              latency_ms: 88,
+              generator: 'rule_based',
+              token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+              rewritten_question: null,
+              expanded_questions: [],
+              created_at: '2026-10-31T09:00:00Z',
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/api/v1/query-logs')) {
+          return new Response(
+            okEnvelope({
+              total: 1,
+              limit: 20,
+              items: [
+                {
+                  query_id: 'qry-hist',
+                  trace_id: 't-hist',
+                  question: '报销流程是什么?',
+                  answer: '差旅报销需要提交发票、行程单和审批记录。',
+                  refused: false,
+                  refusal_reason: null,
+                  hits: [],
+                  filters: {},
+                  top_k: 5,
+                  min_score: 0.35,
+                  latency_ms: 88,
+                  generator: 'rule_based',
+                  token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                  rewritten_question: null,
+                  expanded_questions: [],
+                  created_at: '2026-10-31T09:00:00Z',
+                },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/api/v1/documents/doc-9')) {
+          return new Response(
+            okEnvelope({
+              id: 'doc-9',
+              file_name: '差旅报销制度.md',
+              file_type: 'md',
+              size_bytes: 100,
+              tenant: 'acme',
+              department: null,
+              doc_type: null,
+              version: 'v1',
+              status: 'indexed',
+              error_message: null,
+              is_latest: true,
+              page_count: 8,
+              element_count: 20,
+              chunk_count: 4,
+              created_at: '2026-10-31T08:00:00Z',
+              parsed_at: null,
+              chunked_at: null,
+              indexed_at: null,
+              failed_at: null,
+              superseded_at: null,
+              deleted_at: null,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="recent-questions"]').text()).toContain('报销流程是什么?')
+      })
+      await wrapper.find('[data-testid="recent-question-qry-hist"]').trigger('click')
+
+      // 查询日志的命中不带文档名 → 界面按文档档案补上
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="citation-1"]').text()).toContain('差旅报销制度.md')
+      })
     })
 
     it('提交过反馈时按钮回显选中态', async () => {

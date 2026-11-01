@@ -21,6 +21,8 @@ import ErrorDetails from '@/components/ErrorDetails.vue'
 import RecentQuestions from '@/components/RecentQuestions.vue'
 import { answerViewOfChat, answerViewOfQueryLog, type AnswerView } from '@/components/answerView'
 import { splitAnswerSegments } from '@/components/answerSegments'
+import { describeEffectiveFilters } from '@/components/filterDimensions'
+import { useFilterDimensions } from '@/composables/useFilterDimensions'
 import { useTenantStore } from '@/stores/tenant'
 
 const tenantStore = useTenantStore()
@@ -30,10 +32,9 @@ const question = ref('')
 /** top_k:检索返回的切片数上限。 */
 const topK = ref(5)
 /** 过滤维度:与后端 `ChunkFilter` 同名(部门 / 文档类型 / 版本 / 文档 id)。 */
-const department = ref('')
-const docType = ref('')
-const version = ref('')
-const documentId = ref('')
+const { dimensions, filters } = useFilterDimensions(() =>
+  tenantStore.filter ? { tenant: tenantStore.filter } : {},
+)
 /** 当前展示的回答(本次提问或回看历史,归一后的形状)。 */
 const answer = ref<AnswerView | null>(null)
 /** 假流式的已展示长度(打字机动画)。 */
@@ -108,13 +109,7 @@ const askMutation = useMutation({
   mutationFn: () =>
     ask(question.value.trim(), {
       top_k: topK.value,
-      filters: {
-        ...(tenantStore.filter ? { tenant: tenantStore.filter } : {}),
-        ...(department.value ? { department: department.value } : {}),
-        ...(docType.value ? { doc_type: docType.value } : {}),
-        ...(version.value ? { version: version.value } : {}),
-        ...(documentId.value ? { document_id: documentId.value } : {}),
-      },
+      filters: filters.value,
     }),
   onSuccess: (data) => {
     answer.value = answerViewOfChat(data)
@@ -203,14 +198,16 @@ const effectiveFilters = computed<Record<string, string>>(
   () => answer.value?.filters ?? {},
 )
 
-/** 生效口径的文案:过滤维度逐项列出,便于逐条核对。 */
-const effectiveFilterText = computed<string>(() => {
-  const entries = Object.entries(effectiveFilters.value)
-  if (entries.length === 0) {
-    return '无'
-  }
-  return entries.map(([key, value]) => `${key}=${value}`).join('，')
-})
+/**
+ * 生效口径的文案:过滤维度逐项列出,便于逐条核对。
+ *
+ * **用规范术语而不是后端字段名**:后端字段名是契约(如 `doc_type`),界面
+ * 文案要跟 `GLOSSARY.md` 的规范术语走(部门 / 文档类型 / 版本 / 文档名 /
+ * 租户)—— 用户读的是术语,不是字段名。
+ */
+const effectiveFilterText = computed<string>(() =>
+  describeEffectiveFilters(effectiveFilters.value),
+)
 
 /** 本次回答实际给出的引用编号(角标只指向这些编号)。 */
 const citationIndexes = computed<ReadonlySet<number>>(
@@ -225,9 +222,18 @@ const answerSegments = computed(() =>
 /** 当前高亮的引用编号:点击正文角标后定位到的引用条目。 */
 const highlightedCitation = ref<number | null>(null)
 
-/** 点击正文里的编号角标:定位到下方对应的引用条目。 */
+/**
+ * 点击正文里的编号角标:定位到下方对应的引用条目。
+ *
+ * **定位 = 滚动到该条目并高亮**:只改个颜色不够 —— 引用列表可能很长,
+ * 目标条目在屏幕外,用户点了角标却看不到自己点的是哪一条。故这里真的把
+ * 元素滚进视野,再高亮它。
+ */
 function onCitationBadgeClick(index: number): void {
   highlightedCitation.value = index
+  const target = document.getElementById(`citation-${index}`)
+  // `scrollIntoView` 在个别环境(jsdom)不存在 —— 定位不到也不该让点击崩掉
+  target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
 }
 
 /** 当前回答的反馈状态(打开一次问答时按 query_id 查既有反馈)。 */
@@ -264,8 +270,10 @@ const feedbackMutation = useMutation({
     if (!answer.value) {
       throw new Error('没有可反馈的回答')
     }
-    // 说明随判定一起提交(后端对同一问答按覆盖式处理)
-    const comment = feedbackComment.value.trim()
+    // 说明只随「无用」提交:规格里的一句话说明是给差评用的 ——「有用」
+    // 没什么要解释的(若用户填了,提交「有用」时不带上它,免得把一段
+    // 抱怨挂在"有用"上)。
+    const comment = verdict === 'useless' ? feedbackComment.value.trim() : ''
     return submitFeedback(
       answer.value.query_id,
       verdict,
@@ -373,28 +381,28 @@ onBeforeUnmount(stopTyping)
           <el-form-item label="过滤维度">
             <div style="display: flex; gap: 8px; flex-wrap: wrap">
               <el-input
-                v-model="department"
+                v-model="dimensions.department"
                 size="small"
                 placeholder="部门"
                 style="max-width: 130px"
                 data-testid="chat-filter-department"
               />
               <el-input
-                v-model="docType"
+                v-model="dimensions.docType"
                 size="small"
                 placeholder="文档类型"
                 style="max-width: 130px"
                 data-testid="chat-filter-doc-type"
               />
               <el-input
-                v-model="version"
+                v-model="dimensions.version"
                 size="small"
                 placeholder="版本"
                 style="max-width: 110px"
                 data-testid="chat-filter-version"
               />
               <el-input
-                v-model="documentId"
+                v-model="dimensions.documentId"
                 size="small"
                 placeholder="文档 id"
                 style="max-width: 200px"
@@ -525,7 +533,9 @@ onBeforeUnmount(stopTyping)
               #{{ hit.rank }} 分数 {{ hit.score }} ·
               {{ hit.used ? '进入证据' : '未进入证据' }}
               <span v-if="hit.title"> · {{ hit.title }}</span>
-              <span v-if="hit.page_number"> · 第 {{ hit.page_number }} 页</span>
+              <span v-if="hit.page_number !== null && hit.page_number !== undefined">
+                · 第 {{ hit.page_number }} 页
+              </span>
             </div>
           </div>
         </template>
@@ -551,7 +561,7 @@ onBeforeUnmount(stopTyping)
           <el-input
             v-model="feedbackComment"
             size="small"
-            placeholder="一句话说明(可选,最多 200 字)"
+            placeholder="「无用」可附一句话说明(可选,最多 200 字)"
             :maxlength="FEEDBACK_COMMENT_MAX"
             show-word-limit
             style="max-width: 320px"
@@ -570,3 +580,52 @@ onBeforeUnmount(stopTyping)
     </div>
   </div>
 </template>
+
+<style scoped>
+/** 问答页布局:左侧最近提问,右侧提问与回答。 */
+.chat-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.chat-layout__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/**
+ * 回答正文里的引用角标:小号上标按钮,点击定位到下方对应的引用条目。
+ *
+ * 用 `<button>` 而非 `<span>`:角标是**可交互的**(点击要定位),键盘可达
+ * 是它作为交互控件的基本要求。
+ */
+.citation-badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin: 0 2px;
+  border: 1px solid var(--el-color-primary-light-7);
+  border-radius: 8px;
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+  vertical-align: super;
+  cursor: pointer;
+}
+
+.citation-badge:hover,
+.citation-badge:focus-visible {
+  background-color: var(--el-color-primary-light-7);
+}
+
+/** 窄屏下侧栏落到主列上方。 */
+@media (width <= 900px) {
+  .chat-layout {
+    flex-direction: column;
+  }
+}
+</style>

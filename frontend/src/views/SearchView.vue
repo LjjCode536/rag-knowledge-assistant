@@ -10,6 +10,8 @@ import { computed, ref } from 'vue'
 
 import { search } from '@/api'
 import ErrorDetails from '@/components/ErrorDetails.vue'
+import { describeEffectiveFilters } from '@/components/filterDimensions'
+import { useFilterDimensions } from '@/composables/useFilterDimensions'
 import { useTenantStore } from '@/stores/tenant'
 import type { SearchHit } from '@/types/qa'
 
@@ -17,27 +19,24 @@ const tenantStore = useTenantStore()
 
 const query = ref('')
 const topK = ref(5)
-const department = ref('')
-const docType = ref('')
-const version = ref('')
-const documentId = ref('')
+/** 过滤维度:部门 / 文档类型 / 版本 / 文档 id(与问答页同一套口径)。 */
+const { dimensions, filters } = useFilterDimensions(() =>
+  tenantStore.filter ? { tenant: tenantStore.filter } : {},
+)
 
 const searchMutation = useMutation({
   mutationFn: () =>
     search(query.value.trim(), {
       top_k: topK.value,
-      filters: {
-        ...(tenantStore.filter ? { tenant: tenantStore.filter } : {}),
-        ...(department.value ? { department: department.value } : {}),
-        ...(docType.value ? { doc_type: docType.value } : {}),
-        ...(version.value ? { version: version.value } : {}),
-        ...(documentId.value ? { document_id: documentId.value } : {}),
-      },
+      filters: filters.value,
     }),
 })
 
 const hits = computed(() => searchMutation.data.value?.hits ?? [])
 const effectiveFilters = computed(() => searchMutation.data.value?.filters ?? {})
+
+/** 生效过滤维度的文案:用规范术语而不是后端字段名。 */
+const effectiveFilterText = computed<string>(() => describeEffectiveFilters(effectiveFilters.value))
 
 /** 表格行类型:模板插槽里不便写类型标注,在此声明一次。 */
 type HitRow = SearchHit
@@ -74,25 +73,25 @@ type HitRow = SearchHit
         <el-form-item label="过滤维度">
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             <el-input
-              v-model="department"
+              v-model="dimensions.department"
               size="small"
               placeholder="部门"
               style="max-width: 130px"
             />
             <el-input
-              v-model="docType"
+              v-model="dimensions.docType"
               size="small"
               placeholder="文档类型"
               style="max-width: 130px"
             />
             <el-input
-              v-model="version"
+              v-model="dimensions.version"
               size="small"
               placeholder="版本"
               style="max-width: 110px"
             />
             <el-input
-              v-model="documentId"
+              v-model="dimensions.documentId"
               size="small"
               placeholder="文档 id"
               style="max-width: 200px"
@@ -130,7 +129,7 @@ type HitRow = SearchHit
           <strong>命中</strong>
           <span class="page-hint">
             共 {{ searchMutation.data.value.total }} 条 · 生效过滤:
-            {{ Object.keys(effectiveFilters).length ? JSON.stringify(effectiveFilters) : '无' }}
+            {{ Object.keys(effectiveFilters).length ? effectiveFilterText : '无' }}
           </span>
         </div>
       </template>
