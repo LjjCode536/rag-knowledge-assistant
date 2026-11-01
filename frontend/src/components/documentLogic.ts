@@ -44,7 +44,7 @@ export function isSupportedExtension(fileName: string): boolean {
 export type StatusTagType = 'success' | 'warning' | 'info' | 'danger'
 
 /** 状态 → 规范术语标签。 */
-const STATUS_LABELS: Record<DocumentStatus, string> = {
+export const STATUS_LABELS: Record<DocumentStatus, string> = {
   uploaded: '已登记',
   parsing: '解析中',
   parsed: '已解析',

@@ -115,17 +115,23 @@ function stubDocuments(routes: {
   document?: unknown
   chunks?: unknown
   elements?: unknown
+  /** 上传端点的响应(任务句柄)。 */
+  upload?: unknown
   listStatus?: number
   documentStatus?: number
   error?: { code: string; message: string }
 }): void {
-  vi.mocked(fetch).mockImplementation(async (input) => {
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
     const url = String(input)
     if (routes.error) {
       return new Response(
         errorEnvelope(routes.error.code, routes.error.message),
         { status: 500 },
       )
+    }
+    // 上传:POST /api/v1/documents(不带路径参数)返回任务句柄
+    if (init?.method === 'POST' && url === '/api/v1/documents') {
+      return new Response(okEnvelope(routes.upload ?? documentView()), { status: 201 })
     }
     if (url.includes('/elements')) {
       return new Response(
@@ -296,6 +302,25 @@ describe('知识库文档页组件行为', () => {
         expect(wrapper.find('[data-testid="error-code"]').exists()).toBe(true)
       })
       expect(wrapper.find('[data-testid="error-code"]').text()).toBe('UNSUPPORTED_FORMAT')
+    })
+
+    it('上传后打开详情看得到入库进度', async () => {
+      stubDocuments({
+        document: documentView({ id: 'doc-new', status: 'uploaded', indexed_at: null }),
+      })
+      const wrapper = mountView(DocumentsView)
+      await waitForList(wrapper)
+
+      await pickFile(wrapper, makeFile('manual.txt'))
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-upload"]').attributes('disabled')).toBeUndefined()
+      })
+      await wrapper.find('[data-testid="documents-upload"]').trigger('click')
+
+      // 上传后抽屉自动打开,入库进度就在里面 —— "看得到它进去了"
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-progress"]').exists()).toBe(true)
+      })
     })
   })
 
@@ -504,6 +529,77 @@ describe('知识库文档页组件行为', () => {
         .mock.calls.find(([url, init]) => String(url) === '/api/v1/documents' && init?.method === 'POST')?.[1]
         ?.body as FormData
       expect((form.get('file') as File).name).toBe('坏资料.txt')
+    })
+
+    it('重新上传带上失败档案自己的租户与元数据(同标识重试语义)', async () => {
+      // 后端的文档身份是 (租户, 文件名):租户错了就不是同标识,
+      // 重试会落到另一份档案上,原来那份既没被退位也没被重试。
+      stubDocuments({
+        list: {
+          total: 1,
+          limit: 20,
+          offset: 0,
+          items: [
+            documentView({
+              id: 'doc-bad',
+              file_name: '坏资料.txt',
+              file_type: 'txt',
+              status: 'failed',
+              error_message: '解析失败:文档编码不支持',
+              tenant: 'acme',
+              department: 'HR',
+              doc_type: '制度',
+              version: 'v3',
+            }),
+          ],
+        },
+        document: documentView({
+          id: 'doc-bad',
+          file_name: '坏资料.txt',
+          file_type: 'txt',
+          status: 'failed',
+          error_message: '解析失败:文档编码不支持',
+          tenant: 'acme',
+          department: 'HR',
+          doc_type: '制度',
+          version: 'v3',
+        }),
+      })
+      const wrapper = mountView(DocumentsView)
+      await waitForList(wrapper)
+
+      await wrapper.find('[data-testid="documents-detail-doc-bad"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-reupload"]').exists()).toBe(true)
+      })
+
+      const reuploadInput = wrapper.findAll('input[type="file"]')[1]
+      Object.defineProperty(reuploadInput.element, 'files', {
+        value: [makeFile('坏资料.txt')],
+        configurable: true,
+      })
+      await reuploadInput.trigger('change')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-reupload"]').attributes('disabled')).toBeUndefined()
+      })
+
+      await wrapper.find('[data-testid="documents-reupload"]').trigger('click')
+
+      await vi.waitFor(() => {
+        const calls = vi
+          .mocked(fetch)
+          .mock.calls.filter(([url, init]) => String(url) === '/api/v1/documents' && init?.method === 'POST')
+        expect(calls.length).toBeGreaterThan(0)
+      })
+      const form = vi
+        .mocked(fetch)
+        .mock.calls.find(([url, init]) => String(url) === '/api/v1/documents' && init?.method === 'POST')?.[1]
+        ?.body as FormData
+      // 租户 / 部门 / 文档类型 / 版本都取失败档案自己的,不是上传表单的值
+      expect(form.get('tenant')).toBe('acme')
+      expect(form.get('department')).toBe('HR')
+      expect(form.get('doc_type')).toBe('制度')
+      expect(form.get('version')).toBe('v3')
     })
 
     it('文档停在已切片时提供重试向量化入口', async () => {

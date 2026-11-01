@@ -1,16 +1,15 @@
 <script setup lang="ts">
 /**
- * 知识库文档页:上传 + 入库进度 + 文档清单 + 详情抽屉。
+ * 知识库文档页:上传 + 入库进度 + 文档清单。
+ *
+ * **详情抽屉独立成组件**(`components/DocumentDetailDrawer.vue`):抽屉关心的是
+ * "这一份文档怎么样"(进度 / 时间线 / 切片 / 解析元素 / 恢复),本页关心的是
+ * "有哪些文档"(筛选 / 分页 / 删除)。合在一起就是一个什么都要改的大文件。
  *
  * 已知契约陷阱(ADR-0015):
  * - **上传响应是任务句柄**:status 恒为 `uploaded`,入库进度须轮询档案查询;
  * - **切片失败不返回错误码**:入库失败在响应体里(`status == "failed"` +
- *   `error_message`),界面必须检查文档状态而非只看响应码;
- * - **重试语义分两路**:解析 / 切片失败落 `failed`(终态),只能重新上传;
- *   向量化失败停 `chunked`,可单独重试向量化,不必重传整份知识库文档。
- *
- * **不画百分比进度条**:入库进度按状态机推进,状态机有分支(失败)与重试点
- * (重试向量化),编造百分比是撒谎。界面按"当前所在的那一段"呈现。
+ *   `error_message`),界面必须检查文档状态而非只看响应码。
  *
  * 术语遵循 `GLOSSARY.md`:知识库文档 / 入库进度 / 切片 / 解析元素;
  * 不用 `_Avoid_` 清单里的同义词(文件 / 片段 / 上传进度)。
@@ -18,35 +17,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 
-import {
-  deleteDocument,
-  getDocument,
-  getDocumentElements,
-  listChunks,
-  listDocuments,
-  retryEmbedding,
-  uploadDocument,
-} from '@/api'
+import { deleteDocument, listDocuments, uploadDocument } from '@/api'
+import DocumentDetailDrawer from '@/components/DocumentDetailDrawer.vue'
 import ErrorDetails from '@/components/ErrorDetails.vue'
 import {
+  STATUS_LABELS,
   SUPPORTED_EXTENSIONS,
-  buildTimeline,
-  elementTypeLabel,
   extensionOf,
-  groupElementsByType,
   isSupportedExtension,
-  progressSteps,
   statusLabel,
   statusTagType,
 } from '@/components/documentLogic'
+import { useDebounced } from '@/composables/useDebounced'
 import { useTenantStore } from '@/stores/tenant'
 import type { DocumentStatus, DocumentView } from '@/types/documents'
 
 const tenantStore = useTenantStore()
 const queryClient = useQueryClient()
 
-/** 列表筛选条件。 */
-const keyword = ref('')
+/** 关键字输入框的值(用户即时输入)。 */
+const keywordInput = ref('')
+/** 已防抖的关键字:停顿后才拿去查,避免每敲一个字打一次后端。 */
+const keyword = useDebounced(keywordInput)
 const statusFilter = ref<DocumentStatus | ''>('')
 const includeHistory = ref(false)
 const page = ref(1)
@@ -84,42 +76,6 @@ const listQuery = useQuery({
 const documents = computed(() => listQuery.data.value?.items ?? [])
 const total = computed(() => listQuery.data.value?.total ?? 0)
 
-/** 详情抽屉的数据:按 id 查询单份档案。 */
-const detailQuery = useQuery({
-  queryKey: computed(() => ['document', detailId.value] as const),
-  queryFn: () => getDocument(detailId.value!),
-  enabled: computed(() => Boolean(detailId.value)),
-  // 详情抽屉开着时持续轮询,以便看到入库进度推进
-  refetchInterval: computed(() => (detailId.value ? 2000 : false)),
-})
-
-/** 切片预览:抽屉打开且文档已切片时取全量切片。 */
-const chunksQuery = useQuery({
-  queryKey: computed(() => ['document', detailId.value, 'chunks'] as const),
-  queryFn: () => listChunks(detailId.value!),
-  enabled: computed(() => Boolean(detailId.value)),
-})
-
-/** 解析元素:抽屉打开时取结构化解析产物。 */
-const elementsQuery = useQuery({
-  queryKey: computed(() => ['document', detailId.value, 'elements'] as const),
-  queryFn: () => getDocumentElements(detailId.value!),
-  enabled: computed(() => Boolean(detailId.value)),
-})
-
-/** 解析元素按类型折叠分组。 */
-const elementGroups = computed(() => groupElementsByType(elementsQuery.data.value?.elements ?? []))
-
-/** 当前档案的入库进度段。 */
-const progress = computed(() =>
-  detailQuery.data.value ? progressSteps(detailQuery.data.value.status) : [],
-)
-
-/** 当前档案的生命周期时间线。 */
-const timeline = computed(() =>
-  detailQuery.data.value ? buildTimeline(detailQuery.data.value) : [],
-)
-
 /** 上传表单。 */
 const uploadFile = ref<File | null>(null)
 const uploadDepartment = ref('')
@@ -148,56 +104,6 @@ const extensionError = computed<string>(() => {
   return `不支持的知识库文档格式:.${suffix || '(无扩展名)'};支持的格式:txt / md / html / docx / pdf`
 })
 
-/**
- * 重新上传:后端定义的同标识重试语义(同租户 + 同文档名 → 旧版本退位)。
- *
- * **失败原因在后端,重传内容在用户手上**:后端没有"取回原始文档"的端点,
- * 所以重新上传必须由用户重新挑一次同一份知识库文档 —— 界面据此在失败
- * 区块里放一个文件选择入口,而不是假设浏览器还留着上次的文件。
- */
-const reuploadFile = ref<File | null>(null)
-
-/** 重新上传的目标档案 id。 */
-const reuploadTargetId = ref<string | null>(null)
-
-/** 重新上传所选文件的扩展名是否受支持。 */
-const reuploadExtensionError = computed<string>(() => {
-  const file = reuploadFile.value
-  if (!file || isSupportedExtension(file.name)) {
-    return ''
-  }
-  return `不支持的知识库文档格式:.${extensionOf(file.name) || '(无扩展名)'}`
-})
-
-const reuploadMutation = useMutation({
-  mutationFn: (file: File) =>
-    uploadDocument(file, {
-      tenant: tenantStore.filter ?? 'default',
-      department: uploadDepartment.value || undefined,
-      doc_type: uploadDocType.value || undefined,
-      version: uploadVersion.value || undefined,
-    }),
-  onSuccess: () => {
-    reuploadFile.value = null
-    void queryClient.invalidateQueries({ queryKey: ['documents'] })
-    void queryClient.invalidateQueries({ queryKey: ['document', reuploadTargetId.value] })
-  },
-})
-
-/** 重新上传:用户挑好同一份知识库文档后提交。 */
-function onReupload(): void {
-  const file = reuploadFile.value
-  if (!file || reuploadExtensionError.value) {
-    return
-  }
-  reuploadMutation.mutate(file)
-}
-
-/** 重新上传时挑文件:同样在**选中时**校验扩展名。 */
-function onReuploadPicked(file: File | null): void {
-  reuploadFile.value = file
-}
-
 const uploadMutation = useMutation({
   mutationFn: (file: File) =>
     uploadDocument(file, {
@@ -206,7 +112,9 @@ const uploadMutation = useMutation({
       doc_type: uploadDocType.value || undefined,
       version: uploadVersion.value || undefined,
     }),
-  onSuccess: () => {
+  onSuccess: (uploaded) => {
+    // 上传后立刻把抽屉指向新档案:入库进度在这里看得到
+    detailId.value = uploaded.id
     void queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
 })
@@ -252,13 +160,20 @@ const deleteMutation = useMutation({
   mutationFn: (documentId: string) => deleteDocument(documentId),
   onSuccess: () => {
     void queryClient.invalidateQueries({ queryKey: ['documents'] })
+    void queryClient.invalidateQueries({ queryKey: ['document'] })
   },
 })
 
 /** 等待确认删除的文档 id(非空即表示确认框已弹出)。 */
 const deleteTarget = ref<string | null>(null)
 
-/** 待删除文档的档案(确认框里要说清会连带清掉什么)。 */
+/**
+ * 待删除文档的档案(确认框里要说清会连带清掉什么)。
+ *
+ * 抽屉里的删除入口可能指向**不在当前页**的文档(翻过页、或清单只列了
+ * 现行版本),所以清单里找不到时回退到抽屉正在看的那份 —— 否则确认框会说
+ * "该知识库文档",没告诉用户删的是哪一份。
+ */
 const deleteTargetDocument = computed<DocumentView | null>(
   () => documents.value.find((item) => item.id === deleteTarget.value) ?? null,
 )
@@ -271,77 +186,35 @@ function onCancelDelete(): void {
   deleteTarget.value = null
 }
 
-/** 确认删除:删除是幂等的,重复删除不报错。 */
+/**
+ * 确认删除:删除是幂等的,重复删除不报错。
+ *
+ * 失败时**不关确认框** —— 清理失败(`DOCUMENT_DELETE_FAILED`)是可重试的,
+ * 把错误露出来让用户看见,而不是让文档"人间蒸发"。
+ */
 function onConfirmDelete(): void {
   const id = deleteTarget.value
   if (!id) {
     return
   }
-  deleteMutation.mutate(id)
-  deleteTarget.value = null
+  deleteMutation.mutate(id, {
+    onSuccess: () => {
+      deleteTarget.value = null
+    },
+  })
 }
 
-/** 重试向量化:文档停在 `chunked` 时可单独重试,不必重传整份知识库文档。 */
-const embedMutation = useMutation({
-  mutationFn: (documentId: string) => retryEmbedding(documentId),
-  onSuccess: () => {
-    void queryClient.invalidateQueries({ queryKey: ['document', detailId.value] })
-    void queryClient.invalidateQueries({ queryKey: ['documents'] })
-  },
-})
-
-/** 状态筛选下拉的选项:用状态标签的规范术语做文案。 */
+/** 状态筛选下拉的选项:用状态标签的规范术语做文案(标签表收在 documentLogic)。 */
 const statusOptions = computed(() =>
-  (Object.keys(statusLabels) as DocumentStatus[]).map((value) => ({
+  (Object.keys(STATUS_LABELS) as DocumentStatus[]).map((value) => ({
     value,
-    label: statusLabels[value],
+    label: STATUS_LABELS[value],
   })),
 )
-
-/** 状态标签的呈现:状态 → 标签类型。 */
-const statusLabels: Record<DocumentStatus, string> = {
-  uploaded: '已登记',
-  parsing: '解析中',
-  parsed: '已解析',
-  chunking: '切片中',
-  chunked: '已切片',
-  embedding: '向量化中',
-  indexed: '已入库',
-  failed: '失败',
-  superseded: '已退位',
-  deleted: '已删除',
-}
-
-/** 字节数的可读呈现。 */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 /** 时刻的可读呈现。 */
 function formatTime(value: string): string {
   return new Date(value).toLocaleString()
-}
-
-/** 文档标识是否已复制到剪贴板。 */
-const idCopied = ref(false)
-
-/** 复制文档标识(剪贴板不可用时用户仍可手动选中)。 */
-async function copyDocumentId(id: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(id)
-    idCopied.value = true
-    window.setTimeout(() => {
-      idCopied.value = false
-    }, 1500)
-  } catch {
-    idCopied.value = false
-  }
 }
 </script>
 
@@ -473,10 +346,6 @@ async function copyDocumentId(id: string): Promise<void> {
       v-if="uploadMutation.isError.value"
       :error="uploadMutation.error.value"
     />
-    <ErrorDetails
-      v-if="reuploadMutation.isError.value"
-      :error="reuploadMutation.error.value"
-    />
 
     <el-card
       class="page-section"
@@ -487,7 +356,7 @@ async function copyDocumentId(id: string): Promise<void> {
       </template>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px">
         <el-input
-          v-model="keyword"
+          v-model="keywordInput"
           size="small"
           placeholder="文档名关键字"
           style="max-width: 200px"
@@ -509,6 +378,18 @@ async function copyDocumentId(id: string): Promise<void> {
             :value="option.value"
           />
         </el-select>
+        <!--
+          租户筛选用**全局租户选择器**的值(不另设一个):后端当前没有用户、
+          会话与鉴权,租户只是一个筛选维度(ADR-0015)。另设一个输入框会
+          造出"两套租户真相"。
+        -->
+        <el-tag
+          size="small"
+          type="info"
+          data-testid="documents-tenant-filter"
+        >
+          租户:{{ tenantStore.currentLabel }}
+        </el-tag>
         <el-checkbox
           v-model="includeHistory"
           data-testid="documents-include-history"
@@ -606,6 +487,7 @@ async function copyDocumentId(id: string): Promise<void> {
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         style="margin-top: 12px"
+        @size-change="page = 1"
       />
     </el-card>
 
@@ -620,6 +502,10 @@ async function copyDocumentId(id: string): Promise<void> {
         <strong>全部切片与向量</strong>,文档档案保留在「已删除」终态可供审计。
         删除是幂等的,重复删除不报错。
       </p>
+      <ErrorDetails
+        v-if="deleteMutation.isError.value"
+        :error="deleteMutation.error.value"
+      />
       <template #footer>
         <el-button
           @click="onCancelDelete"
@@ -636,291 +522,18 @@ async function copyDocumentId(id: string): Promise<void> {
       </template>
     </el-dialog>
 
-    <el-drawer
-      :model-value="Boolean(detailId)"
-      title="知识库文档详情"
-      size="560px"
+    <DocumentDetailDrawer
+      :document-id="detailId"
       @close="detailId = null"
+      @reuploaded="detailId = $event"
     >
-      <template v-if="detailQuery.data.value">
-        <!-- 概览:格式 / 大小 / 部门 / 文档类型 / 版本 / 页数 / 元素数 / 切片数 -->
-        <el-descriptions
-          :column="1"
-          border
-          data-testid="documents-overview"
-        >
-          <el-descriptions-item label="文档名">
-            {{ detailQuery.data.value.file_name }}
-          </el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag
-              :type="statusTagType(detailQuery.data.value.status)"
-              size="small"
-            >
-              {{ statusLabel(detailQuery.data.value.status) }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="格式">
-            {{ detailQuery.data.value.file_type }}
-          </el-descriptions-item>
-          <el-descriptions-item label="大小">
-            {{ formatSize(detailQuery.data.value.size_bytes) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="部门">
-            {{ detailQuery.data.value.department ?? '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="文档类型">
-            {{ detailQuery.data.value.doc_type ?? '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="版本">
-            {{ detailQuery.data.value.version }}
-          </el-descriptions-item>
-          <el-descriptions-item label="页数">
-            {{ detailQuery.data.value.page_count ?? '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="元素数">
-            {{ detailQuery.data.value.element_count ?? '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="切片数">
-            {{ detailQuery.data.value.chunk_count ?? '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="租户">
-            {{ detailQuery.data.value.tenant }}
-          </el-descriptions-item>
-          <el-descriptions-item label="文档标识">
-            <span
-              class="trace-id"
-              data-testid="documents-copy-id"
-            >{{ detailQuery.data.value.id }}</span>
-            <el-button
-              size="small"
-              text
-              type="primary"
-              style="margin-left: 8px"
-              @click="copyDocumentId(detailQuery.data.value.id)"
-            >
-              {{ idCopied ? '已复制' : '复制' }}
-            </el-button>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <!-- 入库进度:按状态机呈现当前所在的那一段,不画百分比进度条 -->
-        <el-divider content-position="left">
-          入库进度
-        </el-divider>
-        <div
-          v-if="progress.length > 0"
-          class="progress-track"
-          data-testid="documents-progress"
-        >
-          <div
-            v-for="step in progress"
-            :key="step.key"
-            class="progress-step"
-            :class="`progress-step--${step.state}`"
-            :data-testid="`documents-progress-${step.key}`"
-          >
-            <span class="progress-step__dot" />
-            <span class="progress-step__label">{{ step.label }}</span>
-          </div>
-        </div>
-        <p
-          v-else
-          class="page-hint"
-          data-testid="documents-progress"
-        >
-          {{ statusLabel(detailQuery.data.value.status) }}
-        </p>
-
-        <!-- 失败可恢复 -->
-        <div
-          v-if="detailQuery.data.value.status === 'failed'"
-          class="failure-box"
-        >
-          <p
-            class="page-hint"
-            style="color: var(--el-color-danger)"
-            data-testid="documents-error-reason"
-          >
-            失败原因:{{ detailQuery.data.value.error_message ?? '未提供失败原因' }}
-          </p>
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-            <el-upload
-              :auto-upload="false"
-              :limit="1"
-              :show-file-list="false"
-              :accept="SUPPORTED_EXTENSIONS.map((ext) => `.${ext}`).join(',')"
-              data-testid="documents-reupload-input"
-              @change="onReuploadPicked($event.raw ?? null)"
-            >
-              <el-button
-                size="small"
-                plain
-              >
-                选择同一份知识库文档
-              </el-button>
-            </el-upload>
-            <el-button
-              type="primary"
-              size="small"
-              :loading="reuploadMutation.isPending.value"
-              :disabled="!reuploadFile || Boolean(reuploadExtensionError)"
-              data-testid="documents-reupload"
-              @click="onReupload"
-            >
-              重新上传
-            </el-button>
-            <span
-              class="page-hint"
-            >
-              重新上传即后端定义的同标识重试语义(同租户 + 同文档名,旧版本退位)
-            </span>
-          </div>
-          <p
-            v-if="reuploadFile"
-            class="page-hint"
-            style="margin-top: 4px"
-          >
-            已选择:{{ reuploadFile.name }}
-          </p>
-          <p
-            v-if="reuploadExtensionError"
-            class="page-hint"
-            style="color: var(--el-color-danger)"
-            data-testid="documents-reupload-extension-error"
-          >
-            {{ reuploadExtensionError }}
-          </p>
-        </div>
-
-        <!--
-          停在 chunked 的文档:上游向量化失败后停在这里,可单独重试,
-          不必重传整份知识库文档(后端的向量化端点)。
-        -->
-        <div
-          v-if="detailQuery.data.value.status === 'chunked'"
-          style="margin-top: 12px"
-        >
-          <el-button
-            type="primary"
-            :loading="embedMutation.isPending.value"
-            data-testid="documents-retry-embedding"
-            @click="embedMutation.mutate(detailQuery.data.value.id)"
-          >
-            重试向量化
-          </el-button>
-          <span
-            class="page-hint"
-            style="margin-left: 8px"
-          >
-            上次向量化未完成,文档已切片,重试即可入库
-          </span>
-        </div>
-        <ErrorDetails
-          v-if="embedMutation.isError.value"
-          :error="embedMutation.error.value"
-        />
-
-        <!-- 时间线:创建 / 解析 / 切片 / 索引 / 失败 / 退位 / 删除 -->
-        <el-divider content-position="left">
-          时间线
-        </el-divider>
-        <ul
-          class="timeline"
-          data-testid="documents-timeline"
-        >
-          <li
-            v-for="entry in timeline"
-            :key="entry.key"
-            class="timeline__entry"
-            :data-testid="`documents-timeline-${entry.key}`"
-          >
-            <span class="timeline__label">{{ entry.label }}</span>
-            <span class="timeline__time">{{ formatTime(entry.at) }}</span>
-          </li>
-          <li
-            v-if="timeline.length === 0"
-            class="timeline__entry"
-          >
-            暂无时间线
-          </li>
-        </ul>
-
-        <!-- 切片预览:确认切分粒度是否符合预期 -->
-        <el-divider content-position="left">
-          切片预览
-        </el-divider>
-        <div
-          v-if="chunksQuery.data.value && chunksQuery.data.value.chunks.length > 0"
-          data-testid="documents-chunks"
-        >
-          <el-collapse>
-            <el-collapse-item
-              v-for="chunk in chunksQuery.data.value.chunks"
-              :key="chunk.chunk_id"
-              :title="`#${chunk.index}${chunk.title ? ` · ${chunk.title}` : ''}${chunk.page_number ? ` · 第 ${chunk.page_number} 页` : ''}`"
-            >
-              <pre
-                style="white-space: pre-wrap; margin: 0; font-size: 13px"
-              >{{ chunk.content }}</pre>
-            </el-collapse-item>
-          </el-collapse>
-        </div>
-        <p
-          v-else
-          class="page-hint"
-          data-testid="documents-chunks"
-        >
-          暂无切片
-        </p>
-
-        <!-- 解析元素:按类型折叠分组 -->
-        <el-divider content-position="left">
-          解析元素
-        </el-divider>
-        <div
-          v-if="elementGroups.length > 0"
-          data-testid="documents-elements"
-        >
-          <el-collapse>
-            <el-collapse-item
-              v-for="group in elementGroups"
-              :key="group.type"
-              :name="group.type"
-              :title="`${elementTypeLabel(group.type)}(${group.elements.length})`"
-            >
-              <div
-                v-for="element in group.elements"
-                :key="element.order_index"
-                class="element-row"
-              >
-                <span class="element-row__meta">
-                  #{{ element.order_index }}{{ element.page_number ? ` · 第 ${element.page_number} 页` : '' }}
-                </span>
-                <pre
-                  style="white-space: pre-wrap; margin: 0; font-size: 13px"
-                >{{ element.content }}</pre>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
-        </div>
-        <p
-          v-else
-          class="page-hint"
-          data-testid="documents-elements"
-        >
-          暂无解析元素
-        </p>
-
-        <!-- 操作 -->
-        <el-divider content-position="left">
-          操作
-        </el-divider>
+      <template #actions>
         <el-button
           type="danger"
           plain
           data-testid="documents-delete-in-drawer"
-          @click="onAskDelete(detailQuery.data.value.id)"
+          :disabled="!detailId"
+          @click="onAskDelete(detailId!)"
         >
           删除该知识库文档
         </el-button>
@@ -931,11 +544,7 @@ async function copyDocumentId(id: string): Promise<void> {
           删除会连带清理该文档的全部切片与向量
         </span>
       </template>
-      <ErrorDetails
-        v-if="detailQuery.isError.value"
-        :error="detailQuery.error.value"
-      />
-    </el-drawer>
+    </DocumentDetailDrawer>
   </div>
 </template>
 
@@ -957,96 +566,5 @@ async function copyDocumentId(id: string): Promise<void> {
 .upload-dropzone__hint {
   margin: 0 0 6px;
   font-size: 14px;
-}
-
-/**
- * 入库进度的状态机轨道。
- *
- * **刻意不用 el-progress**:状态机有分支与重试点,百分比是编造的。
- */
-.progress-track {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-}
-
-.progress-step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.progress-step__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--el-border-color);
-}
-
-.progress-step--done {
-  color: var(--el-text-color-primary);
-}
-
-.progress-step--done .progress-step__dot {
-  background-color: var(--el-color-success);
-}
-
-.progress-step--current {
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.progress-step--current .progress-step__dot {
-  background-color: var(--el-color-primary);
-}
-
-.progress-step--failed {
-  color: var(--el-color-danger);
-  font-weight: 600;
-}
-
-.progress-step--failed .progress-step__dot {
-  background-color: var(--el-color-danger);
-}
-
-/** 失败原因与恢复入口。 */
-.failure-box {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--el-color-danger-light-7);
-  border-radius: 4px;
-  background-color: var(--el-color-danger-light-9);
-}
-
-/** 生命周期时间线。 */
-.timeline {
-  margin: 0;
-  padding-left: 16px;
-  list-style: none;
-}
-
-.timeline__entry {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  padding: 3px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.timeline__time {
-  color: var(--el-text-color-secondary);
-}
-
-/** 解析元素条目。 */
-.element-row {
-  padding: 4px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.element-row__meta {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
 }
 </style>
