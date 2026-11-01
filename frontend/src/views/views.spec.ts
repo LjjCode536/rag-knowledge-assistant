@@ -333,12 +333,19 @@ describe('组件行为', () => {
       })
     })
 
-    it('回答以逐字显现呈现且总时长与后端真实耗时一致', async () => {
+    it('回答以逐字显现呈现;动画补足到总时长 = 后端真实耗时', async () => {
       vi.useFakeTimers()
       try {
+        // 后端真实耗时 1000 ms;请求在**发起后 600 ms** 才返回(真实上游的常态)
+        let responded = false
         vi.mocked(fetch).mockImplementation(async (input) => {
           const url = String(input)
           if (url.includes('/api/v1/chat')) {
+            // 用真实定时器等到 600 ms 再应答(不用嵌套推进,避免计时器打架)
+            await new Promise((resolve) => {
+              globalThis.setTimeout(resolve, 600)
+            })
+            responded = true
             return new Response(
               okEnvelope(
                 chatAnswer({
@@ -357,26 +364,33 @@ describe('组件行为', () => {
         await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
         await wrapper.find('[data-testid="chat-submit"]').trigger('click')
 
-        // 等待响应落地(打字机开始)
+        // 请求在途:还没有回答
+        await vi.advanceTimersByTimeAsync(300)
+        expect(responded).toBe(false)
+        expect(wrapper.find('[data-testid="chat-answer"]').exists()).toBe(false)
+
+        // 响应落地(发起后 600 ms)→ 打字机开始,正文还没显现完
+        await vi.advanceTimersByTimeAsync(300)
         await vi.waitFor(() => {
           expect(wrapper.find('[data-testid="chat-answer"]').exists()).toBe(true)
         })
-
-        // 动画尚未走完:正文还没显现完
-        await vi.advanceTimersByTimeAsync(500)
+        expect(responded).toBe(true)
         const midway = wrapper.find('[data-testid="chat-answer"]').text()
         expect(midway.length).toBeGreaterThan(0)
         expect(midway.length).toBeLessThan('入职满一年可以申请年假。'.length)
 
-        // 走满后端真实耗时(1000 ms)后正文完整
-        await vi.advanceTimersByTimeAsync(600)
-        expect(wrapper.find('[data-testid="chat-answer"]').text()).toContain('入职满一年可以申请年假。')
+        // 动画在**总时长 1000 ms** 处收尾(发起后 1000 ms),
+        // 不是"响应落地后再走 1000 ms"(那是 2 倍等待)
+        await vi.advanceTimersByTimeAsync(400)
+        expect(wrapper.find('[data-testid="chat-answer"]').text()).toContain(
+          '入职满一年可以申请年假。',
+        )
       } finally {
         vi.useRealTimers()
       }
     })
 
-    it('选「无用」时可附不超过 200 字的一句话说明', async () => {
+    it('可附不超过 200 字的一句话说明', async () => {
       const bodies: string[] = []
       vi.mocked(fetch).mockImplementation(async (input, init) => {
         const url = String(input)
@@ -416,6 +430,45 @@ describe('组件行为', () => {
       expect(submitted.query_id).toBe('qry-comment')
       expect(submitted.verdict).toBe('useless')
       expect(submitted.comment).toBe('回答没提到申请流程')
+    })
+
+    it('「有用」也能附一句话说明', async () => {
+      const bodies: string[] = []
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes('/api/v1/chat')) {
+          return new Response(okEnvelope(chatAnswer({ query_id: 'qry-useful' })), {
+            status: 200,
+          })
+        }
+        if (url.includes('/api/v1/feedback')) {
+          if (init?.body) {
+            bodies.push(String(init.body))
+          }
+          return new Response(okEnvelope(null), { status: 200 })
+        }
+        return new Response(okEnvelope({ total: 0, limit: 20, items: [] }), { status: 200 })
+      })
+
+      const wrapper = mountView(ChatView)
+      await wrapper.find('[data-testid="chat-question"]').setValue('年假怎么算?')
+      await wrapper.find('[data-testid="chat-submit"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="feedback-useful"]').exists()).toBe(true)
+      })
+
+      await wrapper.find('[data-testid="feedback-comment"]').setValue('回答很准确')
+      await wrapper.find('[data-testid="feedback-useful"]').trigger('click')
+
+      await vi.waitFor(() => {
+        expect(bodies.length).toBe(1)
+      })
+      const submitted = JSON.parse(bodies[0]) as {
+        verdict: string
+        comment: string | null
+      }
+      expect(submitted.verdict).toBe('useful')
+      expect(submitted.comment).toBe('回答很准确')
     })
 
     it('可设置过滤维度并展示后端回传的实际生效取值', async () => {

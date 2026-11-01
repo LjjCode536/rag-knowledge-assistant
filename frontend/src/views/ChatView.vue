@@ -43,44 +43,47 @@ const revealed = ref(0)
 /**
  * 打字机的推进节奏:每隔多久显现一个字。
  *
- * **总时长与后端真实耗时一致**(ADR-0015 的约定):后端 `/chat` 是缓冲
- * JSON,没有真实流式;界面用"请求完成后逐字显现"改善观感,动画的总时长
- * 取后端回传的 `latency_ms` —— 用户在真实耗时里等到了答案,而不是
- * "秒回一句话",假流式不欺骗等待体感。
+ * **总时长 = 后端真实耗时**(ADR-0015 的约定):后端 `/chat` 是缓冲 JSON,
+ * 没有真实流式;界面用"请求完成后逐字显现"改善观感。
  *
- * 每步显现几个字按"已用时长 / 总时长"折算:这样无论正文多长,动画都恰好
- * 在 `latency_ms` 处收尾。
+ * **动画补足到总时长,而不是叠加**:用户等后端响应已经花掉了 `latency_ms`,
+ * 若响应落地后再完整地演一遍,感知等待就是 **2 倍**。故动画的**终点**钉在
+ * "发起请求的时刻 + latency_ms":响应快则动画长,响应慢(接近总时长)则
+ * 动画短 —— 用户从点「提问」到看完正文,总时长恒等于真实耗时。
+ *
+ * 每步显现几个字按"已用时长 / 剩余时长"折算:无论正文多长,动画都在终点
+ * 处收尾。
  */
 const TYPING_INTERVAL_MS = 16
 let typingTimer: number | undefined
-/** 本次动画的开始时刻(用于算剩余时间)。 */
-let typingStartedAt = 0
-/** 本次动画的总时长(ms)。 */
-let typingDurationMs = 0
+/** 动画的终点时刻(发起请求的时刻 + 真实耗时)。 */
+let typingEndsAt = 0
 
 /**
  * 开始打字机动画。
  *
  * @param text 回答正文
- * @param durationMs 动画总时长:后端回传的真实耗时
+ * @param durationMs 后端回传的真实耗时:动画在"发起时刻 + durationMs"收尾
+ * @param startedAtMs 发起请求的时刻(用于算动画终点)
  */
-function startTyping(text: string, durationMs: number): void {
+function startTyping(text: string, durationMs: number, startedAtMs: number): void {
   stopTyping()
   revealed.value = 0
   if (!text) {
     return
   }
-  typingDurationMs = Math.max(durationMs, TYPING_INTERVAL_MS)
-  typingStartedAt = Date.now()
+  const now = Date.now()
+  // 终点 = 发起时刻 + 真实耗时;若响应已经耗掉了全部耗时,动画至少走一拍
+  // (正文不能"秒出",否则用户看不出这是有据回答)
+  typingEndsAt = Math.max(startedAtMs + durationMs, now + TYPING_INTERVAL_MS)
   typingTimer = window.setInterval(() => {
     if (revealed.value >= text.length) {
       stopTyping()
       return
     }
-    // 按"已用时长 / 总时长"折算此刻应显现到的字数:动画恰好在
-    // `durationMs` 处收尾,与正文长短无关。
-    const elapsed = Date.now() - typingStartedAt
-    const progress = Math.min(elapsed / typingDurationMs, 1)
+    // 按"已用时长 / 剩余时长"折算此刻应显现到的字数
+    const remainingMs = typingEndsAt - Date.now()
+    const progress = remainingMs <= 0 ? 1 : 1 - remainingMs / (typingEndsAt - now)
     const target = Math.min(Math.ceil(progress * text.length), text.length)
     if (target <= revealed.value) {
       // 还不到该显现下一个字的时刻,等下一拍
@@ -105,17 +108,22 @@ function stopTyping(): void {
   }
 }
 
+/** 本次提问发起的时刻:打字机动画的终点钉在它 + 真实耗时上。 */
+let askStartedAt = 0
+
 const askMutation = useMutation({
-  mutationFn: () =>
-    ask(question.value.trim(), {
+  mutationFn: () => {
+    askStartedAt = Date.now()
+    return ask(question.value.trim(), {
       top_k: topK.value,
       filters: filters.value,
-    }),
+    })
+  },
   onSuccess: (data) => {
     answer.value = answerViewOfChat(data)
     // 拒答的文案短,不必动画;有据回答才走打字机
-    // 动画总时长 = 后端回传的真实耗时(假流式的约定,ADR-0015)
-    startTyping(data.refused ? '' : data.answer, data.latency_ms)
+    // 动画补足到"发起时刻 + 真实耗时"(假流式的约定,ADR-0015)
+    startTyping(data.refused ? '' : data.answer, data.latency_ms, askStartedAt)
   },
 })
 
@@ -270,10 +278,9 @@ const feedbackMutation = useMutation({
     if (!answer.value) {
       throw new Error('没有可反馈的回答')
     }
-    // 说明只随「无用」提交:规格里的一句话说明是给差评用的 ——「有用」
-    // 没什么要解释的(若用户填了,提交「有用」时不带上它,免得把一段
-    // 抱怨挂在"有用"上)。
-    const comment = verdict === 'useless' ? feedbackComment.value.trim() : ''
+    // 说明随判定一起提交(两种判定都能附):「有用」也可以说清"哪里有用",
+    // 「无用」可以说清"哪里没用"。后端对同一问答按覆盖式处理。
+    const comment = feedbackComment.value.trim()
     return submitFeedback(
       answer.value.query_id,
       verdict,
@@ -561,7 +568,7 @@ onBeforeUnmount(stopTyping)
           <el-input
             v-model="feedbackComment"
             size="small"
-            placeholder="「无用」可附一句话说明(可选,最多 200 字)"
+            placeholder="一句话说明(可选,最多 200 字)"
             :maxlength="FEEDBACK_COMMENT_MAX"
             show-word-limit
             style="max-width: 320px"
