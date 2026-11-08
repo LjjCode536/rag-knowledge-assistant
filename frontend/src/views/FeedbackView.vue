@@ -32,6 +32,22 @@ const candidates = computed(() => candidatesQuery.data.value?.items ?? [])
 type FeedbackRow = Feedback
 type CandidateRow = GoldenCaseCandidate
 
+/** 拒答原因 → 界面文案(未登记的原因原样呈现,不隐藏事实)。 */
+function refusalReasonLabel(reason: string | null): string {
+  switch (reason) {
+    case 'no_hits':
+      return '未检索到资料'
+    case 'low_score':
+      return '资料相关度不足'
+    case 'generator_refused':
+      return '生成器无法作答'
+    case null:
+      return '—'
+    default:
+      return reason
+  }
+}
+
 /** 导出的 CSV 文本:供用户另存。 */
 const exportedCsv = ref('')
 
@@ -153,6 +169,53 @@ function downloadCsv(): void {
         :data="candidates"
         style="width: 100%"
       >
+        <el-table-column type="expand">
+          <template #default="{ row }: { row: CandidateRow }">
+            <el-descriptions
+              :column="1"
+              border
+              size="small"
+            >
+              <el-descriptions-item label="评论">
+                <div
+                  v-for="(comment, position) in row.comments"
+                  :key="position"
+                  data-testid="candidate-comment"
+                >
+                  {{ comment }}
+                </div>
+                <span v-if="row.comments.length === 0">—</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="来源上下文">
+                <div
+                  v-for="origin in row.origins"
+                  :key="origin.query_id"
+                  data-testid="candidate-origin"
+                  style="margin-bottom: 8px"
+                >
+                  <div>
+                    问答 {{ origin.query_id }} ·
+                    {{ origin.refused ? '拒答' : '已作答' }}
+                    <span v-if="origin.refused">
+                      ({{ refusalReasonLabel(origin.refusal_reason) }})
+                    </span>
+                  </div>
+                  <div>
+                    命中文档:
+                    {{ origin.top_documents.length ? origin.top_documents.join('、') : '无' }}
+                  </div>
+                  <div v-if="origin.comment">
+                    评论:{{ origin.comment }}
+                  </div>
+                  <div class="page-hint">
+                    {{ new Date(origin.created_at).toLocaleString() }}
+                  </div>
+                </div>
+                <span v-if="row.origins.length === 0">—</span>
+              </el-descriptions-item>
+            </el-descriptions>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="question"
           label="问题"
@@ -168,6 +231,14 @@ function downloadCsv(): void {
           label="失败归因"
           width="140"
         />
+        <el-table-column
+          label="评论"
+          min-width="200"
+        >
+          <template #default="{ row }: { row: CandidateRow }">
+            {{ row.comments.length ? row.comments.join(' | ') : '—' }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="最近一次"
           width="180"

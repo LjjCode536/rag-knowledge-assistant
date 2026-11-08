@@ -35,6 +35,17 @@ const pagedLogs = computed(() => {
 /** 是否触到了服务端上限(界面上明确标注)。 */
 const atServerLimit = computed(() => total.value > allLogs.value.length)
 
+/** 生成器种类 → 界面文案(未登记的种类原样呈现,不隐藏事实)。 */
+function generatorLabel(kind: string): string {
+  if (kind === 'llm') {
+    return 'LLM'
+  }
+  if (kind === 'rule_based') {
+    return '规则版基线'
+  }
+  return kind
+}
+
 /** 表格行类型:模板插槽里不便写类型标注,在此声明一次。 */
 type LogRow = QueryLog
 </script>
@@ -117,6 +128,30 @@ type LogRow = QueryLog
               是
             </el-tag>
             <span v-else>否</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="命中数"
+          width="90"
+        >
+          <template #default="{ row }: { row: LogRow }">
+            <span data-testid="query-log-hit-count">{{ row.hits.length }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="生成器"
+          width="120"
+        >
+          <template #default="{ row }: { row: LogRow }">
+            <span data-testid="query-log-generator">{{ generatorLabel(row.generator) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="Token 用量"
+          width="110"
+        >
+          <template #default="{ row }: { row: LogRow }">
+            {{ row.token_usage.total_tokens }}
           </template>
         </el-table-column>
         <el-table-column

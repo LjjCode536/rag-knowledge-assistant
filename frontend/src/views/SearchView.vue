@@ -77,24 +77,28 @@ type HitRow = SearchHit
               size="small"
               placeholder="部门"
               style="max-width: 130px"
+              data-testid="search-filter-department"
             />
             <el-input
               v-model="dimensions.docType"
               size="small"
               placeholder="文档类型"
               style="max-width: 130px"
+              data-testid="search-filter-doc-type"
             />
             <el-input
               v-model="dimensions.version"
               size="small"
               placeholder="版本"
               style="max-width: 110px"
+              data-testid="search-filter-version"
             />
             <el-input
               v-model="dimensions.documentId"
               size="small"
               placeholder="文档 id"
               style="max-width: 200px"
+              data-testid="search-filter-document-id"
             />
           </div>
         </el-form-item>
@@ -155,6 +159,30 @@ type HitRow = SearchHit
           label="租户"
           width="110"
         />
+        <el-table-column
+          label="部门"
+          width="110"
+        >
+          <template #default="{ row }: { row: HitRow }">
+            {{ row.chunk.department ?? '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="文档类型"
+          width="110"
+        >
+          <template #default="{ row }: { row: HitRow }">
+            {{ row.chunk.doc_type ?? '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="版本"
+          width="90"
+        >
+          <template #default="{ row }: { row: HitRow }">
+            {{ row.chunk.version }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="标题"
           width="140"
