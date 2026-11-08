@@ -28,6 +28,21 @@ const candidatesQuery = useQuery({
 const feedbacks = computed(() => feedbackQuery.data.value?.items ?? [])
 const candidates = computed(() => candidatesQuery.data.value?.items ?? [])
 
+/** 前端分页:后端该端点只有 `limit` 没有 `offset`,取回最近 100 条后在此切片。 */
+const feedbackPage = ref(1)
+const feedbackPageSize = ref(20)
+const pagedFeedbacks = computed(() => {
+  const start = (feedbackPage.value - 1) * feedbackPageSize.value
+  return feedbacks.value.slice(start, start + feedbackPageSize.value)
+})
+
+const candidatePage = ref(1)
+const candidatePageSize = ref(20)
+const pagedCandidates = computed(() => {
+  const start = (candidatePage.value - 1) * candidatePageSize.value
+  return candidates.value.slice(start, start + candidatePageSize.value)
+})
+
 /** 表格行类型:模板插槽里不便写类型标注,在此声明一次。 */
 type FeedbackRow = Feedback
 type CandidateRow = GoldenCaseCandidate
@@ -91,7 +106,7 @@ function downloadCsv(): void {
 
       <el-table
         v-loading="feedbackQuery.isPending.value"
-        :data="feedbacks"
+        :data="pagedFeedbacks"
         style="width: 100%"
       >
         <el-table-column
@@ -129,6 +144,15 @@ function downloadCsv(): void {
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-model:current-page="feedbackPage"
+        v-model:page-size="feedbackPageSize"
+        :total="feedbacks.length"
+        :page-sizes="[20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 12px"
+        @size-change="feedbackPage = 1"
+      />
       <p
         class="page-hint"
         style="margin-top: 8px"
@@ -166,7 +190,7 @@ function downloadCsv(): void {
 
       <el-table
         v-loading="candidatesQuery.isPending.value"
-        :data="candidates"
+        :data="pagedCandidates"
         style="width: 100%"
       >
         <el-table-column type="expand">
@@ -248,6 +272,16 @@ function downloadCsv(): void {
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="candidatePage"
+        v-model:page-size="candidatePageSize"
+        :total="candidates.length"
+        :page-sizes="[20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 12px"
+        @size-change="candidatePage = 1"
+      />
 
       <el-button
         v-if="exportedCsv"
