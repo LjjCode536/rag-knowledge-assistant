@@ -9,6 +9,7 @@
  *   查询日志 / 拒答 / 入库进度),不使用其 `_Avoid_` 清单里的同义词。
  */
 import { computed, ref, watch } from 'vue'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useRoute } from 'vue-router'
 
 import TenantSelector from '@/components/TenantSelector.vue'
@@ -50,71 +51,73 @@ watch(
 </script>
 
 <template>
-  <el-container class="app-layout">
-    <!-- 宽屏:常驻侧边栏 -->
-    <el-aside
-      v-if="!isNarrow"
-      class="app-sidebar"
-      width="220px"
-    >
-      <div class="app-sidebar__brand">
-        企业 AI 知识库
-      </div>
-      <TenantSelector />
-      <el-menu
-        :default-active="route.path"
-        router
-        class="app-sidebar__menu"
+  <el-config-provider :locale="zhCn">
+    <el-container class="app-layout">
+      <!-- 宽屏:常驻侧边栏 -->
+      <el-aside
+        v-if="!isNarrow"
+        class="app-sidebar"
+        width="220px"
       >
-        <el-menu-item
-          v-for="item in navItems"
-          :key="item.path"
-          :index="item.path"
-        >
-          {{ item.title }}
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
-
-    <!-- 窄屏:抽屉式侧边栏 -->
-    <el-drawer
-      v-model="drawerOpen"
-      direction="ltr"
-      size="220px"
-      title="企业 AI 知识库"
-    >
-      <TenantSelector />
-      <el-menu
-        :default-active="route.path"
-        router
-      >
-        <el-menu-item
-          v-for="item in navItems"
-          :key="item.path"
-          :index="item.path"
-        >
-          {{ item.title }}
-        </el-menu-item>
-      </el-menu>
-    </el-drawer>
-
-    <el-container class="app-main">
-      <el-header class="app-header">
-        <div style="display: flex; align-items: center; gap: 12px">
-          <el-button
-            v-if="isNarrow"
-            text
-            aria-label="打开导航"
-            @click="drawerOpen = true"
-          >
-            菜单
-          </el-button>
-          <span class="app-header__title">{{ pageTitle }}</span>
+        <div class="app-sidebar__brand">
+          企业 AI 知识库
         </div>
-      </el-header>
-      <el-main class="app-content">
-        <router-view />
-      </el-main>
+        <TenantSelector />
+        <el-menu
+          :default-active="route.path"
+          router
+          class="app-sidebar__menu"
+        >
+          <el-menu-item
+            v-for="item in navItems"
+            :key="item.path"
+            :index="item.path"
+          >
+            {{ item.title }}
+          </el-menu-item>
+        </el-menu>
+      </el-aside>
+
+      <!-- 窄屏:抽屉式侧边栏 -->
+      <el-drawer
+        v-model="drawerOpen"
+        direction="ltr"
+        size="220px"
+        title="企业 AI 知识库"
+      >
+        <TenantSelector />
+        <el-menu
+          :default-active="route.path"
+          router
+        >
+          <el-menu-item
+            v-for="item in navItems"
+            :key="item.path"
+            :index="item.path"
+          >
+            {{ item.title }}
+          </el-menu-item>
+        </el-menu>
+      </el-drawer>
+
+      <el-container class="app-main">
+        <el-header class="app-header">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <el-button
+              v-if="isNarrow"
+              text
+              aria-label="打开导航"
+              @click="drawerOpen = true"
+            >
+              菜单
+            </el-button>
+            <span class="app-header__title">{{ pageTitle }}</span>
+          </div>
+        </el-header>
+        <el-main class="app-content">
+          <router-view />
+        </el-main>
+      </el-container>
     </el-container>
-  </el-container>
+  </el-config-provider>
 </template>
