@@ -1,4 +1,8 @@
-"""HTML 解析:BeautifulSoup DOM 游走,过滤噪声标签,保留正文结构。"""
+"""HTML 解析:BeautifulSoup DOM 游走,过滤噪声标签,保留正文结构。
+
+噪声边界见 ADR-0017:页面级 ``header / footer`` 只在直接挂在 ``body`` 下时剔除,
+嵌套在 ``article / section / div`` 里的保留(通常承载标题与作者),避免误删正文。
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,28 @@ from app.domain.documents import DocumentElement, DocumentFormat, ElementType, P
 
 _cleaner = TextCleaner()
 
-_SKIP_TAGS = frozenset({"script", "style", "noscript", "template", "head", "link", "meta"})
+_SKIP_TAGS = frozenset(
+    {
+        "script",
+        "style",
+        "noscript",
+        "template",
+        "head",
+        "link",
+        "meta",
+        "nav",
+        "aside",
+        "form",
+        "iframe",
+        "svg",
+        "canvas",
+        "button",
+        "select",
+        "input",
+        "textarea",
+    }
+)
+_PAGE_LEVEL_TAGS = frozenset({"header", "footer"})
 _HEADING_LEVELS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 
 
@@ -41,6 +66,8 @@ class HtmlParser:
                 continue
             name = (child.name or "").lower()
             if name in _SKIP_TAGS:
+                continue
+            if name in _PAGE_LEVEL_TAGS and _is_page_level(child):
                 continue
             if name in _HEADING_LEVELS:
                 self._flush_stray(stray, elements)
@@ -143,3 +170,9 @@ class HtmlParser:
                 heading_level=heading_level,
             )
         )
+
+
+def _is_page_level(tag: Tag) -> bool:
+    """``header / footer`` 只有直接挂在 ``body`` 下才视为页面级噪声。"""
+    parent = tag.parent
+    return parent is not None and (parent.name or "").lower() == "body"

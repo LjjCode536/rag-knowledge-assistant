@@ -18,5 +18,6 @@ M1 要把 txt / md / html / docx / pdf 解析成带定位元数据(页码 / 行�
 ## Consequences
 
 - 五个解析器全部位于 `app/integrations/parsing/`,领域层只认 `ParsedDocument / DocumentElement`
+- Markdown 解析引擎与 HTML 噪声边界见 ADR-0017(手写行扫描已换成 markdown-it-py)
 - PDF 无文本层(扫描件)显式报错并提示 need_ocr,M1 不做 OCR(项目 out of scope)
 - 后续若某格式需要更强的版面理解(如复杂 PDF),只替换工厂里的单个解析器,契约不动

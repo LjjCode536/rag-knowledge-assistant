@@ -83,7 +83,8 @@ def test_upload_md_extracts_title_list_table_code(client):
     assert elements[0]["content"] == "部署指南"
     assert elements[0]["heading_level"] == 1
     assert elements[1]["line"] == 3
-    assert elements[2]["content"] == "第一步"
+    assert elements[2]["content"] == "- 第一步"
+    assert elements[3]["content"] == "- 第二步"
     assert elements[4]["content"] == "参数 | 值\n超时 | 30"
     assert elements[5]["content"] == "print('hi')"
 

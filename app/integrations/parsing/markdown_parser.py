@@ -1,21 +1,51 @@
-"""Markdown 解析:保留标题 / 列表 / 表格 / 代码块结构,行号定位。"""
+"""Markdown 解析:markdown-it-py 的 token 流映射为解析元素(ADR-0017)。
+
+结构映射:
+
+- 标题(ATX / Setext)→ TITLE,层级取 h1-h6;行号取 token.map
+- 段落 / 引用块 → PARAGRAPH;引用符号 ``>`` 由 token 边界消化,不进正文
+- 列表项 → 每项一个 LIST 元素,content 保留标记(``- `` / 按 start 重算的 ``N. ``);
+  嵌套项按文档序展开为独立元素,不建模层级
+- 表格(GFM,含无首尾竖线写法)→ 单个 TABLE 元素,单元格以 `` | `` 连接
+- 围栏 / 缩进代码块 → CODE 元素,原样保留缩进
+- HTML 块 → 原样作为 PARAGRAPH,不递归解析(嵌套 HTML 超出解析层职责)
+
+行内 Markdown 标记保持原样(链接 URL 因此保留在正文里);行号统一为 1 基。
+"""
 
 from __future__ import annotations
 
-import re
+from dataclasses import dataclass, field
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 from app.domain.cleaning import TextCleaner
 from app.domain.documents import DocumentElement, DocumentFormat, ElementType, ParsedDocument
 from app.integrations.parsing.base import decode_utf8
 
 _cleaner = TextCleaner()
+# commonmark 预设不含表格;项目需要 GFM 表格,单独启用 table 规则
+_parser = MarkdownIt("commonmark").enable("table")
 
-_HEADING = re.compile(r"^(#{1,6})\s+(.+)$")
-_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.+)$")
-_TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
-_TABLE_SEPARATOR = re.compile(r"^\s*\|?(\s*:?-{1,}:?\s*\|)+\s*:?-{1,}:?\s*\|?\s*$")
-_FENCE = re.compile(r"^\s*(```|~~~)")
-_BLOCKQUOTE = re.compile(r"^\s*>\s?")
+
+@dataclass(slots=True)
+class _ListContext:
+    """一层列表(无序 / 有序)的编号状态。"""
+
+    ordered: bool
+    start: int = 1
+    next_index: int = 0
+
+
+@dataclass(slots=True)
+class _ItemFrame:
+    """正在收集的列表项;记录插入位置,保证父项排在子项之前。"""
+
+    marker: str
+    line: int | None
+    insert_at: int
+    lines: list[str] = field(default_factory=list)
 
 
 class MarkdownParser:
@@ -23,7 +53,10 @@ class MarkdownParser:
 
     def parse(self, data: bytes, *, document_id: str, file_name: str) -> ParsedDocument:
         text = decode_utf8(data, file_name=file_name)
-        elements: list[DocumentElement] = self._extract(text.splitlines())
+        elements = self._extract_elements(_parser.parse(text))
+        # 插入父列表项会打乱产出顺序里的序号,统一按最终次序连续编号
+        for index, element in enumerate(elements):
+            element.order_index = index
         return ParsedDocument(
             document_id=document_id,
             file_name=file_name,
@@ -31,121 +64,131 @@ class MarkdownParser:
             elements=elements,
         )
 
-    def _extract(self, lines: list[str]) -> list[DocumentElement]:
+    @staticmethod
+    def _extract_elements(tokens: list[Token]) -> list[DocumentElement]:
         elements: list[DocumentElement] = []
-        paragraph: list[str] = []
-        paragraph_start = 1
+        lists: list[_ListContext] = []
+        items: list[_ItemFrame] = []
+        heading_level: int | None = None
 
-        def flush_paragraph() -> None:
-            if not paragraph:
-                return
-            content = _cleaner.clean("\n".join(paragraph))
-            if content:
-                elements.append(
-                    DocumentElement(
-                        element_type=ElementType.PARAGRAPH,
-                        content=content,
-                        order_index=len(elements),
-                        line=paragraph_start,
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            kind = token.type
+
+            if kind == "table_open":
+                table, index = _take_table(tokens, index)
+                if table is not None:
+                    elements.append(table)
+                continue
+            if kind == "heading_open":
+                heading_level = int(token.tag[1])
+            elif kind == "heading_close":
+                heading_level = None
+            elif kind == "bullet_list_open":
+                lists.append(_ListContext(ordered=False))
+            elif kind == "ordered_list_open":
+                start = token.attrGet("start")
+                lists.append(_ListContext(ordered=True, start=int(start) if start else 1))
+            elif kind in ("bullet_list_close", "ordered_list_close"):
+                lists.pop()
+            elif kind == "list_item_open":
+                context = lists[-1]
+                items.append(
+                    _ItemFrame(
+                        marker=_marker(context),
+                        line=_line(token),
+                        # 父项的插入点先于子项与项内代码块,收尾时回插即可还原文档序
+                        insert_at=len(elements),
                     )
                 )
-            paragraph.clear()
-
-        i = 0
-        while i < len(lines):
-            raw = lines[i]
-            stripped = raw.strip()
-            if not stripped:
-                flush_paragraph()
-                i += 1
-                continue
-            if fence := _FENCE.match(raw):
-                flush_paragraph()
-                i = self._take_code_block(lines, i, fence.group(1), elements)
-                continue
-            if heading := _HEADING.match(stripped):
-                flush_paragraph()
-                content = _cleaner.clean(heading.group(2))
+                context.next_index += 1
+            elif kind == "list_item_close":
+                frame = items.pop()
+                content = _cleaner.clean("\n".join(frame.lines))
                 if content:
-                    elements.append(
-                        DocumentElement(
-                            element_type=ElementType.TITLE,
-                            content=content,
-                            order_index=len(elements),
-                            heading_level=len(heading.group(1)),
-                            line=i + 1,
-                        )
+                    elements.insert(
+                        frame.insert_at,
+                        _element(ElementType.LIST, f"{frame.marker}{content}", frame.line),
                     )
-                i += 1
-                continue
-            next_line = lines[i + 1] if i + 1 < len(lines) else ""
-            if _TABLE_ROW.match(raw) and _TABLE_SEPARATOR.match(next_line):
-                flush_paragraph()
-                i = self._take_table(lines, i, elements)
-                continue
-            if item := _LIST_ITEM.match(raw):
-                flush_paragraph()
-                content = _cleaner.clean(item.group(1))
+            elif kind in ("fence", "code_block"):
+                # 代码块即使位于列表项内也单独成元素:切片器按元素类型识别原子结构
+                content = token.content.strip("\n")
+                if content.strip():
+                    elements.append(_element(ElementType.CODE, content, _line(token)))
+            elif kind == "html_block":
+                content = _cleaner.clean(token.content)
                 if content:
+                    if items:
+                        items[-1].lines.append(content)
+                    else:
+                        elements.append(_element(ElementType.PARAGRAPH, content, _line(token)))
+            elif kind == "inline":
+                content = _cleaner.clean(token.content)
+                if not content:
+                    pass
+                elif heading_level is not None:
                     elements.append(
-                        DocumentElement(
-                            element_type=ElementType.LIST,
-                            content=content,
-                            order_index=len(elements),
-                            line=i + 1,
-                        )
+                        _element(ElementType.TITLE, content, _line(token), heading_level)
                     )
-                i += 1
-                continue
-            if not paragraph:
-                paragraph_start = i + 1
-            paragraph.append(_BLOCKQUOTE.sub("", raw))
-            i += 1
-
-        flush_paragraph()
+                elif items:
+                    items[-1].lines.append(content)
+                else:
+                    elements.append(_element(ElementType.PARAGRAPH, content, _line(token)))
+            index += 1
         return elements
 
-    def _take_code_block(
-        self, lines: list[str], start: int, marker: str, elements: list[DocumentElement]
-    ) -> int:
-        """吞掉整个围栏代码块,返回结束围栏之后的位置。"""
-        code_lines: list[str] = []
-        i = start + 1
-        while i < len(lines) and not lines[i].strip().startswith(marker):
-            code_lines.append(lines[i])
-            i += 1
-        content = "\n".join(code_lines).strip()
-        if content:
-            elements.append(
-                DocumentElement(
-                    element_type=ElementType.CODE,
-                    content=content,
-                    order_index=len(elements),
-                    line=start + 2,
-                )
-            )
-        return i + 1
 
-    def _take_table(self, lines: list[str], start: int, elements: list[DocumentElement]) -> int:
-        """吞掉表头 + 分隔行 + 连续数据行,返回表格之后的位置。"""
-        rows = [lines[start].strip()]
-        i = start + 2  # 跳过分隔行
-        while i < len(lines) and _TABLE_ROW.match(lines[i]):
-            rows.append(lines[i].strip())
-            i += 1
-        content = _cleaner.clean("\n".join(self._cells(row) for row in rows))
-        if content:
-            elements.append(
-                DocumentElement(
-                    element_type=ElementType.TABLE,
-                    content=content,
-                    order_index=len(elements),
-                    line=start + 1,
-                )
-            )
-        return i
+def _marker(context: _ListContext) -> str:
+    """无序列表归一为 ``- ``;有序列表按 start + 已产出项数重算 ``N. ``。"""
+    if context.ordered:
+        return f"{context.start + context.next_index}. "
+    return "- "
 
-    @staticmethod
-    def _cells(row: str) -> str:
-        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
-        return " | ".join(cells)
+
+def _line(token: Token) -> int | None:
+    return token.map[0] + 1 if token.map else None
+
+
+def _element(
+    element_type: ElementType,
+    content: str,
+    line: int | None,
+    heading_level: int | None = None,
+) -> DocumentElement:
+    return DocumentElement(
+        element_type=element_type,
+        content=content,
+        line=line,
+        heading_level=heading_level,
+    )
+
+
+def _take_table(tokens: list[Token], start: int) -> tuple[DocumentElement | None, int]:
+    """吞掉整张表,返回 (表格元素, 表格之后的位置)。"""
+    header = tokens[start]
+    rows: list[str] = []
+    cells: list[str] = []
+    in_cell = False
+    index = start + 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token.type == "table_close":
+            break
+        if token.type == "tr_open":
+            cells = []
+        elif token.type in ("th_open", "td_open"):
+            in_cell = True
+        elif token.type in ("th_close", "td_close"):
+            in_cell = False
+        elif token.type == "inline" and in_cell:
+            cells.append(_cleaner.clean(token.content))
+        elif token.type == "tr_close":
+            row = " | ".join(cells)
+            if row.strip(" |"):
+                rows.append(row)
+        index += 1
+    content = "\n".join(rows)
+    if not content:
+        return None, index + 1
+    return _element(ElementType.TABLE, content, _line(header)), index + 1
