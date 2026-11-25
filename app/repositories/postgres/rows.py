@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.chunks import Chunk, ChunkQualityWarning
+from app.domain.chunks import Chunk, ChunkingStrategy, ChunkQualityWarning
 from app.domain.documents import (
     DocumentFormat,
     DocumentRecord,
@@ -83,6 +83,7 @@ class _ChunkRow(_RowModel):
     department: str | None = None
     doc_type: str | None = None
     version: str
+    strategy: ChunkingStrategy | None = None
     page_number: int | None = None
     title: str | None = None
     element_index_start: int
@@ -165,6 +166,7 @@ def chunk_from_row(row: Mapping[str, Any]) -> Chunk:
         department=parsed.department,
         doc_type=parsed.doc_type,
         version=parsed.version,
+        strategy=parsed.strategy,
         page_number=parsed.page_number,
         title=parsed.title,
         element_index_start=parsed.element_index_start,

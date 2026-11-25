@@ -117,7 +117,7 @@ class ChunkingService:
             self._documents.save(record)
             return result
 
-        result.chunks = self._assemble(record, raw_chunks)
+        result.chunks = self._assemble(record, raw_chunks, effective_strategy)
         result.warnings = self._quality_warnings(result.chunks, effective_size)
 
         self._chunks.replace(document_id, result.chunks)
@@ -149,7 +149,11 @@ class ChunkingService:
         record.status = target
 
     @staticmethod
-    def _assemble(record: DocumentRecord, raw_chunks: list[RawChunk]) -> list[Chunk]:
+    def _assemble(
+        record: DocumentRecord,
+        raw_chunks: list[RawChunk],
+        strategy: ChunkingStrategy,
+    ) -> list[Chunk]:
         """装配切片:补齐租户、部门、文档类型、版本等文档级元数据并连续编号。"""
         return [
             Chunk(
@@ -160,6 +164,7 @@ class ChunkingService:
                 department=record.department,
                 doc_type=record.doc_type,
                 version=record.version,
+                strategy=strategy,
                 page_number=item.page_number,
                 title=item.title,
                 element_index_start=item.element_index_start,

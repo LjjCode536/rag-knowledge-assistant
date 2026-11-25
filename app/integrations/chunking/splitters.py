@@ -7,7 +7,7 @@
 
 - paragraph:非标题元素连成整体文本流,递归切分;表格等结构可能被切断(基线)。
 - heading:按标题元素分节,节标题进元数据;节内超长时再按尺寸细切。
-- table_aware:表格 / 代码等结构原子不可切,连续散文合并后按尺寸切分并带重叠。
+- table_aware:表格 / 代码结构优先;散文按标题分节后切分,超大表格按行组切并重复表头。
 - element:一个解析元素一个切片,结构完整、无合并;标题元素自身内容保留。
 """
 
@@ -110,6 +110,49 @@ def _raw_pieces(
     return raw
 
 
+def _table_chunk(element: DocumentElement, content: str, title: str | None) -> RawChunk:
+    """表格切片:来源区间仍是整张表所在的单个元素。"""
+    return RawChunk(
+        content=content,
+        page_number=element.page_number,
+        title=title,
+        element_index_start=element.order_index,
+        element_index_end=element.order_index,
+    )
+
+
+def _split_table_rows(
+    element: DocumentElement, *, chunk_size: int, title: str | None
+) -> list[RawChunk]:
+    """超大表格按行组切:首行视为表头,每块重复表头;单行数据不切断。
+
+    解析层的表格统一输出为"每行一段、单元格以 `` | `` 连接",因此首行即表头
+    (无表头的表格也按首行重复,保证每块能自解释)。
+    """
+    lines = [line.strip() for line in element.content.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return [_table_chunk(element, element.content, title)]
+
+    header, rows = lines[0], lines[1:]
+    groups: list[list[str]] = []
+    current: list[str] = []
+    current_len = 0
+    for row in rows:
+        extra = len(row) + (1 if current else 0)  # 行间换行
+        if current and len(header) + 1 + current_len + extra > chunk_size:
+            groups.append(current)
+            current = [row]
+            current_len = len(row)
+        else:
+            current.append(row)
+            current_len += extra
+    if current:
+        groups.append(current)
+    return [
+        _table_chunk(element, "\n".join([header, *group]), title) for group in groups
+    ]
+
+
 class ParagraphChunker:
     """段落策略:整体文本流递归切分(基线);表格等结构可能被切断。"""
 
@@ -177,7 +220,12 @@ class HeadingChunker:
 
 
 class TableAwareChunker:
-    """表格感知策略:表格 / 代码原子不可切,连续散文合并后按尺寸切分并带重叠。"""
+    """表格感知策略:表格 / 代码结构优先,连续散文按节合并后切分并带重叠。
+
+    标题是硬边界:每节散文单独切,节标题进元数据;一片不再横跨多节却只带
+    一个标题。表格 / 代码仍原子保留;仅超大表格按行组切,每块重复表头,
+    不把一行数据切断。
+    """
 
     def chunk(
         self, elements: Sequence[DocumentElement], *, chunk_size: int, chunk_overlap: int
@@ -185,6 +233,7 @@ class TableAwareChunker:
         titles = _title_chain(elements)
         raw: list[RawChunk] = []
         run: list[_Positioned] = []
+        current_title: str | None = None
 
         def flush_run() -> None:
             if not run:
@@ -198,26 +247,36 @@ class TableAwareChunker:
                     spans=spans,
                     elements=elements,
                     chunk_overlap=chunk_overlap,
-                    title_for=titles.__getitem__,
+                    title_for=(
+                        (lambda _position: current_title)
+                        if current_title is not None
+                        else titles.__getitem__
+                    ),
                 )
             )
             run.clear()
 
         for position, element in enumerate(elements):
             if element.element_type is _TITLE:
-                flush_run()  # 标题只更新"最近标题",不产生切片内容
+                flush_run()  # 上一节收口;标题本身不单独成片,只更新节标题元数据
+                current_title = element.content
             elif element.element_type in _ATOMIC_TYPES:
                 flush_run()
-                raw.append(
-                    RawChunk(
-                        content=element.content,
-                        page_number=element.page_number,
-                        title=titles[position],
-                        # 原子结构:来源区间就是单个元素,永远整块出现
-                        element_index_start=element.order_index,
-                        element_index_end=element.order_index,
+                if element.element_type is ElementType.TABLE and len(element.content) > chunk_size:
+                    raw.extend(
+                        _split_table_rows(element, chunk_size=chunk_size, title=titles[position])
                     )
-                )
+                else:
+                    raw.append(
+                        RawChunk(
+                            content=element.content,
+                            page_number=element.page_number,
+                            title=titles[position],
+                            # 原子结构:来源区间就是单个元素,永远整块出现
+                            element_index_start=element.order_index,
+                            element_index_end=element.order_index,
+                        )
+                    )
             else:
                 run.append((position, element))
         flush_run()

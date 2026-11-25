@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.domain.chunks import ChunkingStrategy
+
 DOCUMENTS_URL = "/api/v1/documents"
 
 TABLE_CONTENT = "参数 | 值\n超时 | 30\n并发 | 5"
@@ -161,12 +163,58 @@ def test_heading_strategy_splits_by_sections_keeping_titles(client):
     assert [chunk["title"] for chunk in chunks] == ["总则", "退费政策", "联系方式"]
     assert "一般约定如下。" in chunks[0]["content"] and "条款甲" in chunks[0]["content"]
     assert "7 天内可退。" in chunks[1]["content"]
-    assert not any("总则" in chunk["content"] for chunk in chunks)  # 标题文本不重复进内容
+    assert not any("总则" in chunk["content"] for chunk in chunks)  # 标题只进元数据
     assert [(c["element_index_start"], c["element_index_end"]) for c in chunks] == [
         (1, 3),  # 总则一节覆盖段落与两条列表项
         (5, 5),
         (7, 7),
     ]
+
+
+# ===== 表格感知策略:标题处断开,每片带本节标题且不跨节 =====
+
+
+def test_table_aware_binds_each_section_title(client):
+    markdown = (
+        "# 年假制度\n"
+        "\n"
+        "员工满一年可申请年假。\n"
+        "\n"
+        "# 报销制度\n"
+        "\n"
+        "差旅需发票。\n"
+    )
+    body = _upload(client, name="sections.md", content=markdown.encode(), mime="text/markdown")
+    document_id = body["data"]["id"]
+
+    chunks = client.post(
+        f"{DOCUMENTS_URL}/{document_id}/chunks", json={"strategy": "table_aware"}
+    ).json()["data"]["chunks"]
+
+    assert [chunk["title"] for chunk in chunks] == ["年假制度", "报销制度"]
+    assert chunks[0]["content"] == "员工满一年可申请年假。"  # 标题只进元数据
+    assert "报销制度" not in chunks[0]["content"]  # 不跨节混入下一节正文
+    assert chunks[1]["content"] == "差旅需发票。"
+    assert "年假制度" not in chunks[1]["content"]
+    assert [(c["element_index_start"], c["element_index_end"]) for c in chunks] == [(1, 1), (3, 3)]
+
+
+# ===== 切片记录产生它的策略,重切后随之更新 =====
+
+
+def test_chunks_record_effective_strategy(client):
+    body = _upload(client, name="guide.md", content=MARKDOWN.encode(), mime="text/markdown")
+    document_id = body["data"]["id"]
+
+    client.post(f"{DOCUMENTS_URL}/{document_id}/chunks", json={"strategy": "paragraph"})
+    chunks = client.app.state.chunking_service.get_chunks(document_id)
+    assert chunks
+    assert {chunk.strategy for chunk in chunks} == {ChunkingStrategy.PARAGRAPH}
+
+    client.post(f"{DOCUMENTS_URL}/{document_id}/chunks")  # 重切回默认策略
+    chunks = client.app.state.chunking_service.get_chunks(document_id)
+    assert chunks
+    assert {chunk.strategy for chunk in chunks} == {ChunkingStrategy.TABLE_AWARE}
 
 
 # ===== 元素策略:一个解析元素一个切片 =====
@@ -216,7 +264,7 @@ TABLE_ROWS_MARKDOWN = (
 )
 
 
-def test_table_aware_keeps_table_whole_while_paragraph_cuts_it(client):
+def test_table_aware_splits_large_table_by_rows_while_paragraph_cuts_it(client):
     body = _upload(
         client, name="price.md", content=TABLE_ROWS_MARKDOWN.encode(), mime="text/markdown"
     )
@@ -227,8 +275,15 @@ def test_table_aware_keeps_table_whole_while_paragraph_cuts_it(client):
         json={"strategy": "table_aware", "chunk_size": 120, "chunk_overlap": 20},
     ).json()["data"]
     aware_table = [chunk for chunk in aware["chunks"] if "渠道" in chunk["content"]]
-    assert len(aware_table) == 1  # 表格只出现在一个切片里
-    assert aware_table[0]["content"] == FULL_TABLE  # 整表原子出现,未被切断
+    assert len(aware_table) >= 2  # 超长表格按行组切,不再整表超限
+    assert all(chunk["content"].splitlines()[0] == "渠道 | 时效" for chunk in aware_table)
+    assert all(len(chunk["content"]) <= 120 for chunk in aware_table)
+    data_rows = [
+        line
+        for chunk in aware_table
+        for line in chunk["content"].splitlines()[1:]  # 每块首行都是重复的表头
+    ]
+    assert data_rows == [f"{name} | {days} 天" for name, days in _PRICE_ROWS]  # 行不丢不重
 
     cut = client.post(
         f"{DOCUMENTS_URL}/{document_id}/chunks",

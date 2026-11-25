@@ -58,6 +58,8 @@ class Chunk(BaseModel):
     department: str | None = None
     doc_type: str | None = None
     version: str
+    # 产生本切片的策略;历史切片与向量快照可能缺省(None),新切片由服务层写入
+    strategy: ChunkingStrategy | None = None
     # ===== 定位信息 =====
     page_number: int | None = None
     title: str | None = None

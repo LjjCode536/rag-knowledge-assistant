@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.chunks import Chunk
+from app.domain.chunks import Chunk, ChunkingStrategy
 from app.domain.documents import DocumentRecord, ParsedDocument
 from app.domain.evaluation import EvaluationReport, RetrievalMetrics
 from app.domain.feedback import FeedbackVerdict
@@ -160,7 +160,14 @@ def test_chunk_replace_list_roundtrip_with_metadata(test_pg_database):
     repo = PgChunkRepository(db)
     chunks = [
         _chunk("doc-1", 0, "第一段", department="人力部", doc_type="制度"),
-        _chunk("doc-1", 1, "第二段", page_number=2, title="休假"),
+        _chunk(
+            "doc-1",
+            1,
+            "第二段",
+            page_number=2,
+            title="休假",
+            strategy=ChunkingStrategy.TABLE_AWARE,
+        ),
     ]
 
     repo.replace("doc-1", chunks)
@@ -168,6 +175,7 @@ def test_chunk_replace_list_roundtrip_with_metadata(test_pg_database):
     fetched = repo.list_by_document("doc-1")
     assert fetched == chunks
     assert [chunk.title for chunk in fetched] == [None, "休假"]
+    assert [chunk.strategy for chunk in fetched] == [None, ChunkingStrategy.TABLE_AWARE]
     db.close()
 
 

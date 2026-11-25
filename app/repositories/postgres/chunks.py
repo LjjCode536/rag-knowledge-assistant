@@ -16,7 +16,7 @@ from app.repositories.postgres.rows import chunk_from_row
 
 _COLUMNS = (
     "chunk_id, document_id, chunk_index, content, tenant, department, doc_type, "
-    "version, page_number, title, element_index_start, element_index_end"
+    "version, strategy, page_number, title, element_index_start, element_index_end"
 )
 
 _INSERT = f"INSERT INTO chunks ({_COLUMNS}) VALUES ({placeholder_sql(len(_COLUMNS.split(', ')))})"
@@ -34,6 +34,7 @@ def _row_values(chunk: Chunk) -> tuple:
         chunk.department,
         chunk.doc_type,
         chunk.version,
+        chunk.strategy.value if chunk.strategy else None,
         chunk.page_number,
         chunk.title,
         chunk.element_index_start,

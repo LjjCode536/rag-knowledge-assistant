@@ -62,12 +62,15 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         department          text,
         doc_type            text,
         version             text NOT NULL,
+        strategy            text,
         page_number         integer,
         title               text,
         element_index_start integer NOT NULL,
         element_index_end   integer NOT NULL
     )
     """,
+    # 已有库补列:历史切片没有策略记录,保持 NULL,不做失真回填
+    "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS strategy text",
     "CREATE INDEX IF NOT EXISTS chunks_by_document ON chunks (document_id)",
     """
     CREATE TABLE IF NOT EXISTS embeddings (
