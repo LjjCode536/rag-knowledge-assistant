@@ -28,6 +28,7 @@ class ErrorCode(StrEnum):
     UPSTREAM_BAD_RESPONSE = "UPSTREAM_BAD_RESPONSE"
 
     UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
+    EMBEDDING_DIMENSION_MISMATCH = "EMBEDDING_DIMENSION_MISMATCH"
     DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
     DOCUMENT_CHUNK_FAILED = "DOCUMENT_CHUNK_FAILED"
     INVALID_DOCUMENT_STATE = "INVALID_DOCUMENT_STATE"
@@ -143,6 +144,14 @@ class UnsupportedFormatError(AppError):
     code = ErrorCode.UNSUPPORTED_FORMAT
     status_code = 415
     default_message = "不支持的文档格式,支持 txt / md / html / docx / pdf"
+
+
+class DimensionMismatchError(AppError):
+    """模型输出的向量维度与声明的索引维度不一致:拒绝写入,不静默落库。"""
+
+    code = ErrorCode.EMBEDDING_DIMENSION_MISMATCH
+    status_code = 500
+    default_message = "向量维度与索引声明的维度不一致"
 
 
 class DocumentParseError(AppError):

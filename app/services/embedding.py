@@ -4,6 +4,9 @@
 与解析、切片不同——它们可重试,不落 failed 状态:文档停在 chunked,
 补齐密钥或稍后重试即可(见 ADR-0003)。向量库重嵌即整组替换,
 与切片整组替换语义对齐(ADR-0002)。
+
+写入前按来源身份(模型 / 版本 / 维度)断言:模型输出的维度与声明不符即
+抛 :class:`~app.core.errors.DimensionMismatchError`,不落库(ADR-0019)。
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import structlog
 
 from app.core.errors import (
     AppError,
+    DimensionMismatchError,
     InvalidDocumentStateError,
     NotFoundError,
     UpstreamBadResponseError,
@@ -24,7 +28,12 @@ from app.core.errors import (
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.repositories import ChunkRepository, DocumentRepository
-from app.domain.retrieval import KeywordIndex, VectorStore
+from app.domain.retrieval import (
+    EmbeddingRef,
+    KeywordIndex,
+    VectorStore,
+    build_embedded_chunks,
+)
 from app.domain.state_machine import ensure_transition
 from app.integrations.llm.client import EmbedResult, TokenUsage
 from app.services.qa_cache import AnswerCache
@@ -42,10 +51,11 @@ class Embedder(Protocol):
 
 @dataclass(slots=True)
 class EmbeddingRunResult:
-    """一次向量化请求的结果:生效模型、用量与延迟。"""
+    """一次向量化请求的结果:生效模型与来源身份、用量与延迟。"""
 
     record: DocumentRecord
     model: str
+    embedding: EmbeddingRef
     chunk_count: int
     usage: TokenUsage
     latency_ms: float
@@ -72,6 +82,7 @@ class EmbeddingService:
         chunk_repository: ChunkRepository,
         vector_store: VectorStore,
         embedder: Embedder,
+        embedding: EmbeddingRef,
         keyword_index: KeywordIndex | None = None,
         answer_cache: AnswerCache | None = None,
         batch_size: int = 20,
@@ -80,14 +91,14 @@ class EmbeddingService:
         self._chunks = chunk_repository
         self._vectors = vector_store
         self._embedder = embedder
+        # 本服务写入的唯一索引身份:模型 / 版本 / 维度来自配置,随每个向量落库。
+        self._embedding = embedding
         self._keyword_index = keyword_index
         self._answer_cache = answer_cache
         # 单批切片数上限:整篇文档一次打给上游会超请求体 / 触发批量上限
         self._batch_size = max(batch_size, 1)
 
-    async def embed_document(
-        self, document_id: str, *, model: str | None = None
-    ) -> EmbeddingRunResult:
+    async def embed_document(self, document_id: str) -> EmbeddingRunResult:
         """向量化一次:整个文档的切片分批送向量模型,成功后文档落 indexed。"""
         record = self._documents.get(document_id)
         if record is None:
@@ -105,7 +116,7 @@ class EmbeddingService:
 
         started = datetime.now(UTC)
         try:
-            result = await self._embed_in_batches(chunks, model=model)
+            result = await self._embed_in_batches(chunks)
         except AppError as exc:
             # 失败侧也留用量与延迟基线;文档停在 chunked,可直接重试(ADR-0003)
             logger.warning(
@@ -117,6 +128,8 @@ class EmbeddingService:
                 duration_ms=round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
             )
             raise
+        # 维度在三处一致:模型输出、服务声明、向量库写入的每一条向量。
+        embedded = build_embedded_chunks(chunks, result.vectors, self._embedding)
         # 并发防护:向量化期间切片被整组替换(重切),本次入库作废,拒绝写入陈旧向量
         current = self._chunks.list_by_document(document_id)
         if (
@@ -128,7 +141,7 @@ class EmbeddingService:
                 "文档在向量化期间被重新切片,请对最新切片重试入库",
                 details={"document_id": document_id},
             )
-        self._vectors.replace(document_id, chunks, result.vectors)
+        self._vectors.replace(document_id, embedded)
         # 关键词通道与向量库同组替换、同批写入:两条通道候选永远一致。
         if self._keyword_index is not None:
             self._keyword_index.replace(document_id, chunks)
@@ -145,6 +158,8 @@ class EmbeddingService:
             document_id=record.id,
             file_name=record.file_name,
             model=result.model,
+            embedding_version=self._embedding.version,
+            embedding_dimension=self._embedding.dimension,
             chunks=len(chunks),
             prompt_tokens=result.usage.prompt_tokens,
             completion_tokens=result.usage.completion_tokens,
@@ -155,28 +170,30 @@ class EmbeddingService:
         return EmbeddingRunResult(
             record=record,
             model=result.model,
+            embedding=self._embedding,
             chunk_count=len(chunks),
             usage=result.usage,
             latency_ms=result.latency_ms,
         )
 
     async def _embed_in_batches(
-        self, chunks: Sequence[Chunk], *, model: str | None
+        self, chunks: Sequence[Chunk]
     ) -> EmbeddingBatchResult:
         """分批向量化:每批不超过批上限,批次向量按批序拼接与切片严格对齐。
 
         上游失败(超时 / 限流 / 不可用)原样上抛:文档停在 chunked 可重试,
         已有批次不回写 —— 向量库整组替换,半批向量不落库(ADR-0003)。
+        维度不符在第一批就失败,不继续消耗上游配额。
         """
         contents = [chunk.content for chunk in chunks]
         vectors: list[list[float]] = []
         usage = TokenUsage()
         latency_ms = 0.0
-        model_name = model or ""
+        model_name = ""
         batches = 0
         for start in range(0, len(contents), self._batch_size):
             batch = contents[start : start + self._batch_size]
-            result = await self._embedder.embed(batch, model=model)
+            result = await self._embedder.embed(batch)
             # 批次向量数必须与该批输入数对齐:错位即静默数据损坏
             if len(result.vectors) != len(batch):
                 raise UpstreamBadResponseError(
@@ -187,6 +204,20 @@ class EmbeddingService:
                         "received": len(result.vectors),
                     },
                 )
+            for offset, vector in enumerate(result.vectors):
+                if len(vector) != self._embedding.dimension:
+                    chunk = chunks[start + offset]
+                    raise DimensionMismatchError(
+                        "模型输出的向量维度与配置声明的维度不一致",
+                        details={
+                            "chunk_id": chunk.chunk_id,
+                            "document_id": chunk.document_id,
+                            "model": result.model,
+                            "version": self._embedding.version,
+                            "expected_dimension": self._embedding.dimension,
+                            "actual_dimension": len(vector),
+                        },
+                    )
             vectors.extend(result.vectors)
             usage = TokenUsage(
                 prompt_tokens=usage.prompt_tokens + result.usage.prompt_tokens,

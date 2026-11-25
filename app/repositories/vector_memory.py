@@ -9,34 +9,33 @@ from __future__ import annotations
 import threading
 from collections.abc import Sequence
 
-from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, ScoredChunk, cosine_similarity, matches_chunk_filter
+from app.domain.retrieval import (
+    ChunkFilter,
+    EmbeddedChunk,
+    EmbeddingRef,
+    ScoredChunk,
+    consistent_embedding_ref,
+    cosine_similarity,
+    matches_chunk_filter,
+)
 
 
 class InMemoryVectorStore:
     """线程安全的内存向量库:一个文档一组向量,重嵌即整组替换。
 
-    检索流程:先按切片元数据筛候选(权限过滤),再逐候选算余弦相似度、
-    降序取 top_k;同分按写入顺序稳定排出,保证结果可复现。
+    检索流程:先按来源身份与切片元数据筛候选(模型隔离 + 权限过滤),再逐候选
+    算余弦相似度、降序取 top_k;同分按写入顺序稳定排出,保证结果可复现。
     上传 / 切片端点运行在线程池中,读写必须加锁。
     """
 
     def __init__(self) -> None:
-        self._entries: dict[str, list[tuple[Chunk, list[float]]]] = {}
+        self._entries: dict[str, list[EmbeddedChunk]] = {}
         self._lock = threading.Lock()
 
-    def replace(
-        self,
-        document_id: str,
-        chunks: Sequence[Chunk],
-        vectors: Sequence[Sequence[float]],
-    ) -> None:
-        """整组写入一个文档的切片向量;切片数与向量数不对齐视为程序错误。"""
-        if len(chunks) != len(vectors):
-            raise ValueError(
-                f"切片数({len(chunks)})与向量数({len(vectors)})不对齐:{document_id}"
-            )
-        entries = [(chunk, list(vector)) for chunk, vector in zip(chunks, vectors, strict=False)]
+    def replace(self, document_id: str, chunks: Sequence[EmbeddedChunk]) -> None:
+        """整组写入一个文档的切片向量;混入不同来源身份的批次视为程序错误。"""
+        consistent_embedding_ref(chunks)
+        entries = list(chunks)
         with self._lock:
             self._entries[document_id] = entries
 
@@ -51,19 +50,21 @@ class InMemoryVectorStore:
         *,
         top_k: int,
         filters: ChunkFilter | None,
+        embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """过滤在相似度计算之前:先取满足条件的候选,再打分排序。"""
+        """身份与元数据过滤都在相似度计算之前:不同模型 / 版本的向量不进候选。"""
         constraints = (filters or ChunkFilter()).effective()
         with self._lock:
             candidates = [
-                (chunk, stored)
+                entry
                 for entries in self._entries.values()
-                for chunk, stored in entries
-                if matches_chunk_filter(chunk, constraints)
+                for entry in entries
+                if entry.embedding == embedding
+                and matches_chunk_filter(entry.chunk, constraints)
             ]
         scored = [
-            ScoredChunk(chunk=chunk, score=cosine_similarity(vector, stored))
-            for chunk, stored in candidates
+            ScoredChunk(chunk=entry.chunk, score=cosine_similarity(vector, entry.vector))
+            for entry in candidates
         ]
         scored.sort(key=lambda hit: hit.score, reverse=True)
         return scored[:top_k]
@@ -72,7 +73,16 @@ class InMemoryVectorStore:
         """内存形态直接查表:切片已被嵌入,向量必然可取。"""
         with self._lock:
             for entries in self._entries.values():
-                for chunk, stored in entries:
-                    if chunk.chunk_id == chunk_id:
-                        return list(stored)
+                for entry in entries:
+                    if entry.chunk.chunk_id == chunk_id:
+                        return list(entry.vector)
         return None
+
+    def identity_counts(self) -> dict[EmbeddingRef | None, int]:
+        """库内向量按来源身份计数(启动期一致性告警用)。"""
+        counts: dict[EmbeddingRef | None, int] = {}
+        with self._lock:
+            entries = [entry for batch in self._entries.values() for entry in batch]
+        for entry in entries:
+            counts[entry.embedding] = counts.get(entry.embedding, 0) + 1
+        return counts

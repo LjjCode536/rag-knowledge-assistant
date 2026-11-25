@@ -16,11 +16,25 @@ import pytest
 
 from app.core.config import Settings
 from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, QueryPlan, ScoredChunk
+from app.domain.retrieval import (
+    ChunkFilter,
+    EmbeddingRef,
+    QueryPlan,
+    ScoredChunk,
+    build_embedded_chunks,
+)
 from app.integrations.llm.client import EmbedResult, TokenUsage
 from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.retrieval import RetrievalService
+
+_QUERY_DIM = 3
+_EMBEDDING = EmbeddingRef(model="stub", version="v1", dimension=_QUERY_DIM)
+
+
+def _embedded(chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]):
+    """测试数据统一按当前索引身份写入:检索侧只认同一身份。"""
+    return build_embedded_chunks(chunks, vectors, _EMBEDDING)
 
 
 def _chunk(document_id: str, index: int, content: str, *, tenant: str = "acme") -> Chunk:
@@ -102,6 +116,9 @@ def _settings(**updates: object) -> Settings:
         "_env_file": None,
         "environment": "test",
         "siliconflow_api_key": None,
+        "embedding_model": "stub",
+        "embedding_version": "v1",
+        "embedding_dimension": _QUERY_DIM,
         "use_query_rewrite": False,
         "use_multi_query": False,
         "use_hybrid": False,
@@ -128,8 +145,7 @@ async def test_all_toggles_off_reproduces_single_vector_search() -> None:
     chunk_b = _chunk("doc", 1, "年假制度")
     store.replace(
         "doc",
-        [chunk_a, chunk_b],
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        _embedded([chunk_a, chunk_b], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
     )
     embedder = StubEmbedder({"押金退款": [0.6, 0.8, 0.0]})
     service = _seed_service(
@@ -148,7 +164,7 @@ async def test_minmax_degenerate_channel_keeps_raw_scores() -> None:
     """单候选通道无区分度:按原分透传(不抬成满分,也不清零)。"""
     store = InMemoryVectorStore()
     chunk_a = _chunk("doc", 0, "唯一候选")
-    store.replace("doc", [chunk_a], [[1.0, 0.0, 0.0]])
+    store.replace("doc", _embedded([chunk_a], [[1.0, 0.0, 0.0]]))
     keyword_index = InMemoryKeywordIndex()
     keyword_index.replace("doc", [chunk_a])
     embedder = StubEmbedder({"押金退款": [0.6, 0.8, 0.0]})
@@ -191,8 +207,10 @@ async def test_hybrid_fuses_channels_with_dedup() -> None:
     chunk_c = _chunk("doc", 2, "押金退款细则")
     store.replace(
         "doc",
-        [chunk_a, chunk_b, chunk_c],
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        _embedded(
+            [chunk_a, chunk_b, chunk_c],
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        ),
     )
     keyword_index = InMemoryKeywordIndex()
     keyword_index.replace("doc", [chunk_a, chunk_b, chunk_c])
@@ -221,9 +239,9 @@ async def test_hybrid_permission_filter_still_pre_retrieval() -> None:
     chunk_acme = _chunk("acme_doc", 0, "押金退款政策", tenant="acme")
     chunk_beta = _chunk("beta_doc", 0, "押金退款禁读", tenant="beta")
     store.replace(
-        "acme_doc", [chunk_acme], [[1.0, 0.0, 0.0]],
+        "acme_doc", _embedded([chunk_acme], [[1.0, 0.0, 0.0]])
     )
-    store.replace("beta_doc", [chunk_beta], [[1.0, 0.0, 0.0]])
+    store.replace("beta_doc", _embedded([chunk_beta], [[1.0, 0.0, 0.0]]))
     keyword_index = InMemoryKeywordIndex()
     keyword_index.replace("acme_doc", [chunk_acme])
     keyword_index.replace("beta_doc", [chunk_beta])
@@ -249,7 +267,7 @@ async def test_query_rewrite_embeds_rewritten_query_single_batch() -> None:
     embedder = StubEmbedder({"未发货订单退款流程": [1.0, 0.0, 0.0]})
     store = InMemoryVectorStore()
     chunk_a = _chunk("doc", 0, "退款政策")
-    store.replace("doc", [chunk_a], [[1.0, 0.0, 0.0]])
+    store.replace("doc", _embedded([chunk_a], [[1.0, 0.0, 0.0]]))
     service = _seed_service(
         _settings(use_query_rewrite=True),
         vector_store=store,
@@ -268,7 +286,7 @@ async def test_planner_returns_no_rewrite_falls_back_to_original_query() -> None
     embedder = StubEmbedder({"原查询": [1.0, 0.0, 0.0]})
     store = InMemoryVectorStore()
     chunk_a = _chunk("doc", 0, "退款政策")
-    store.replace("doc", [chunk_a], [[1.0, 0.0, 0.0]])
+    store.replace("doc", _embedded([chunk_a], [[1.0, 0.0, 0.0]]))
     service = _seed_service(
         _settings(use_query_rewrite=True),
         vector_store=store,
@@ -287,7 +305,9 @@ async def test_multi_query_expands_and_merges_with_dedup() -> None:
     store = InMemoryVectorStore()
     chunk_a = _chunk("doc", 0, "主查询命中")
     chunk_x = _chunk("doc", 1, "变体才命中")
-    store.replace("doc", [chunk_a, chunk_x], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    store.replace(
+        "doc", _embedded([chunk_a, chunk_x], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    )
     embedder = StubEmbedder(
         {
             "原始查询": [1.0, 0.0, 0.0],
@@ -325,7 +345,9 @@ async def test_multi_query_only_does_not_leak_planner_rewrite() -> None:
     store = InMemoryVectorStore()
     chunk_a = _chunk("doc", 0, "原查询才命中")
     chunk_b = _chunk("doc", 1, "改写后命中")
-    store.replace("doc", [chunk_a, chunk_b], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    store.replace(
+        "doc", _embedded([chunk_a, chunk_b], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    )
     service = _seed_service(
         _settings(use_multi_query=True, retrieval_multi_query_count=1),
         vector_store=store,
@@ -352,8 +374,7 @@ async def test_rerank_orders_final_hits_and_truncates_to_top_k() -> None:
     candidates = [_chunk("doc", i, f"第 {i} 个候选" + "长" * (2 - i)) for i in range(3)]
     store.replace(
         "doc",
-        candidates,
-        [[1.0, 0.0, 0.0], [0.9, 0.436, 0.0], [0.8, 0.6, 0.0]],
+        _embedded(candidates, [[1.0, 0.0, 0.0], [0.9, 0.436, 0.0], [0.8, 0.6, 0.0]]),
     )
     embedder = StubEmbedder({"查询": [1.0, 0.0, 0.0]})
     reranker = FakeReranker()
@@ -386,8 +407,10 @@ async def test_mmr_replaces_duplicate_with_diverse_candidate() -> None:
     chunk_diverse = _chunk("doc", 2, "正交方向")
     store.replace(
         "doc",
-        [chunk_a, chunk_dup, chunk_diverse],
-        [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        _embedded(
+            [chunk_a, chunk_dup, chunk_diverse],
+            [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        ),
     )
     embedder = StubEmbedder({"查询": [1.0, 0.0, 0.0]})
     service = _seed_service(
@@ -414,8 +437,10 @@ async def test_rerank_runs_before_mmr_when_both_on() -> None:
     ]
     store.replace(
         "doc",
-        candidates,
-        [[1.0, 0.0, 0.0], [0.9, 0.436, 0.0], [0.6, 0.8, 0.0], [0.0, 0.0, 1.0]],
+        _embedded(
+            candidates,
+            [[1.0, 0.0, 0.0], [0.9, 0.436, 0.0], [0.6, 0.8, 0.0], [0.0, 0.0, 1.0]],
+        ),
     )
     embedder = StubEmbedder({"查询": [1.0, 0.0, 0.0]})
     reranker = FakeReranker()

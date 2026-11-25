@@ -13,6 +13,7 @@ from typing import Protocol
 import numpy as np
 from pydantic import BaseModel
 
+from app.core.errors import DimensionMismatchError
 from app.domain.chunks import Chunk
 
 
@@ -43,18 +44,111 @@ class ScoredChunk:
     score: float
 
 
+@dataclass(frozen=True, slots=True)
+class EmbeddingRef:
+    """一组向量的来源身份:模型 / 版本 / 维度。
+
+    三者共同定义一个索引空间。只有身份完全一致的向量才允许互算余弦:
+    同维度换模型时余弦分数在数学上仍可算,但语义已不可比,必须按身份隔离
+    (ADR-0019)。``version`` 用于同一模型更换预处理 / 指令口径时的重建灰度。
+    """
+
+    model: str
+    version: str
+    dimension: int
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddedChunk:
+    """带来源身份的切片向量:向量库写入的最小单元。"""
+
+    chunk: Chunk
+    vector: tuple[float, ...]
+    embedding: EmbeddingRef
+
+
+def build_embedded_chunks(
+    chunks: Sequence[Chunk],
+    vectors: Sequence[Sequence[float]],
+    embedding: EmbeddingRef,
+) -> list[EmbeddedChunk]:
+    """切片 + 向量 + 来源身份 → 写入单元;维度不符即拒绝,不落库。
+
+    维度在这里而不是在向量库里校验:错误发生在生产方(模型输出与声明不符),
+    定位信息(chunk_id / document_id)必须完整带回。
+    """
+    if len(chunks) != len(vectors):
+        raise ValueError(
+            f"切片数({len(chunks)})与向量数({len(vectors)})不对齐"
+        )
+    built: list[EmbeddedChunk] = []
+    for chunk, vector in zip(chunks, vectors, strict=True):
+        if len(vector) != embedding.dimension:
+            raise DimensionMismatchError(
+                "向量维度与声明的模型维度不一致",
+                details={
+                    "chunk_id": chunk.chunk_id,
+                    "document_id": chunk.document_id,
+                    "model": embedding.model,
+                    "version": embedding.version,
+                    "expected_dimension": embedding.dimension,
+                    "actual_dimension": len(vector),
+                },
+            )
+        built.append(
+            EmbeddedChunk(
+                chunk=chunk,
+                vector=tuple(float(component) for component in vector),
+                embedding=embedding,
+            )
+        )
+    return built
+
+
+def consistent_embedding_ref(
+    embedded: Sequence[EmbeddedChunk],
+) -> EmbeddingRef | None:
+    """校验一批写入单元同属一个索引空间且维度自洽;空批返回 None。
+
+    向量库实现统一调用本函数:批量写入混入两种身份是程序错误,绝不静默
+    按"哪个先到算哪个"落库。
+    """
+    if not embedded:
+        return None
+    ref = embedded[0].embedding
+    for item in embedded:
+        if item.embedding != ref:
+            raise ValueError(
+                "同一批向量混入了不同的来源身份:"
+                f"{ref} / {item.embedding}"
+            )
+        if len(item.vector) != ref.dimension:
+            raise DimensionMismatchError(
+                "向量维度与来源身份声明的维度不一致",
+                details={
+                    "chunk_id": item.chunk.chunk_id,
+                    "document_id": item.chunk.document_id,
+                    "model": ref.model,
+                    "version": ref.version,
+                    "expected_dimension": ref.dimension,
+                    "actual_dimension": len(item.vector),
+                },
+            )
+    return ref
+
+
 class VectorStore(Protocol):
     """向量库契约:相似度检索与元数据过滤的存储。
 
     与切片仓储同语义:同一个文档重嵌即整组替换,旧向量不并存;
     过滤发生在检索之前(先筛候选,再算相似度),而非检索后。
+    检索还必须带来源身份:不同模型 / 版本的向量绝不互算分数(ADR-0019)。
     """
 
     def replace(
         self,
         document_id: str,
-        chunks: Sequence[Chunk],
-        vectors: Sequence[Sequence[float]],
+        chunks: Sequence[EmbeddedChunk],
     ) -> None:
         """整组写入一个文档的全部切片向量(重嵌即换,旧向量整批作废)。"""
         ...
@@ -65,8 +159,13 @@ class VectorStore(Protocol):
         *,
         top_k: int,
         filters: ChunkFilter | None,
+        embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """按相似度降序返回至多 top_k 个切片;过滤在相似度计算之前完成。"""
+        """按相似度降序返回至多 top_k 个切片;过滤与身份隔离在打分之前完成。"""
+        ...
+
+    def identity_counts(self) -> dict[EmbeddingRef | None, int]:
+        """库内向量按来源身份计数;键 None 表示身份未知(历史行尚未回填)。"""
         ...
 
     def delete(self, document_id: str) -> None:

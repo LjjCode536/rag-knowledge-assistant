@@ -1,6 +1,6 @@
 # ADR-0011: 生产持久化切 pgvector;六张生产表;无 Docker 回退内存 / Chroma
 
-**Status**: accepted
+**Status**: accepted(混维共存 / 维度按 0 分降级两处由 ADR-0019 取代)
 
 ## Context
 

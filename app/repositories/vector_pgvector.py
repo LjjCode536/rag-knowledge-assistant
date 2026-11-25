@@ -9,26 +9,33 @@
 - 相似度分数不用 Postgres 原生距离:候选一律在 Python 用领域层
   :func:`~app.domain.retrieval.cosine_similarity` 复算,三个后端(内存 /
   Chroma / pgvector)分数同源,仅剩 vector 列物化为 float32 的 1e-5 级精度差;
+- 来源身份(模型 / 版本 / 维度)随每个向量落库,检索前作为 SQL 条件下推:
+  不同模型 / 版本的向量绝不互算分数(ADR-0019);身份未知的历史行(NULL)
+  不参与检索,等回填脚本补齐后自动恢复可见;
 - 检索前过滤下推 SQL WHERE(embeddings 自带的切片元数据列),先筛候选、
   再算相似度;元数据字段空值(NULL)不参与等值过滤,与内存基线
   ``None != value`` 语义一致;
-- 维度不一致(如换向量模型后未整库重嵌)在 Python 复算阶段按 0 分降级,不
-  参与有效相似度,检索接口不因此 5xx;切片向量列不带维度修饰,允许迁移期
-  新旧维度共存(换嵌入模型必须整库重嵌,ADR-0003);
-- 候选排序走 SQL 侧精确余弦(``ORDER BY embedding <=> :q``),不建 ANN 索引:
-  HNSW 要求定维列,与混维共存语义冲突;内部教材口径的语料量级下精确扫描
-  足够,升维定容后可换定维列 + HNSW(留在 ADR 后续迭代)。
+- 索引列不带维度修饰,维度正确性由写入侧断言(DimensionMismatchError)与
+  ``embedding_dimension`` 过滤双重保证:同一身份的行维度必然一致,因此不
+  需要按查询维度做降级兜底;定维列 + HNSW 留给独立脚本(ADR-0019)。
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
-import psycopg
 from psycopg.rows import dict_row
 
 from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, ScoredChunk, cosine_similarity
+from app.domain.retrieval import (
+    ChunkFilter,
+    EmbeddedChunk,
+    EmbeddingRef,
+    ScoredChunk,
+    consistent_embedding_ref,
+    cosine_similarity,
+)
 from app.repositories.postgres.base import PgDatabase
 
 _SEARCH_COLUMNS = (
@@ -76,16 +83,28 @@ def _as_vector(stored: str | None) -> list[float] | None:
     return [float(component) for component in stored.strip("[]").split(",") if component]
 
 
-def _where_of(filters: ChunkFilter) -> tuple[str, list[str]]:
+def _where_of(filters: ChunkFilter) -> tuple[str, list[Any]]:
     """生效过滤条件 → SQL WHERE 片段(AND 等值);空条件返回 (true, [])。"""
     constraints = filters.effective()
     clauses: list[str] = []
-    params: list[str] = []
+    params: list[Any] = []
     for field, value in constraints.items():
         column = _FILTER_COLUMNS[field]
         clauses.append(f"{column} = %s")
         params.append(value)
     return " AND ".join(clauses) if clauses else "true", params
+
+
+def _identity_of(embedding: EmbeddingRef) -> tuple[str, list[Any]]:
+    """来源身份 → SQL 条件:模型 / 版本 / 维度三者全等才进候选。
+
+    身份未知的历史行(NULL)不会被 ``=`` 命中:检索里"消失"直到回填,
+    而不是与当前模型的向量混算。
+    """
+    return (
+        "embedding_model = %s AND embedding_version = %s AND embedding_dimension = %s",
+        [embedding.model, embedding.version, embedding.dimension],
+    )
 
 
 def _chunk_of(row: dict) -> Chunk:
@@ -106,7 +125,7 @@ def _chunk_of(row: dict) -> Chunk:
 
 
 class PgVectorStore:
-    """pgvector 向量库:embedding + 切片元数据快照同表存续,按文档整组联动。
+    """pgvector 向量库:embedding + 切片元数据快照 + 来源身份同表存续,按文档整组联动。
 
     与内存基线同契约:同一文档重嵌即整组替换;``delete`` 按文档连带清理
     (未入库幂等);``search`` 结果按相似度降序。score 复算与 Chroma 同源。
@@ -124,29 +143,30 @@ class PgVectorStore:
     def replace(
         self,
         document_id: str,
-        chunks: Sequence[Chunk],
-        vectors: Sequence[Sequence[float]],
+        chunks: Sequence[EmbeddedChunk],
     ) -> None:
-        """整组写入一个文档的切片向量;切片数与向量数不对齐视为程序错误。"""
-        if len(chunks) != len(vectors):
-            raise ValueError(
-                f"切片数({len(chunks)})与向量数({len(vectors)})不对齐:{document_id}"
-            )
+        """整组写入一个文档的切片向量;混入不同来源身份的批次视为程序错误。"""
+        consistent_embedding_ref(chunks)
         insert = (
-            "INSERT INTO embeddings (chunk_id, document_id, embedding, chunk_index, "
+            "INSERT INTO embeddings (chunk_id, document_id, embedding, "
+            "embedding_model, embedding_version, embedding_dimension, chunk_index, "
             "content, tenant, department, doc_type, version, page_number, title, "
             "element_index_start, element_index_end) "
-            "VALUES (%s, %s, %s::vector, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "VALUES (%s, %s, %s::vector, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         )
         with self._db.connection() as conn, conn.transaction():
             self._delete_only(document_id, conn)
-            for chunk, vector in zip(chunks, vectors, strict=True):
+            for entry in chunks:
+                chunk = entry.chunk
                 conn.execute(
                     insert,
                     (
                         chunk.chunk_id,
                         document_id,
-                        _to_pg_vector(vector),
+                        _to_pg_vector(entry.vector),
+                        entry.embedding.model,
+                        entry.embedding.version,
+                        entry.embedding.dimension,
                         chunk.index,
                         chunk.content,
                         chunk.tenant,
@@ -174,17 +194,23 @@ class PgVectorStore:
         *,
         top_k: int,
         filters: ChunkFilter | None,
+        embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """过滤在相似度计算之前:WHERE 下推 SQL,被过滤的切片不进候选。"""
+        """身份与元数据过滤都在相似度计算之前:被过滤的切片不进 SQL 候选。"""
         where, params = _where_of(filters or ChunkFilter())
-        query_vector = _to_pg_vector(vector)
-        ordered = (
+        identity, identity_params = _identity_of(embedding)
+        query = (
             "SELECT " + _SEARCH_COLUMNS + f" FROM embeddings e WHERE {where} "
-            "ORDER BY e.embedding <=> %s::vector LIMIT %s"
+            f"AND {identity} ORDER BY e.embedding <=> %s::vector LIMIT %s"
         )
-        unordered = "SELECT " + _SEARCH_COLUMNS + f" FROM embeddings e WHERE {where}"
+        sql_params: list[Any] = [
+            *params,
+            *identity_params,
+            _to_pg_vector(vector),
+            top_k,
+        ]
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
-            rows = self._fetch_candidates(cursor, ordered, unordered, params, query_vector, top_k)
+            rows = cursor.execute(query, sql_params).fetchall()
         hits = [
             ScoredChunk(
                 chunk=_chunk_of(row),
@@ -193,21 +219,7 @@ class PgVectorStore:
             for row in rows
         ]
         hits.sort(key=lambda hit: hit.score, reverse=True)
-        # 混维降级路径取回的是全量过滤候选,必须切回 top_k(契约:至多 top_k 个)
         return hits[:top_k]
-
-    def _fetch_candidates(
-        self, cursor, ordered: str, unordered: str, params: list[str], query_vector: str, top_k: int
-    ) -> list[dict]:
-        """先按 SQL 侧精确余弦取 top_k 候选;混维(如迁移期)退回全量候选再 Python 复算。"""
-        try:
-            cursor.execute(ordered, (*params, query_vector, top_k))
-            return cursor.fetchall()
-        except psycopg.errors.DataError as exc:
-            if "dimension" not in str(exc).lower():
-                raise
-            cursor.execute(unordered, params)
-            return cursor.fetchall()
 
     def vector_of(self, chunk_id: str) -> Sequence[float] | None:
         """取一个切片的已存向量(MMR 需要候选间的多样性计算);缺失返回 None。"""
@@ -218,3 +230,20 @@ class PgVectorStore:
         if row is None:
             return None
         return _as_vector(row[0])
+
+    def identity_counts(self) -> dict[EmbeddingRef | None, int]:
+        """库内向量按来源身份计数(启动期一致性告警用)。"""
+        with self._db.connection() as conn:
+            rows = conn.execute(
+                "SELECT embedding_model, embedding_version, embedding_dimension, count(*) "
+                "FROM embeddings GROUP BY 1, 2, 3"
+            ).fetchall()
+        counts: dict[EmbeddingRef | None, int] = {}
+        for model, version, dimension, count in rows:
+            ref = (
+                None
+                if model is None or version is None or dimension is None
+                else EmbeddingRef(model=model, version=version, dimension=int(dimension))
+            )
+            counts[ref] = counts.get(ref, 0) + int(count)
+        return counts

@@ -5,9 +5,10 @@ documents / chunks / embeddings / query_logs / feedbacks / evaluation_runs,
 
 设计要点(与内存基线的语义对齐见各仓储实现):
 
-- ``embeddings.embedding`` 用**不带维度修饰**的 vector 列:换嵌入模型的
-  迁移期允许新旧维度共存,维度不一致按 0 分降级(不崩溃),与内存基线同
-  语义;代价是走精确顺序扫描而不是 ANN 索引(见 vector_pgvector 模块说明);
+- ``embeddings`` 带**来源身份三列**(模型 / 版本 / 维度,可空):检索只与
+  同一身份的向量互算分数,历史行在回填前不参与检索(ADR-0019);
+  ``embedding`` 列仍不带维度修饰,维度正确性由写入侧断言保证,代价是走
+  精确顺序扫描而不是 ANN 索引(见 vector_pgvector 模块说明);
 - ``embeddings`` 是**自带切片元数据快照**的自足存储(与 Chroma 的 metadata
   形态一致):重切作废旧切片后、重嵌入完成前,向量通道仍按旧快照检索 ——
   与内存基线 / Chroma 同语义(向量的生死只由 vector store 的 replace /
@@ -77,6 +78,9 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         chunk_id            text PRIMARY KEY,
         document_id         text NOT NULL,
         embedding           vector NOT NULL,
+        embedding_model     text,
+        embedding_version   text,
+        embedding_dimension integer,
         chunk_index         integer NOT NULL,
         content             text NOT NULL,
         tenant              text NOT NULL,
@@ -89,6 +93,11 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         element_index_end   integer NOT NULL
     )
     """,
+    # 来源身份三列:可空 = 历史行未知,回填前不参与检索(ADR-0019)。
+    # 启动路径只做加法:不收紧列类型、不加 CHECK、不回填覆盖。
+    "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_model text",
+    "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_version text",
+    "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_dimension integer",
     "CREATE INDEX IF NOT EXISTS embeddings_by_document ON embeddings (document_id)",
     """
     CREATE TABLE IF NOT EXISTS query_logs (

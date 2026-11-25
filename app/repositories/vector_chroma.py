@@ -10,10 +10,10 @@
   仅剩向量物化为 float32 的 1e-5 级精度差;
 - 检索前过滤下推到 Chroma 的 ``where`` 原生查询,被过滤的切片不进 ANN
   候选,同内存基线"先筛候选、再算相似度"的口径;
+- 来源身份(模型 / 版本 / 维度)写进每条记录的 metadata,并作为 ``where``
+  的强制条件:不同模型 / 版本的向量绝不互算分数(ADR-0019);
 - 元数据不含空值字段:未填写的字段不写入,``$eq`` 对缺失字段按不匹配
-  处理,与内存基线 ``None != value`` 语义一致;
-- 维度不一致按 0 分降级(不参与有效相似度),与内存基线同语义;
-  切片向量写入维度不一致仍然报错(换向量模型必须整库重嵌,ADR-0003)。
+  处理,与内存基线 ``None != value`` 语义一致。
 
 Chroma 不设默认嵌入函数:调用方显式传入与查询一致的向量;遥测关闭,
 评估与测试不触网。
@@ -26,8 +26,19 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+import structlog
+
 from app.domain.chunks import Chunk
-from app.domain.retrieval import ChunkFilter, ScoredChunk, cosine_similarity
+from app.domain.retrieval import (
+    ChunkFilter,
+    EmbeddedChunk,
+    EmbeddingRef,
+    ScoredChunk,
+    consistent_embedding_ref,
+    cosine_similarity,
+)
+
+logger = structlog.get_logger("vector_chroma")
 
 # 切片元数据里可能为空的字段:为 None 时不写入,取回时按 None 还原
 _OPTIONAL_METADATA_FIELDS = ("department", "doc_type", "page_number", "title")
@@ -41,8 +52,6 @@ _REQUIRED_METADATA_FIELDS = (
     "element_index_start",
     "element_index_end",
 )
-
-
 class ChromaVectorStore:
     """Chroma 向量库:一个持久目录一份标签,重嵌即整组替换,读写加锁。
 
@@ -73,21 +82,17 @@ class ChromaVectorStore:
     def replace(
         self,
         document_id: str,
-        chunks: Sequence[Chunk],
-        vectors: Sequence[Sequence[float]],
+        chunks: Sequence[EmbeddedChunk],
     ) -> None:
-        """整组写入一个文档的切片向量;切片数与向量数不对齐视为程序错误。"""
-        if len(chunks) != len(vectors):
-            raise ValueError(
-                f"切片数({len(chunks)})与向量数({len(vectors)})不对齐:{document_id}"
-            )
+        """整组写入一个文档的切片向量;混入不同来源身份的批次视为程序错误。"""
+        consistent_embedding_ref(chunks)
         with self._lock:
             self._delete_only(document_id)
             if chunks:
                 self._collection.add(
-                    ids=[chunk.chunk_id for chunk in chunks],
-                    embeddings=[list(vector) for vector in vectors],
-                    metadatas=[_metadata_of(chunk) for chunk in chunks],
+                    ids=[entry.chunk.chunk_id for entry in chunks],
+                    embeddings=[list(entry.vector) for entry in chunks],
+                    metadatas=[_metadata_of(entry) for entry in chunks],
                 )
 
     def delete(self, document_id: str) -> None:
@@ -104,9 +109,17 @@ class ChromaVectorStore:
         *,
         top_k: int,
         filters: ChunkFilter | None,
+        embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """过滤在相似度计算之前:where 条件下推,被过滤的切片不进 ANN 候选。"""
-        constraints = (filters or ChunkFilter()).effective()
+        """过滤在相似度计算之前:身份 + 元数据 where 条件下推,被过滤的不进候选。"""
+        constraints: dict[str, Any] = dict((filters or ChunkFilter()).effective())
+        constraints.update(
+            {
+                "embedding_model": embedding.model,
+                "embedding_version": embedding.version,
+                "embedding_dimension": embedding.dimension,
+            }
+        )
         where = _chroma_where(constraints)
         with self._lock:
             try:
@@ -120,22 +133,31 @@ class ChromaVectorStore:
                 embeddings = _query_flat(result, "embeddings")
                 record_ids = _query_flat(result, "ids")
                 hits = []
-                for metadata, embedding, record_id in zip(
+                for metadata, stored, record_id in zip(
                     metadatas, embeddings, record_ids, strict=False
                 ):
-                    stored = _as_vector(embedding)
-                    if stored is not None:
+                    stored_vector = _as_vector(stored)
+                    if stored_vector is not None:
                         hits.append(
                             ScoredChunk(
                                 chunk=_chunk_of(metadata, record_id),
-                                score=cosine_similarity(vector, stored),
+                                score=cosine_similarity(vector, stored_vector),
                             )
                         )
             except Exception as exc:
                 if not _is_dimension_mismatch(exc):
                     raise
-                # 维度不一致(如换向量模型后未重嵌):同内存基线按 0 分降级,
-                # 不参与有效相似度,检索接口不因此 5xx。
+                # 维度不一致只可能来自"换模型后未重嵌"(Chroma 的 HNSW 维度在
+                # 建集合时定死,where 救不了查询维度本身):按身份条件取回候选
+                # 并一律 0 分,返回空结果而不是 5xx;重建索引后自然恢复。
+                logger.warning(
+                    "vector_store_dimension_mismatch",
+                    backend="chroma",
+                    query_dimension=len(vector),
+                    identity_model=embedding.model,
+                    identity_version=embedding.version,
+                    identity_dimension=embedding.dimension,
+                )
                 hits = self._fallback_zero_hits(where, top_k)
         # 稳定按分数降序:绕开 Chroma 内部 ANN 的同分顺序浮动
         hits.sort(key=lambda hit: hit.score, reverse=True)
@@ -150,8 +172,18 @@ class ChromaVectorStore:
         stored = stored[0] if stored is not None and len(stored) > 0 else None
         return _as_vector(stored)
 
+    def identity_counts(self) -> dict[EmbeddingRef | None, int]:
+        """库内向量按来源身份计数(启动期一致性告警用;本地库规模可接受全量读)。"""
+        with self._lock:
+            result = self._collection.get(include=["metadatas"])
+        counts: dict[EmbeddingRef | None, int] = {}
+        for metadata in result.get("metadatas") or []:
+            ref = _identity_of(metadata)
+            counts[ref] = counts.get(ref, 0) + 1
+        return counts
+
     def _fallback_zero_hits(self, where: dict[str, Any] | None, top_k: int) -> list[ScoredChunk]:
-        """维度不一致时的降级候选:满足过滤条件的切片全部按 0 分返回。"""
+        """维度不一致时的降级候选:满足身份与元数据条件的切片全部按 0 分返回。"""
         result = self._collection.get(where=where, include=["metadatas"])
         metadatas = result.get("metadatas") or []
         record_ids = result.get("ids") or []
@@ -170,14 +202,29 @@ def _is_dimension_mismatch(exc: Exception) -> bool:
     return "dimension" in str(exc).lower()
 
 
-def _metadata_of(chunk: Chunk) -> dict[str, Any]:
-    """切片 → Chroma 元数据:None 字段不写入(缺失即未填写)。"""
-    metadata: dict[str, Any] = {field: getattr(chunk, field) for field in _REQUIRED_METADATA_FIELDS}
+def _metadata_of(entry: EmbeddedChunk) -> dict[str, Any]:
+    """切片 + 来源身份 → Chroma 元数据:None 字段不写入(缺失即未填写)。"""
+    metadata: dict[str, Any] = {
+        field: getattr(entry.chunk, field) for field in _REQUIRED_METADATA_FIELDS
+    }
     for field in _OPTIONAL_METADATA_FIELDS:
-        value = getattr(chunk, field)
+        value = getattr(entry.chunk, field)
         if value is not None:
             metadata[field] = value
+    metadata["embedding_model"] = entry.embedding.model
+    metadata["embedding_version"] = entry.embedding.version
+    metadata["embedding_dimension"] = entry.embedding.dimension
     return metadata
+
+
+def _identity_of(metadata: dict[str, Any]) -> EmbeddingRef | None:
+    """元数据 → 来源身份;三个字段缺一即视为未知(历史行未回填)。"""
+    model = metadata.get("embedding_model")
+    version = metadata.get("embedding_version")
+    dimension = metadata.get("embedding_dimension")
+    if model is None or version is None or dimension is None:
+        return None
+    return EmbeddingRef(model=str(model), version=str(version), dimension=int(dimension))
 
 
 def _chunk_of(metadata: dict[str, Any], record_id: str) -> Chunk:
@@ -190,7 +237,7 @@ def _chunk_of(metadata: dict[str, Any], record_id: str) -> Chunk:
     return Chunk(**fields)
 
 
-def _chroma_where(constraints: dict[str, str]) -> dict[str, Any] | None:
+def _chroma_where(constraints: dict[str, Any]) -> dict[str, Any] | None:
     """过滤条件 → Chroma where:单条直接等值,多条 $and,空条件放行。"""
     conditions = [{field: {"$eq": value}} for field, value in constraints.items()]
     if not conditions:

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
 
+    # ===== 向量溯源(ADR-0019)=====
+    # 模型标识 / 版本 / 维度三者共同定义一个索引空间:写库时随每个向量落库,
+    # 检索只与同一身份的向量互算余弦。换模型或版本必须整库重嵌;维度不符在
+    # 入库前拒绝(DimensionMismatchError),不静默降级。
+    embedding_version: str = "v1"
+    embedding_dimension: int = Field(default=1024, ge=1)
+
     # ===== 上游调用策略 =====
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=5)

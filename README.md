@@ -109,6 +109,10 @@ curl -X POST http://127.0.0.1:8000/api/v1/search \
   (T13;需先 `docker compose up -d db` 看下节):同题同结果,前后指标对比见
   `docs/iterations/0004-t12-vector-store-switch.md` 与 `0005-t13-pgvector.md`。
 - 向量库的 `VectorStore` 契约在领域层;换后端只换实现(ADR-0001)。
+- 每个向量随库带来源身份(`embedding_model` / `embedding_version` /
+  `embedding_dimension`):检索只与同一身份的向量互算,同维度换模型不会被静默混算
+  (ADR-0019)。换模型必须整库重嵌;历史行先跑
+  `uv run python scripts/backfill_embedding_identity.py`(默认 dry-run,确认后加 `--apply`)。
 - 过滤发生在相似度计算之前:被权限条件排除的切片不占 top-k 名额。
 - 未配置密钥时返回统一上游错误,文档停在 `chunked` 可直接重试,不落 `failed`。
 

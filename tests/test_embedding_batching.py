@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.core.errors import NotFoundError
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord, DocumentStatus
+from app.domain.retrieval import EmbeddingRef
 from app.integrations.llm.client import EmbedResult, TokenUsage
 from app.repositories.memory import (
     InMemoryChunkRepository,
@@ -77,6 +78,7 @@ def _service(settings: Settings, embedder, chunk_count: int) -> EmbeddingService
         chunk_repository=chunks,
         vector_store=InMemoryVectorStore(),
         embedder=embedder,
+        embedding=EmbeddingRef(model="fake", version="v1", dimension=embedder.dimension),
         batch_size=settings.embedding_batch_size,
     )
 

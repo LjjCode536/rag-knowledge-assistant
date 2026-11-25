@@ -19,10 +19,12 @@ router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
 
 class EmbeddingRunView(BaseModel):
-    """一次向量化运行视图:档案最新状态 + 生效模型 + 用量与延迟。"""
+    """一次向量化运行视图:档案最新状态 + 生效模型 / 来源身份 + 用量与延迟。"""
 
     document: DocumentView
     model: str
+    embedding_version: str
+    embedding_dimension: int
     chunk_count: int
     prompt_tokens: int
     completion_tokens: int
@@ -35,6 +37,8 @@ class EmbeddingRunView(BaseModel):
         return cls(
             document=DocumentView.of(record),
             model=result.model,
+            embedding_version=result.embedding.version,
+            embedding_dimension=result.embedding.dimension,
             chunk_count=result.chunk_count,
             prompt_tokens=result.usage.prompt_tokens,
             completion_tokens=result.usage.completion_tokens,

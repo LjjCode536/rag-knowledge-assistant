@@ -27,9 +27,13 @@ def text_vector(text: str, dim: int = DIM) -> list[float]:
 
 
 class DeterministicEmbedder:
-    """统一客户端 embed 接缝的替身:签名与 UnifiedLLMClient.embed 一致。"""
+    """统一客户端 embed 接缝的替身:签名与 UnifiedLLMClient.embed 一致。
 
-    def __init__(self, *, model: str = "BAAI/bge-m3", dim: int = DIM) -> None:
+    默认维度取 :data:`EVALUATION_DIM`(与生产 bge-m3 的 1024 对齐):服务层
+    会按配置声明校验维度,替身维度必须与 ``embedding_dimension`` 同口径。
+    """
+
+    def __init__(self, *, model: str = "BAAI/bge-m3", dim: int = EVALUATION_DIM) -> None:
         self._model = model
         self._dim = dim
 

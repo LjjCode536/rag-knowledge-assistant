@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.errors import UpstreamTimeoutError
+from app.domain.retrieval import EmbeddingRef
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.services.chunking import ChunkingService
@@ -182,6 +183,11 @@ def test_rechunk_during_embedding_rejects_stale_vectors(settings, upload_dir):
             chunk_repository=embedding_service._chunks,
             vector_store=app.state.vector_store,
             embedder=RechunkDuringEmbed(),
+            embedding=EmbeddingRef(
+                model=settings.embedding_model,
+                version=settings.embedding_version,
+                dimension=settings.embedding_dimension,
+            ),
         )
 
         response = _embed(client, document_id)

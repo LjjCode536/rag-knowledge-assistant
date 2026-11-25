@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import structlog
 from fastapi import FastAPI
 
 from app.api.routes.chat import router as chat_router
@@ -29,7 +30,12 @@ from app.domain.repositories import (
     QueryLogRepository,
     StatsRepository,
 )
-from app.domain.retrieval import KeywordIndex, QueryPlanner, VectorStore
+from app.domain.retrieval import (
+    EmbeddingRef,
+    KeywordIndex,
+    QueryPlanner,
+    VectorStore,
+)
 from app.integrations.llm.client import UnifiedLLMClient
 from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.memory import (
@@ -62,6 +68,52 @@ from app.services.storage import LocalDocumentStorage
 
 if TYPE_CHECKING:
     from app.repositories.postgres import PgDatabase
+
+logger = structlog.get_logger("app")
+
+
+def _embedding_ref_of(settings: Settings) -> EmbeddingRef:
+    """当前配置声明的索引身份:写入与检索同源,只此一处构造(ADR-0019)。"""
+    return EmbeddingRef(
+        model=settings.embedding_model,
+        version=settings.embedding_version,
+        dimension=settings.embedding_dimension,
+    )
+
+
+def _warn_embedding_identity(store: VectorStore, current: EmbeddingRef) -> None:
+    """启动期身份盘点:存在非当前身份 / 未知身份的向量时大声告警。
+
+    不阻断启动:旧向量会被检索身份条件排除,表现为"查不到 / 拒答"而不是
+    混算降分;运维据告警重嵌或跑回填脚本。盘点失败也不影响服务可用性。
+    """
+    try:
+        counts = store.identity_counts()
+    except Exception as exc:  # 启动期盘点失败不阻断服务
+        logger.warning("embedding_identity_check_failed", error=str(exc))
+        return
+    stale = [
+        {
+            "model": ref.model if ref is not None else None,
+            "version": ref.version if ref is not None else None,
+            "dimension": ref.dimension if ref is not None else None,
+            "count": count,
+        }
+        for ref, count in counts.items()
+        if ref != current
+    ]
+    if not stale:
+        return
+    logger.warning(
+        "embedding_identity_mismatch",
+        current={
+            "model": current.model,
+            "version": current.version,
+            "dimension": current.dimension,
+        },
+        stale=stale,
+        stale_total=sum(item["count"] for item in stale),
+    )
 
 
 def _build_answer_generator(
@@ -215,11 +267,13 @@ def create_app(
         chunk_repository=chunk_repository,
         settings=settings,
     )
+    embedding_ref = _embedding_ref_of(settings)
     embedding_service = EmbeddingService(
         document_repository=document_repository,
         chunk_repository=chunk_repository,
         vector_store=effective_vector_store,
         embedder=effective_embedder,
+        embedding=embedding_ref,
         keyword_index=effective_keyword_index,
         answer_cache=answer_cache,
         batch_size=settings.embedding_batch_size,
@@ -258,6 +312,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.llm_client = llm_client
+        _warn_embedding_identity(effective_vector_store, embedding_ref)
         try:
             yield
         finally:

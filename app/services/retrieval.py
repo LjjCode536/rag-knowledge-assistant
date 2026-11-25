@@ -10,15 +10,18 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import structlog
 
 from app.core.config import Settings
+from app.core.errors import DimensionMismatchError
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
     ChunkFilter,
+    EmbeddingRef,
     KeywordIndex,
     QueryPlan,
     QueryPlanner,
@@ -100,6 +103,12 @@ class RetrievalService:
         self._keyword_index = keyword_index
         self._planner = query_planner
         self._reranker = reranker
+        # 查询向量的索引身份与写入侧同源(配置声明),不同模型 / 版本的向量不互算。
+        self._embedding = EmbeddingRef(
+            model=settings.embedding_model,
+            version=settings.embedding_version,
+            dimension=settings.embedding_dimension,
+        )
         self._check_wiring()
 
     def _check_wiring(self) -> None:
@@ -115,6 +124,23 @@ class RetrievalService:
             missing.append("reranker (use_rerank)")
         if missing:
             raise ValueError("高级检索开关开启但缺少协作对象:" + "; ".join(missing))
+
+    def _checked_embedding(self, vector: Sequence[float]) -> EmbeddingRef:
+        """查询向量维度必须与配置声明的索引维度一致:不一致即模型 / 配置错配。
+
+        不把错配当成"0 分候选"降级:那会把配置错误伪装成"知识库没有相关内容"。
+        """
+        if len(vector) != self._embedding.dimension:
+            raise DimensionMismatchError(
+                "查询向量维度与索引声明的维度不一致",
+                details={
+                    "model": self._embedding.model,
+                    "version": self._embedding.version,
+                    "expected_dimension": self._embedding.dimension,
+                    "actual_dimension": len(vector),
+                },
+            )
+        return self._embedding
 
     async def search(
         self,
@@ -160,8 +186,12 @@ class RetrievalService:
     ) -> RetrievalOutcome:
         started = datetime.now(UTC)
         embedded_query = await self._embedder.embed([query])
+        query_vector = embedded_query.vectors[0]
         hits = self._vectors.search(
-            embedded_query.vectors[0], top_k=top_k, filters=filters
+            query_vector,
+            top_k=top_k,
+            filters=filters,
+            embedding=self._checked_embedding(query_vector),
         )
         effective_filters = (filters or ChunkFilter()).effective()
         logger.info(
@@ -206,6 +236,7 @@ class RetrievalService:
         candidate_k = max(settings.retrieval_candidate_k, top_k)
         candidates = self._fuse_channels(
             embedded_queries.vectors,
+            embedding=self._checked_embedding(embedded_queries.vectors[0]),
             primary_query=primary,
             filters=filters,
             candidate_k=candidate_k,
@@ -242,6 +273,7 @@ class RetrievalService:
         self,
         query_vectors: list[list[float]],
         *,
+        embedding: EmbeddingRef,
         primary_query: str,
         filters: ChunkFilter | None,
         candidate_k: int,
@@ -257,7 +289,10 @@ class RetrievalService:
         vector_hits: dict[str, ScoredChunk] = {}
         for query_vector in query_vectors:
             for hit in self._vectors.search(
-                query_vector, top_k=candidate_k, filters=filters
+                query_vector,
+                top_k=candidate_k,
+                filters=filters,
+                embedding=embedding,
             ):
                 best = vector_hits.get(hit.chunk.chunk_id)
                 if best is None or hit.score > best.score:
