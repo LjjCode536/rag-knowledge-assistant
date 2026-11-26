@@ -94,7 +94,7 @@ def test_embed_roundtrip_marks_document_indexed(fake_client):
         fake_client,
         "hr.txt",
         ALPHA_TEXT,
-        tenant="acme",
+        tenant="default",
         department="人力部",
         doc_type="政策",
         version="v2",
@@ -120,7 +120,7 @@ def test_embed_roundtrip_marks_document_indexed(fake_client):
 
 
 def test_embed_logs_usage_and_latency_structured(fake_client, capsys):
-    _index(fake_client, "hr.txt", ALPHA_TEXT, tenant="acme")
+    _index(fake_client, "hr.txt", ALPHA_TEXT, tenant="default")
 
     entries = json_log_entries(capsys.readouterr().out)
     embedded = [entry for entry in entries if entry["event"] == "document_embedded"]

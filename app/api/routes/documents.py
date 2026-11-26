@@ -3,11 +3,13 @@
 端点一览:
 
 - ``POST   /api/v1/documents``        上传(登记,后台入库);
-- ``GET    /api/v1/documents``        **文档清单**(T17):按租户 / 状态 / 关键字 /
-  部门 / 文档类型筛选,分页返回并给出总数;
+- ``GET    /api/v1/documents``        **文档清单**(T17):按主体租户收敛,可再按
+  状态 / 关键字 / 部门 / 文档类型筛选,分页返回并给出总数;
 - ``GET    /api/v1/documents/{id}``   查询文档状态(入库进度);
 - ``GET    /api/v1/documents/{id}/elements``  查询解析产物;
 - ``DELETE /api/v1/documents/{id}``   删除文档(切片与向量连带清理)。
+
+读路径的租户边界来自登录主体构造的授权范围:跨租户对象一律 404(ADR-0020)。
 """
 
 from __future__ import annotations
@@ -15,12 +17,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, UploadFile
 from pydantic import BaseModel
 
+from app.api.dependencies import reject_tenant_parameter, require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
+from app.domain.identity import Principal
+from app.services.access import AccessService
 from app.services.document_catalog import DocumentCatalogService
 from app.services.ingestion import IngestionService
 from app.services.lifecycle import DocumentLifecycleService
@@ -168,10 +173,11 @@ def upload_document(
     "",
     response_model=ApiEnvelope[DocumentListView],
     summary="知识库文档清单(按创建时间倒序,支持筛选与分页)",
+    dependencies=[Depends(reject_tenant_parameter)],
 )
 def list_documents(
     request: Request,
-    tenant: Annotated[str | None, Query(description="按租户精确匹配")] = None,
+    principal: Annotated[Principal, Depends(require_principal)],
     status: Annotated[DocumentStatus | None, Query(description="按状态精确匹配")] = None,
     keyword: Annotated[
         str | None, Query(description="按文件名子串匹配(大小写不敏感)")
@@ -184,7 +190,10 @@ def list_documents(
     limit: Annotated[int, Query(ge=1, le=200, description="每页条数")] = 50,
     offset: Annotated[int, Query(ge=0, description="偏移量")] = 0,
 ) -> ApiEnvelope[DocumentListView]:
-    """列出知识库文档,并给出符合筛选条件的总数。
+    """列出授权范围内的知识库文档,并给出符合筛选条件的总数。
+
+    租户只来自登录主体,端点不接受租户查询参数(携带 ``tenant`` 即 422);
+    清单与总数都收敛在同一主体的授权范围内,不会看到异租户文档。
 
     默认**只列现行版本**:退位的旧版本与已删除的文档不进清单,给
     ``include_history=true`` 可查历史(ADR-0015 的显式例外:知识库服务
@@ -193,14 +202,16 @@ def list_documents(
     排序固定为创建时间倒序(最新在前);创建时间相同时按 id 兜底,次序
     确定,不依赖存储实现的偶然顺序。
 
-    筛选条件按"与"组合:租户 / 状态 / 关键字 / 部门 / 文档类型;关键字
-    命中文件名子串且大小写不敏感。
+    筛选条件按"与"组合:状态 / 关键字 / 部门 / 文档类型;关键字命中
+    文件名子串且大小写不敏感。
 
     分页越界(偏移超出总数)返回空清单与正确总数,不报错。
     """
     service: DocumentCatalogService = request.app.state.document_catalog_service
+    access: AccessService = request.app.state.access_service
+    scope = access.scope_for(principal, None)
     page = service.list_documents(
-        tenant=tenant,
+        scope=scope,
         status=status,
         keyword=keyword,
         department=department,
@@ -219,9 +230,14 @@ def list_documents(
 
 
 @router.get("/{document_id}", response_model=ApiEnvelope[DocumentView], summary="查询文档状态")
-def get_document(request: Request, document_id: str) -> ApiEnvelope[DocumentView]:
-    service: IngestionService = request.app.state.ingestion_service
-    record = service.get(document_id)
+def get_document(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[DocumentView]:
+    access: AccessService = request.app.state.access_service
+    scope = access.scope_for(principal, None)
+    record = access.require_document(scope=scope, document_id=document_id)
     return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))
 
 
@@ -230,9 +246,15 @@ def get_document(request: Request, document_id: str) -> ApiEnvelope[DocumentView
     response_model=ApiEnvelope[ElementsView],
     summary="查询解析产物(结构化元素)",
 )
-def get_document_elements(request: Request, document_id: str) -> ApiEnvelope[ElementsView]:
+def get_document_elements(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[ElementsView]:
+    access: AccessService = request.app.state.access_service
+    scope = access.scope_for(principal, None)
+    record = access.require_document(scope=scope, document_id=document_id)
     service: IngestionService = request.app.state.ingestion_service
-    record = service.get(document_id)
     views = [ElementView(**element.model_dump()) for element in service.get_elements(document_id)]
     data = ElementsView(document_id=record.id, page_count=record.page_count, elements=views)
     return success_envelope(data, trace_id=trace_id_of(request))

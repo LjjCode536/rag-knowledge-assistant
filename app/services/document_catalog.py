@@ -7,6 +7,7 @@
 本层负责:
 
 - 把路由层的查询参数装配成领域层的 :class:`DocumentFilter`;
+- 用主体构造的授权范围强制收敛租户,没有"不传即查全库"的兜底;
 - 归一"空值即未提供"(空白串按未提供处理),使过滤条件语义唯一;
 - 用**同一份筛选条件**分别取清单与总数,故 ``total`` 与清单口径必然一致。
 """
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 
 from app.domain.documents import DocumentFilter, DocumentRecord, DocumentStatus
 from app.domain.repositories import DocumentRepository
+from app.domain.retrieval import Scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +40,7 @@ class DocumentCatalogService:
     def list_documents(
         self,
         *,
-        tenant: str | None = None,
+        scope: Scope,
         status: DocumentStatus | None = None,
         keyword: str | None = None,
         department: str | None = None,
@@ -47,7 +49,10 @@ class DocumentCatalogService:
         limit: int = 50,
         offset: int = 0,
     ) -> DocumentPage:
-        """列出知识库文档并给出符合条件总数。
+        """列出授权范围内的知识库文档并给出符合条件总数。
+
+        租户由主体构造的 :class:`Scope` 强制收敛,没有"不传即查全库"的
+        兜底;调用方只能在同一租户内继续收窄部门 / 文档类型等条件。
 
         默认只列现行版本(``is_latest = true``):退位的旧版本与已删除的
         文档不进默认清单,给 ``latest_only=False`` 可查历史。
@@ -58,7 +63,7 @@ class DocumentCatalogService:
         分页越界(偏移超出总数)返回空清单与正确总数,不报错。
         """
         filters = DocumentFilter(
-            tenant=_blank_to_none(tenant),
+            tenant=scope.tenant,
             status=status,
             keyword=_blank_to_none(keyword),
             department=_blank_to_none(department),

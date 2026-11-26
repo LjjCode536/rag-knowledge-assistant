@@ -43,13 +43,13 @@ def test_chunk_with_default_strategy_carries_complete_metadata(client):
         name="guide.md",
         content=MARKDOWN.encode(),
         mime="text/markdown",
-        tenant="acme",
+        tenant="default",
         department="研发部",
         doc_type="运维手册",
         version="v2",
     )
     document_id = body["data"]["id"]
-    assert (body["data"]["tenant"], body["data"]["version"]) == ("acme", "v2")
+    assert (body["data"]["tenant"], body["data"]["version"]) == ("default", "v2")
 
     response = client.post(f"{DOCUMENTS_URL}/{document_id}/chunks")
     assert response.status_code == 200
@@ -71,7 +71,7 @@ def test_chunk_with_default_strategy_carries_complete_metadata(client):
         assert chunk["chunk_id"]
         for field in ("tenant", "department", "doc_type", "version", "page_number", "title"):
             assert field in chunk
-        assert chunk["tenant"] == "acme"
+        assert chunk["tenant"] == "default"
         assert chunk["department"] == "研发部"
         assert chunk["doc_type"] == "运维手册"
         assert chunk["version"] == "v2"

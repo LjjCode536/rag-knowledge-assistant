@@ -8,11 +8,31 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Header, Request
+from fastapi.exceptions import RequestValidationError
 
 from app.domain.identity import Principal, UnauthenticatedError
 from app.services.auth import AuthService
 
 _BEARER_PREFIX = "bearer "
+
+
+def reject_tenant_parameter(request: Request) -> None:
+    """普通端点不接受调用方声明的租户:携带 ``tenant`` 查询参数即 422。
+
+    FastAPI 默认忽略未声明的查询参数,因此显式校验;错误交给统一校验
+    处理器,返回既有的 ``VALIDATION_ERROR`` 信封。租户只能来自主体。
+    """
+    if "tenant" in request.query_params:
+        raise RequestValidationError(
+            [
+                {
+                    "type": "extra_forbidden",
+                    "loc": ("query", "tenant"),
+                    "msg": "Extra inputs are not permitted",
+                    "input": request.query_params["tenant"],
+                }
+            ]
+        )
 
 
 def require_principal(

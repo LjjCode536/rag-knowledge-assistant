@@ -144,7 +144,7 @@ def test_same_file_name_in_different_tenants_do_not_supersede(fake_app):
         theirs = _index(other_client, "hr.txt", NEW_TEXT, tenant="other")["document_id"]
 
         assert _fetch(client, mine)["is_latest"] is True
-        assert _fetch(client, theirs)["is_latest"] is True
+        assert _fetch(other_client, theirs)["is_latest"] is True
         # 两份同名不同租户的文档互不退位、各自只能在自己的授权范围内检索
         old_hits = _search(client, OLD_VOCAB_QUERY)
         assert any(hit["chunk"]["document_id"] == mine for hit in old_hits["hits"])

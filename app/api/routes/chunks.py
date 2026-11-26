@@ -5,18 +5,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, model_validator
 
+from app.api.dependencies import require_principal
 from app.api.routes.documents import DocumentView
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import InvalidDocumentStateError
 from app.core.tracing import trace_id_of
 from app.domain.chunks import Chunk, ChunkingStrategy, ChunkQualityWarning
 from app.domain.documents import DocumentStatus
+from app.domain.identity import Principal
 from app.domain.state_machine import StateTransitionError
+from app.services.access import AccessService
 from app.services.chunking import ChunkingService, ChunkRunResult
-from app.services.ingestion import IngestionService
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -125,10 +129,15 @@ def chunk_document(
     response_model=ApiEnvelope[ChunksListView],
     summary="查询切片(全量,含告警)",
 )
-def get_document_chunks(request: Request, document_id: str) -> ApiEnvelope[ChunksListView]:
-    service: IngestionService = request.app.state.ingestion_service
+def get_document_chunks(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[ChunksListView]:
+    access: AccessService = request.app.state.access_service
+    scope = access.scope_for(principal, None)
+    record = access.require_document(scope=scope, document_id=document_id)
     chunking: ChunkingService = request.app.state.chunking_service
-    record = service.get(document_id)
     views = [ChunkView.of(chunk) for chunk in chunking.get_chunks(document_id)]
     data = ChunksListView(
         document_id=record.id,

@@ -224,7 +224,6 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         upload = client.post(
             DOCUMENTS_URL,
             files={"file": ("employee.md", "# 员工手册\n\n正文。\n".encode(), "text/markdown")},
-            data={"tenant": "acme"},
         )
         assert upload.status_code == 201, upload.text
         document_id = upload.json()["data"]["id"]
@@ -233,11 +232,19 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         assert listed["total"] == 1
         assert listed["items"][0]["id"] == document_id
 
-        filtered = client.get(DOCUMENTS_URL, params={"tenant": "acme"}).json()["data"]
-        assert filtered["total"] == 1
-        assert client.get(DOCUMENTS_URL, params={"tenant": "other"}).json()["data"][
-            "total"
-        ] == 0
+        # 租户由主体决定:不再接受查询参数,携带即 422
+        rejected = client.get(DOCUMENTS_URL, params={"tenant": "acme"})
+        assert rejected.status_code == 422
+        assert rejected.json()["code"] == "VALIDATION_ERROR"
+
+        # 异租户文档不进本租户清单(内存与 PG 走同一份 DocumentFilter)
+        decoy = client.post(
+            DOCUMENTS_URL,
+            files={"file": ("other.md", "# 别家手册\n\n正文。\n".encode(), "text/markdown")},
+            data={"tenant": "other"},
+        )
+        assert decoy.status_code == 201, decoy.text
+        assert client.get(DOCUMENTS_URL).json()["data"]["total"] == 1
 
     # "重启容器":全新应用实例挂同库 —— 清单仍在
     with authorized_client(
