@@ -104,6 +104,8 @@ class DocumentFilter(BaseModel):
       —— 退位的旧版本与已删除的文档不进默认清单;给 ``False`` 可查历史;
     - ``limit`` / ``offset``:分页;``limit`` 缺省为 50,``offset`` 缺省为 0。
       ``offset`` 超出总数时返回空清单(不报错),``total`` 仍是符合条件的总数。
+    - ``document_ids``:授权解析出的允许集合(IN 语义);``None`` 表示不设
+      集合条件,**空集合表示一条都列不出来**。
     """
 
     tenant: str | None = None
@@ -111,6 +113,7 @@ class DocumentFilter(BaseModel):
     keyword: str | None = None
     department: str | None = None
     doc_type: str | None = None
+    document_ids: frozenset[str] | None = None
     latest_only: bool = True
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)

@@ -37,7 +37,7 @@ class CacheEntry:
 
 @dataclass(frozen=True, slots=True)
 class AnswerCacheStats:
-    """命中率统计:随命中 / 未命中事件与 /health 一并下发。"""
+    """命中率统计:随命中 / 未命中事件与管理员诊断端点一并下发。"""
 
     hits: int = 0
     misses: int = 0
@@ -78,10 +78,12 @@ class AnswerCache:
         scope: dict[str, str],
         principal_id: str,
         generator: str,
+        document_ids: frozenset[str] | None = None,
     ) -> str:
         """缓存键:问题、主体与对答案有影响的过程口径全部入键(定长摘要)。
 
         授权范围与主体身份必须入键:答档只在"同一主体、同一有效范围"内复用。
+        文档级允许集合是范围的一部分,同样入键;集合可能很大,只进摘要。
         """
         canonical = json.dumps(
             {
@@ -91,6 +93,9 @@ class AnswerCache:
                 "min_score": min_score,
                 "generator": generator,
                 "scope": dict(sorted(scope.items())),
+                "document_ids": (
+                    sorted(document_ids) if document_ids is not None else None
+                ),
             },
             ensure_ascii=False,
             sort_keys=True,

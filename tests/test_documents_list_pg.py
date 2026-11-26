@@ -235,10 +235,10 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         assert listed["total"] == 1
         assert listed["items"][0]["id"] == document_id
 
-        # 租户由主体决定:查询参数与上传表单都不再接受,携带即 422
+        # 租户由主体决定:查询参数携带即 403 越权,上传表单携带即 422
         rejected = client.get(DOCUMENTS_URL, params={"tenant": "acme"})
-        assert rejected.status_code == 422
-        assert rejected.json()["code"] == "VALIDATION_ERROR"
+        assert rejected.status_code == 403
+        assert rejected.json()["code"] == "SCOPE_VIOLATION"
         rejected_form = client.post(
             DOCUMENTS_URL,
             files={"file": ("bad.md", "正文。".encode(), "text/markdown")},

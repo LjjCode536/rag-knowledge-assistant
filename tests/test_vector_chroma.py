@@ -311,6 +311,54 @@ def test_other_identity_is_invisible_not_scored_zero(chroma_store):
     assert [hit.chunk.content for hit in hits] == ["旧模型"]
 
 
+def test_document_set_filter_is_before_scoring_and_empty_set_is_zero_hits(
+    chroma_store,
+):
+    """集合条件先于打分;空集合零命中,绝不退化成"不限制"(ADR-0021)。"""
+    chroma_store.replace(
+        "doc-1", _embedded([_chunk("甲", document_id="doc-1")], [[1.0, 0.0]])
+    )
+    chroma_store.replace(
+        "doc-2", _embedded([_chunk("乙", document_id="doc-2")], [[1.0, 0.0]])
+    )
+    chroma_store.replace(
+        "doc-3",
+        _embedded(
+            [_chunk("丙", document_id="doc-3", department="人力")], [[1.0, 0.0]]
+        ),
+    )
+
+    only_doc_2 = chroma_store.search(
+        [1.0, 0.0],
+        top_k=10,
+        scope=Scope(tenant="acme", document_ids=frozenset({"doc-2"})),
+        embedding=_ref(),
+    )
+    assert [hit.chunk.document_id for hit in only_doc_2] == ["doc-2"]
+
+    combined = chroma_store.search(
+        [1.0, 0.0],
+        top_k=10,
+        scope=Scope(
+            tenant="acme",
+            department="人力",
+            document_ids=frozenset({"doc-1", "doc-2", "doc-3"}),
+        ),
+        embedding=_ref(),
+    )
+    assert [hit.chunk.document_id for hit in combined] == ["doc-3"]
+
+    assert (
+        chroma_store.search(
+            [1.0, 0.0],
+            top_k=10,
+            scope=Scope(tenant="acme", document_ids=frozenset()),
+            embedding=_ref(),
+        )
+        == []
+    )
+
+
 def test_identity_counts_groups_by_source_identity(chroma_store):
     chroma_store.replace(
         "doc-1", _embedded([_chunk("甲"), _chunk("乙", index=1)], [[1.0], [1.0]], ref=_ref(1))

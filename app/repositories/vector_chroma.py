@@ -120,7 +120,11 @@ class ChromaVectorStore:
                 "embedding_dimension": embedding.dimension,
             }
         )
-        where = _chroma_where(constraints)
+        document_ids = scope.document_ids
+        if document_ids is not None and not document_ids:
+            # 空允许集合 = 一条都查不到,绝不退化成"不限制"
+            return []
+        where = _chroma_where(constraints, document_ids)
         with self._lock:
             try:
                 result = self._collection.query(
@@ -237,9 +241,18 @@ def _chunk_of(metadata: dict[str, Any], record_id: str) -> Chunk:
     return Chunk(**fields)
 
 
-def _chroma_where(constraints: dict[str, Any]) -> dict[str, Any] | None:
-    """过滤条件 → Chroma where:单条直接等值,多条 $and,空条件放行。"""
+def _chroma_where(
+    constraints: dict[str, Any],
+    document_ids: frozenset[str] | None = None,
+) -> dict[str, Any] | None:
+    """过滤条件 → Chroma where:等值单条直接,多条 $and;集合条件用 $in。
+
+    空集合已由调用方提前返回;这里若收到空集合也按"匹配不到任何记录"的
+    条件表达,绝不省略成无过滤。
+    """
     conditions = [{field: {"$eq": value}} for field, value in constraints.items()]
+    if document_ids is not None:
+        conditions.append({"document_id": {"$in": sorted(document_ids)}})
     if not conditions:
         return None
     if len(conditions) == 1:

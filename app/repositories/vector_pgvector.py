@@ -58,8 +58,11 @@ _FILTER_COLUMNS = {
         "document_id",
     }
 }
-# 领域模型里有、但 embeddings 表没有对应列的过滤字段:程序错误(装配期暴露)
-_UNMAPPED_FILTER_FIELDS = set(Scope.model_fields) - set(_FILTER_COLUMNS)
+# 领域模型里有、但 embeddings 表没有对应列的等值过滤字段:程序错误(装配期暴露)。
+# ``document_ids`` 是集合条件,由 ``_where_of`` 单独翻译成 IN,不走等值映射。
+_UNMAPPED_FILTER_FIELDS = set(Scope.model_fields) - set(_FILTER_COLUMNS) - {
+    "document_ids"
+}
 if _UNMAPPED_FILTER_FIELDS:
     raise RuntimeError(
         "Scope 存在无对应列的过滤字段(embeddings 表缺列):"
@@ -84,7 +87,7 @@ def _as_vector(stored: str | None) -> list[float] | None:
 
 
 def _where_of(scope: Scope) -> tuple[str, list[Any]]:
-    """生效授权范围 → SQL WHERE 片段(AND 等值)。"""
+    """生效授权范围 → SQL WHERE 片段(等值条件 + 文档集合 IN)。"""
     constraints = scope.effective()
     clauses: list[str] = []
     params: list[Any] = []
@@ -92,6 +95,9 @@ def _where_of(scope: Scope) -> tuple[str, list[Any]]:
         column = _FILTER_COLUMNS[field]
         clauses.append(f"{column} = %s")
         params.append(value)
+    if scope.document_ids is not None:
+        clauses.append("e.document_id = ANY(%s::text[])")
+        params.append(list(scope.document_ids))
     return " AND ".join(clauses) if clauses else "true", params
 
 
@@ -197,6 +203,8 @@ class PgVectorStore:
         embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
         """身份与授权范围过滤都在相似度计算之前:越界切片不进 SQL 候选。"""
+        if scope.document_ids is not None and not scope.document_ids:
+            return []
         where, params = _where_of(scope)
         identity, identity_params = _identity_of(embedding)
         query = (

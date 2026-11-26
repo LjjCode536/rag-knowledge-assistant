@@ -88,15 +88,15 @@ def test_request_narrowing_rejects_tenant_inside_filters(
 def test_search_and_chat_reject_tenant_query_parameter(
     scoped_clients, url: str, field: str, value: str
 ) -> None:
-    """查询参数与请求体同一契约:租户只来自主体,携带即 422。"""
+    """查询参数与请求体同一契约:租户只来自主体,携带即 403 越权。"""
     client, _ = scoped_clients
 
     response = client.post(f"{url}?tenant=other", json={field: value})
 
-    assert response.status_code == 422
+    assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "VALIDATION_ERROR"
-    assert body["details"]["errors"][0]["loc"] == ["query", "tenant"]
+    assert body["code"] == "SCOPE_VIOLATION"
+    assert body["details"] == {"tenant": "other"}
 
 
 # ===== 跨租户不可见:检索与问答都只在 token 的租户内 =====

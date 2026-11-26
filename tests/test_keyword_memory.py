@@ -36,6 +36,41 @@ def _chunk(
     )
 
 
+def test_document_set_filter_is_before_scoring_and_empty_set_is_zero_hits() -> None:
+    """集合条件先于 BM25 打分;空集合零命中,绝不退化成"不限制"(ADR-0021)。"""
+    index = InMemoryKeywordIndex()
+    index.replace(
+        "doc-1", [_chunk("doc-1", 0, "年假如何累计", department="人力")]
+    )
+    index.replace(
+        "doc-2", [_chunk("doc-2", 0, "年假如何清零", department="人力")]
+    )
+
+    only_doc_2 = index.search(
+        "年假",
+        top_k=10,
+        scope=Scope(tenant="acme", document_ids=frozenset({"doc-2"})),
+    )
+    assert [hit.chunk.document_id for hit in only_doc_2] == ["doc-2"]
+
+    assert index.search(
+        "年假",
+        top_k=10,
+        scope=Scope(tenant="acme", document_ids=frozenset()),
+    ) == []
+
+    combined = index.search(
+        "年假",
+        top_k=10,
+        scope=Scope(
+            tenant="acme",
+            department="人力",
+            document_ids=frozenset({"doc-1", "doc-2"}),
+        ),
+    )
+    assert {hit.chunk.document_id for hit in combined} == {"doc-1", "doc-2"}
+
+
 def test_tokens_are_shared_with_deterministic_vector_identity() -> None:
     """分词口径与确定性向量替身一致:同一词面 → 同一 token 序列。"""
     assert text_tokens("没发货可以退钱吗 unshipped refund") == text_tokens(

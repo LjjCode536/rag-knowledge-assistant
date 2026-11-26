@@ -10,31 +10,37 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from fastapi.exceptions import RequestValidationError
 
+from app.core.errors import BadRequestError, ScopeViolationError
+from app.core.tracing import trace_id_of
+from app.domain.audit import AuditAction
 from app.domain.documents import DocumentRecord
-from app.domain.identity import Principal, UnauthenticatedError
+from app.domain.identity import Principal, Role, UnauthenticatedError
 from app.domain.retrieval import Scope
 from app.services.access import AccessService
+from app.services.audit import AuditService
 from app.services.auth import AuthService
 
 _BEARER_PREFIX = "bearer "
 
 
 def reject_tenant_parameter(request: Request) -> None:
-    """普通端点不接受调用方声明的租户:携带 ``tenant`` 查询参数即 422。
+    """普通端点不接受调用方声明的租户:携带 ``tenant`` 查询参数即 403。
 
-    FastAPI 默认忽略未声明的查询参数,因此显式校验;错误交给统一校验
-    处理器,返回既有的 ``VALIDATION_ERROR`` 信封。租户只能来自主体。
+    租户只能来自主体(ADR-0020);跨租户只能走管理端点显式选择租户并逐次
+    留痕。这里不再是 422 校验错误,而是明确的越权拒绝。
     """
     if "tenant" in request.query_params:
-        raise RequestValidationError(
-            [
-                {
-                    "type": "extra_forbidden",
-                    "loc": ("query", "tenant"),
-                    "msg": "Extra inputs are not permitted",
-                    "input": request.query_params["tenant"],
-                }
-            ]
+        tenant = request.query_params["tenant"]
+        raise ScopeViolationError(
+            "普通端点不接受租户参数",
+            details={"tenant": tenant},
+            audit={
+                "action": AuditAction.ACCESS_DENIED,
+                "resource_type": "tenant",
+                "resource_id": tenant,
+                "reason": "tenant_parameter_on_non_admin_endpoint",
+                "path": request.url.path,
+            },
         )
 
 
@@ -111,4 +117,59 @@ def require_writable_document(
     access_service: AccessService = request.app.state.access_service
     return access_service.require_writable_document(
         principal=principal, document_id=document_id
+    )
+
+
+def require_admin_tenant(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> str:
+    """管理端点的租户解析:普通管理员只看本租户,平台管理员显式选择租户。
+
+    - 租户 ``admin``:租户来自 token;携带 ``tenant`` 参数是越权(403);
+    - ``platform_operator``:必须显式给出 ``tenant``,每次成功访问写审计;
+    - 其他角色:403,不泄露管理端点细节。
+    """
+    requested = request.query_params.get("tenant")
+    if principal.role is Role.ADMIN:
+        if requested is not None:
+            raise ScopeViolationError(
+                "普通管理员不接受租户参数",
+                details={"tenant": requested},
+                audit={
+                    "action": AuditAction.ACCESS_DENIED,
+                    "resource_type": "tenant",
+                    "resource_id": requested,
+                    "reason": "tenant_parameter_for_tenant_admin",
+                    "path": request.url.path,
+                },
+            )
+        return principal.tenant
+    if principal.role is Role.PLATFORM_OPERATOR:
+        tenant = (requested or "").strip()
+        if not tenant:
+            raise BadRequestError(
+                "平台管理员必须显式指定租户",
+                details={"parameter": "tenant"},
+            )
+        audit_service: AuditService = request.app.state.audit_service
+        audit_service.record_required(
+            tenant=tenant,
+            principal_id=principal.id,
+            action=AuditAction.PLATFORM_TENANT_ACCESS,
+            trace_id=trace_id_of(request),
+            resource_type="tenant",
+            resource_id=tenant,
+            details={"path": request.url.path},
+        )
+        return tenant
+    raise ScopeViolationError(
+        "仅管理员可访问管理端点",
+        details={"role": principal.role.value},
+        audit={
+            "action": AuditAction.ACCESS_DENIED,
+            "resource_type": "admin_endpoint",
+            "resource_id": request.url.path,
+            "reason": "admin_required",
+        },
     )

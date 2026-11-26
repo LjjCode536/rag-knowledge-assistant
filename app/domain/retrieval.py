@@ -24,6 +24,11 @@ class Scope(BaseModel):
     其余字段是调用方可选的收窄条件;未给的字段(None)一律放行,给定字段
     必须与切片元数据完全相等。字段名与 :class:`~app.domain.chunks.Chunk`
     的同名字段保持同名,过滤端按名匹配,改名须两边同步。
+
+    ``document_ids`` 是文档级授权的集合条件(IN 语义):ADR-0021 要求授权先
+    解析成"允许的现行版本集合",检索在打分前按集合过滤。**空集合表示一条都
+    查不到**,绝不是"不限制";``None`` 只留给进程内评估与低层存储直调,表示
+    该维度不设集合条件。
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -33,10 +38,18 @@ class Scope(BaseModel):
     doc_type: str | None = None
     version: str | None = None
     document_id: str | None = None
+    document_ids: frozenset[str] | None = None
 
     def effective(self) -> dict[str, str]:
-        """生效的授权范围:剔除未给字段后的字段值对,可直接用于过滤与日志回显。"""
-        return self.model_dump(exclude_none=True)
+        """生效的等值过滤条件(不含集合条件),用于过滤与日志回显。
+
+        集合条件单独走 ``document_ids``:它可能很大,日志与答档回显不展开;
+        缓存键由服务端另外把集合纳入(见 ``AnswerService``)。
+        """
+        return self.model_dump(
+            exclude_none=True,
+            exclude={"document_ids"},
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,8 +219,18 @@ class KeywordIndex(Protocol):
         ...
 
 
-def matches_scope(chunk: Chunk, constraints: dict[str, str]) -> bool:
-    """切片元数据逐字段等值匹配:向量库与关键词库共用的检索前过滤实现。"""
+def matches_scope(
+    chunk: Chunk,
+    constraints: dict[str, str],
+    document_ids: frozenset[str] | None = None,
+) -> bool:
+    """切片元数据逐字段等值匹配 + 文档集合条件:各检索通道共用的过滤实现。
+
+    集合条件先于打分执行;``document_ids=None`` 表示该维度不设条件,
+    空集合表示任何切片都不匹配(绝不退化成"不限制")。
+    """
+    if document_ids is not None and chunk.document_id not in document_ids:
+        return False
     return all(getattr(chunk, field) == value for field, value in constraints.items())
 
 

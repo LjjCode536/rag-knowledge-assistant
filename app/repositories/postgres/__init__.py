@@ -18,18 +18,22 @@ evaluation_runs,以及身份底座的主体表 principals)的幂等 DDL 与数�
 
 from __future__ import annotations
 
+from app.repositories.postgres.audit import PgAuditRepository
 from app.repositories.postgres.base import PgDatabase, PgUnavailableError
 from app.repositories.postgres.chunks import PgChunkRepository
 from app.repositories.postgres.documents import PgDocumentRepository
 from app.repositories.postgres.evaluation_runs import PgEvaluationRunRepository
 from app.repositories.postgres.feedbacks import PgFeedbackRepository
+from app.repositories.postgres.grants import PgDocumentGrantRepository
 from app.repositories.postgres.principals import PgPrincipalRepository
 from app.repositories.postgres.query_logs import PgQueryLogRepository
 from app.repositories.postgres.stats import PgStatsRepository
 
 __all__ = (
+    "PgAuditRepository",
     "PgChunkRepository",
     "PgDatabase",
+    "PgDocumentGrantRepository",
     "PgDocumentRepository",
     "PgEvaluationRunRepository",
     "PgFeedbackRepository",

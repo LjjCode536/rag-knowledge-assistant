@@ -18,7 +18,11 @@ import structlog
 
 from app.core.errors import DocumentDeleteError, DocumentSupersedeError, NotFoundError
 from app.domain.documents import DocumentRecord, DocumentStatus
-from app.domain.repositories import ChunkRepository, DocumentRepository
+from app.domain.repositories import (
+    ChunkRepository,
+    DocumentGrantRepository,
+    DocumentRepository,
+)
 from app.domain.retrieval import KeywordIndex, VectorStore
 from app.domain.state_machine import ensure_transition
 from app.services.qa_cache import AnswerCache
@@ -39,6 +43,7 @@ class DocumentLifecycleService:
         keyword_index: KeywordIndex,
         storage: LocalDocumentStorage,
         answer_cache: AnswerCache | None = None,
+        grant_repository: DocumentGrantRepository | None = None,
     ) -> None:
         self._documents = document_repository
         self._chunks = chunk_repository
@@ -46,6 +51,7 @@ class DocumentLifecycleService:
         self._keyword_index = keyword_index
         self._storage = storage
         self._answer_cache = answer_cache
+        self._grants = grant_repository
 
     def supersede(self, previous: DocumentRecord) -> None:
         """旧版本退位:清理两条检索通道的旧版本数据后,状态迁移到 superseded。
@@ -102,6 +108,11 @@ class DocumentLifecycleService:
             # 向量与关键词通道先清:即便后续步骤失败,检索面也不再返回该文档的切片
             self._chunks.delete(document_id)
             self._storage.delete(document_id, file_name=record.file_name)
+            # 文档删除是终态:授权连带清理,审计事件保留(ADR-0021)
+            if self._grants is not None:
+                self._grants.delete_for_logical(
+                    tenant=record.tenant, file_name=record.file_name
+                )
         except Exception as exc:
             self._record_failure(record, exc)
             raise DocumentDeleteError(

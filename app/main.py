@@ -11,6 +11,8 @@ import structlog
 from fastapi import Depends, FastAPI
 
 from app.api.dependencies import reject_tenant_parameter, require_principal
+from app.api.routes.admin import alias_router as admin_alias_router
+from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.chunks import router as chunks_router
@@ -26,7 +28,9 @@ from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.tracing import TraceIdMiddleware
 from app.domain.repositories import (
+    AuditRepository,
     ChunkRepository,
+    DocumentGrantRepository,
     DocumentRepository,
     FeedbackRepository,
     PrincipalRepository,
@@ -42,7 +46,9 @@ from app.domain.retrieval import (
 from app.integrations.llm.client import UnifiedLLMClient
 from app.repositories.keyword_memory import InMemoryKeywordIndex
 from app.repositories.memory import (
+    InMemoryAuditRepository,
     InMemoryChunkRepository,
+    InMemoryDocumentGrantRepository,
     InMemoryDocumentRepository,
     InMemoryFeedbackRepository,
     InMemoryPrincipalRepository,
@@ -52,6 +58,7 @@ from app.repositories.memory import (
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.access import AccessService
 from app.services.answering import AnswerService
+from app.services.audit import AuditService
 from app.services.auth import AuthService, TokenService
 from app.services.chunking import ChunkingService
 from app.services.document_catalog import DocumentCatalogService
@@ -62,6 +69,7 @@ from app.services.generation import (
     RuleBasedAnswerGenerator,
     SiliconFlowAnswerGenerator,
 )
+from app.services.grants import DocumentGrantService
 from app.services.ingestion import IngestionService
 from app.services.ingestion_pipeline import IngestionPipeline
 from app.services.lifecycle import DocumentLifecycleService
@@ -150,6 +158,8 @@ class _Persistence:
     feedbacks: FeedbackRepository
     stats: StatsRepository
     principals: PrincipalRepository
+    grants: DocumentGrantRepository
+    audits: AuditRepository
     store: VectorStore
     # pgvector 模式下四仓储与向量库共用;memory / chroma 模式恒为 None
     pg: PgDatabase | None = None
@@ -167,8 +177,10 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
     """
     if settings.vector_store == "pgvector":
         from app.repositories.postgres import (
+            PgAuditRepository,
             PgChunkRepository,
             PgDatabase,
+            PgDocumentGrantRepository,
             PgDocumentRepository,
             PgFeedbackRepository,
             PgPrincipalRepository,
@@ -188,6 +200,8 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
             feedbacks=PgFeedbackRepository(pg_database),
             stats=PgStatsRepository(db=pg_database),
             principals=PgPrincipalRepository(pg_database),
+            grants=PgDocumentGrantRepository(pg_database),
+            audits=PgAuditRepository(pg_database),
             store=vector_store if vector_store is not None else PgVectorStore(pg_database),
             pg=pg_database,
         )
@@ -205,6 +219,8 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
         ),
         # 不创建默认账号:内存模式下由调用方显式传入种子夹具(ADR-0020)
         principals=InMemoryPrincipalRepository(),
+        grants=InMemoryDocumentGrantRepository(),
+        audits=InMemoryAuditRepository(),
         store=vector_store if vector_store is not None else _build_vector_store(settings),
     )
 
@@ -219,6 +235,8 @@ def create_app(
     reranker: Reranker | None = None,
     vector_store: VectorStore | None = None,
     principal_repository: PrincipalRepository | None = None,
+    grant_repository: DocumentGrantRepository | None = None,
+    audit_repository: AuditRepository | None = None,
 ) -> FastAPI:
     """建应用;embedder、生成器与高级检索协作对象可注入替身(测试),缺省走真实实现。
 
@@ -257,8 +275,18 @@ def create_app(
         token_service=token_service,
     )
     document_repository = persistence.documents
-    # 授权范围与对象级可见性只此一处构造:路由只解析主体(ADR-0020)
-    access_service = AccessService(document_repository=document_repository)
+    grant_repository = (
+        grant_repository if grant_repository is not None else persistence.grants
+    )
+    audit_repository = (
+        audit_repository if audit_repository is not None else persistence.audits
+    )
+    audit_service = AuditService(repository=audit_repository)
+    # 授权范围与对象级可见性只此一处构造:路由只解析主体(ADR-0020 / 0021)
+    access_service = AccessService(
+        document_repository=document_repository,
+        grant_repository=grant_repository,
+    )
     chunk_repository = persistence.chunks
     effective_vector_store = persistence.store
     effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
@@ -280,6 +308,7 @@ def create_app(
         keyword_index=effective_keyword_index,
         storage=document_storage,
         answer_cache=answer_cache,
+        grant_repository=grant_repository,
     )
     ingestion_service = IngestionService(
         repository=document_repository,
@@ -333,6 +362,12 @@ def create_app(
     document_catalog_service = DocumentCatalogService(
         repository=document_repository,
     )
+    document_grant_service = DocumentGrantService(
+        document_repository=document_repository,
+        grant_repository=grant_repository,
+        audit_service=audit_service,
+        answer_cache=answer_cache,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -371,6 +406,8 @@ def create_app(
     app.state.feedback_service = feedback_service
     app.state.stats_service = stats_service
     app.state.document_catalog_service = document_catalog_service
+    app.state.document_grant_service = document_grant_service
+    app.state.audit_service = audit_service
     app.state.vector_store = effective_vector_store
     app.state.lifecycle_service = lifecycle_service
     # pgvector 模式的共享连接池(memory / chroma 恒为 None),运维与测试清理用
@@ -381,6 +418,9 @@ def create_app(
     # 公共面只有存活探针与登录;其余端点一律先过真实鉴权(ADR-0020)
     app.include_router(health_router)
     app.include_router(auth_router)
+    # 管理端点:普通 tenant 参数不接受;平台管理员在依赖里显式选租户并留痕
+    app.include_router(admin_router, dependencies=[Depends(require_principal)])
+    app.include_router(admin_alias_router, dependencies=[Depends(require_principal)])
     protected_routers = (
         documents_router,
         chunks_router,

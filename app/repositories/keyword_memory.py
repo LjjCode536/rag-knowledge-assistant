@@ -50,6 +50,7 @@ class InMemoryKeywordIndex:
     ) -> list[ScoredChunk]:
         """过滤在打分之前:先取满足授权范围的候选,再用 BM25 打分排序。"""
         constraints = scope.effective()
+        document_ids = scope.document_ids
         query_tokens = text_tokens(query)
         if not query_tokens:
             return []
@@ -58,7 +59,7 @@ class InMemoryKeywordIndex:
                 chunk
                 for entries in self._chunks.values()
                 for chunk in entries
-                if matches_scope(chunk, constraints)
+                if matches_scope(chunk, constraints, document_ids)
             ]
         if not candidates:
             return []

@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domain.audit import AuditAction, AuditEvent, AuditResult
 from app.domain.chunks import Chunk, ChunkingStrategy, ChunkQualityWarning
 from app.domain.documents import (
     DocumentFormat,
@@ -25,6 +26,7 @@ from app.domain.documents import (
     ParsedDocument,
 )
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.grants import DocumentGrant, GrantSubjectType
 from app.domain.identity import Principal, PrincipalAccount, PrincipalKind, Role
 from app.domain.qa import (
     GenerationUsage,
@@ -150,6 +152,29 @@ class _FeedbackRow(_RowModel):
     created_at: datetime
 
 
+class _DocumentGrantRow(_RowModel):
+    grant_id: str
+    tenant: str
+    file_name: str
+    subject_type: GrantSubjectType
+    subject_id: str | None = None
+    granted_by: str
+    created_at: datetime
+
+
+class _AuditEventRow(_RowModel):
+    event_id: str
+    occurred_at: datetime
+    tenant: str
+    principal_id: str | None = None
+    action: AuditAction
+    resource_type: str | None = None
+    resource_id: str | None = None
+    result: AuditResult
+    trace_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 # ===== 对外的行 → 领域模型 =====
 
 
@@ -244,4 +269,35 @@ def feedback_from_row(row: Mapping[str, Any]) -> FeedbackRecord:
         verdict=parsed.verdict,
         comment=parsed.comment,
         created_at=parsed.created_at,
+    )
+
+
+def document_grant_from_row(row: Mapping[str, Any]) -> DocumentGrant:
+    """document_grants 行 → 文档授权。"""
+    parsed = _DocumentGrantRow.model_validate(dict(row))
+    return DocumentGrant(
+        grant_id=parsed.grant_id,
+        tenant=parsed.tenant,
+        file_name=parsed.file_name,
+        subject_type=parsed.subject_type,
+        subject_id=parsed.subject_id,
+        granted_by=parsed.granted_by,
+        created_at=parsed.created_at,
+    )
+
+
+def audit_event_from_row(row: Mapping[str, Any]) -> AuditEvent:
+    """audit_events 行 → 审计事件。"""
+    parsed = _AuditEventRow.model_validate(dict(row))
+    return AuditEvent(
+        event_id=parsed.event_id,
+        occurred_at=parsed.occurred_at,
+        tenant=parsed.tenant,
+        principal_id=parsed.principal_id,
+        action=parsed.action,
+        resource_type=parsed.resource_type,
+        resource_id=parsed.resource_id,
+        result=parsed.result,
+        trace_id=parsed.trace_id,
+        details=parsed.details,
     )

@@ -22,8 +22,7 @@ curl -H "X-Request-ID: demo-trace-0001" http://127.0.0.1:8000/health
 {
   "code": "OK",
   "message": "ok",
-  "data": {"status": "ok", "version": "0.1.0", "environment": "local", "upstream_configured": true,
-           "qa_cache": {"enabled": true, "hits": 12, "misses": 40, "hit_rate": 0.2308}},
+  "data": {"status": "ok", "version": "0.1.0", "environment": "local", "upstream_configured": true},
   "details": null,
   "trace_id": "demo-trace-0001",
   "timestamp": "2026-10-28T09:00:00Z"
@@ -173,7 +172,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
 
 - 资料不足时统一拒答(`refused=true`、`refusal_reason` 为 `no_hits` / `low_score` / `generator_refused`),答案固定为 `根据当前资料无法确认。`,且不返回引用。
 - 拒答阈值由 `QA_MIN_SCORE` 配置(默认 `0.35`);默认 `QA_TOP_K=3`。
-- 问答答档缓存(T15,ADR-0013):相同问题(空白归一化、忽略大小写,连同 top_k / 阈值 / 过滤 / 生成器口径一致)在 `QA_CACHE_TTL_SECONDS`(默认 300s)内直接复用上次的回答与引用,响应带 `cache_hit=true`,秒级延迟降为亚毫秒且不消耗上游;文档向量化、版本退位与删除即刻清空缓存,答档不落后于知识库变化;命中率随 `qa_cache_hit` / `qa_cache_miss` 日志事件与 `/health` 的 `qa_cache` 字段可查,`QA_CACHE_ENABLED=false` 可整体关闭。
+- 问答答档缓存(T15,ADR-0013):相同问题(空白归一化、忽略大小写,连同 top_k / 阈值 / 过滤 / 生成器口径一致)在 `QA_CACHE_TTL_SECONDS`(默认 300s)内直接复用上次的回答与引用,响应带 `cache_hit=true`,秒级延迟降为亚毫秒且不消耗上游;文档向量化、版本退位与删除即刻清空缓存,答档不落后于知识库变化;命中率随 `qa_cache_hit` / `qa_cache_miss` 日志事件与管理员诊断端点 `/api/v1/admin/diagnostics` 的 `qa_cache` 字段可查(公开 `/health` 不再暴露该诊断信息),`QA_CACHE_ENABLED=false` 可整体关闭。
 - 查询日志:`GET /api/v1/query-logs?limit=20`(最近优先)与 `GET /api/v1/query-logs/{query_id}`,含原始问题与改写 / 扩展后的问题、命中 / 分数、是否进入证据、拒答原因、生成器种类(`generator`=`rule_based` / `llm`)、Token 用量(`token_usage`)与延迟。
 - 回答生成器默认真实 LLM 有据生成(`QA_GENERATOR=llm`,默认模型 `Qwen/Qwen3-8B`,经 `LLM_MODEL` 可换):
 

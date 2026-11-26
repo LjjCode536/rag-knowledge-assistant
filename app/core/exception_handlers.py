@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 from app.core.envelope import error_envelope
 from app.core.errors import AppError, ErrorCode
 from app.core.tracing import TRACE_ID_HEADER, trace_id_of
+from app.services.audit import denial_event
 
 logger = structlog.get_logger("errors")
 
@@ -63,9 +64,27 @@ def _sanitize_validation_errors(errors: list[dict[str, Any]]) -> list[dict[str, 
     return sanitized
 
 
+def _audit_denial(request: Request, exc: AppError) -> None:
+    """越权拒绝的审计尽力而为:失败只记告警,不改变响应(ADR-0020)。"""
+    audit = getattr(exc, "audit", None)
+    service = getattr(request.app.state, "audit_service", None)
+    if not audit or service is None:
+        return
+    principal = getattr(request.state, "principal", None)
+    tenant = getattr(principal, "tenant", None) or "unknown"
+    event = denial_event(
+        tenant=tenant,
+        principal_id=getattr(principal, "id", None),
+        audit=audit,
+        trace_id=trace_id_of(request),
+    )
+    service.record_denial(event)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
+        _audit_denial(request, exc)
         logger.warning(
             "app_error",
             trace_id=trace_id_of(request),

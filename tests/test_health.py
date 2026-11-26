@@ -1,8 +1,12 @@
-"""HTTP 主接缝:健康检查必须返回统一信封,且 trace_id 全链路一致。"""
+"""HTTP 主接缝:健康检查必须返回统一信封,且 trace_id 全链路一致。
+
+``/health`` 是公开面,只留存活与粗粒度依赖;缓存与向量身份等诊断信息移到
+管理员端点(ADR-0020)。
+"""
 
 from __future__ import annotations
 
-from tests.support import authorized_client
+from tests.support import ADMIN, authorized_client
 
 
 def test_health_returns_unified_envelope(client):
@@ -17,13 +21,19 @@ def test_health_returns_unified_envelope(client):
         "version": "0.1.0",
         "environment": "test",
         "upstream_configured": False,
-        "upstream": {"circuit_breaker": "closed"},
-        "qa_cache": {"enabled": True, "hits": 0, "misses": 0, "hit_rate": None},
     }
     assert body["details"] is None
     assert body["trace_id"]
     assert body["timestamp"]
     assert response.headers["X-Request-ID"] == body["trace_id"]
+
+
+def test_health_does_not_expose_diagnostics(client):
+    data = client.get("/health").json()["data"]
+
+    assert "qa_cache" not in data
+    assert "upstream" not in data
+    assert "embedding" not in data
 
 
 def test_health_reuses_caller_trace_id(client):
@@ -52,7 +62,7 @@ def test_health_reports_configured_upstream(settings):
     assert response.json()["data"]["upstream_configured"] is True
 
 
-def test_health_reports_cache_stats_from_answered_traffic(settings, upload_dir):
+def test_diagnostics_report_cache_stats_from_answered_traffic(settings, upload_dir):
 
     from app.integrations.llm.deterministic import DeterministicEmbedder
     from app.main import create_app
@@ -62,17 +72,36 @@ def test_health_reports_cache_stats_from_answered_traffic(settings, upload_dir):
         client.post("/api/v1/chat", json={"question": "入职多久可以申请年假?"})
         client.post("/api/v1/chat", json={"question": "入职多久可以申请年假?"})
 
-        data = client.get("/health").json()["data"]
+    with authorized_client(app, ADMIN.principal) as admin:
+        data = admin.get("/api/v1/admin/diagnostics").json()["data"]
 
-    assert data["qa_cache"] == {"enabled": True, "hits": 1, "misses": 1, "hit_rate": 0.5}
+    assert data["qa_cache"] == {
+        "enabled": True,
+        "hits": 1,
+        "misses": 1,
+        "hit_rate": 0.5,
+    }
+    assert data["embedding"]["model"]
+    assert data["upstream"] == {"circuit_breaker": "closed"}
 
 
-def test_health_reports_cache_disabled(settings, upload_dir):
+def test_diagnostics_report_cache_disabled(settings, upload_dir):
 
     from app.main import create_app
 
     configured = settings.model_copy(update={"qa_cache_enabled": False})
-    with authorized_client(create_app(configured)) as client:
-        data = client.get("/health").json()["data"]
+    app = create_app(configured)
+    with authorized_client(app, ADMIN.principal) as admin:
+        data = admin.get("/api/v1/admin/diagnostics").json()["data"]
 
-    assert data["qa_cache"] == {"enabled": False, "hits": 0, "misses": 0, "hit_rate": None}
+    assert data["qa_cache"] == {
+        "enabled": False,
+        "hits": 0,
+        "misses": 0,
+        "hit_rate": None,
+    }
+
+
+def test_diagnostics_are_admin_only(client, anonymous_client):
+    assert anonymous_client.get("/api/v1/admin/diagnostics").status_code == 401
+    assert client.get("/api/v1/admin/diagnostics").status_code == 403

@@ -39,6 +39,8 @@ class ErrorCode(StrEnum):
     UNAUTHENTICATED = "UNAUTHENTICATED"
     # 授权范围(ADR-0020):请求的收窄条件超出主体授权范围,不静默裁剪。
     SCOPE_VIOLATION = "SCOPE_VIOLATION"
+    # 审计(ADR-0020):变更类操作的审计写入失败,业务写随之失败。
+    AUDIT_WRITE_FAILED = "AUDIT_WRITE_FAILED"
 
 
 class AppError(Exception):
@@ -56,11 +58,15 @@ class AppError(Exception):
         details: dict[str, Any] | None = None,
         code: ErrorCode | None = None,
         status_code: int | None = None,
+        audit: dict[str, Any] | None = None,
     ) -> None:
         self.code = code or type(self).code
         self.status_code = status_code or type(self).status_code
         self.message = message or self.default_message
         self.details = details
+        # 越权拒绝的审计线索(动作 / 资源 / 原因);不进入响应 details,
+        # 由异常处理器尽力写入审计(ADR-0020)。
+        self.audit = audit
         super().__init__(self.message)
 
     def __str__(self) -> str:
@@ -79,6 +85,14 @@ class ScopeViolationError(AppError):
     code = ErrorCode.SCOPE_VIOLATION
     status_code = 403
     default_message = "请求超出授权范围"
+
+
+class AuditWriteError(AppError):
+    """变更类操作的审计写入失败:审计与业务写同事务,审计失败即请求失败。"""
+
+    code = ErrorCode.AUDIT_WRITE_FAILED
+    status_code = 500
+    default_message = "审计写入失败,操作未执行"
 
 
 class BadRequestError(AppError):

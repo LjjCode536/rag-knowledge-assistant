@@ -2,10 +2,10 @@
 
 验收口径:
 
-- 清单不再接受租户查询参数:携带 ``tenant`` 即 422,走统一信封;
-- 清单只返回主体租户的知识库文档,``total`` 与清单同口径收缩;
+- 清单不再接受租户查询参数:携带 ``tenant`` 即 403 ``SCOPE_VIOLATION``;
+- 清单只返回主体可读的知识库文档,``total`` 与清单同口径收缩;
 - 跨租户 id 的详情 / 解析产物 / 切片一律 404,与不存在对象同一入口,不泄露存在性;
-- 管理员与成员本片都看本租户全部文档(文档授权落地后再收紧)。
+- 文档默认不可读:成员只看到自己的,管理员看到本租户全部(文档授权另测)。
 """
 
 from __future__ import annotations
@@ -74,11 +74,11 @@ def test_list_rejects_tenant_query_parameter(tenant_clients, tenant: str) -> Non
 
     response = member.get(DOCUMENTS_URL, params={"tenant": tenant})
 
-    assert response.status_code == 422
+    assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "VALIDATION_ERROR"
+    assert body["code"] == "SCOPE_VIOLATION"
     assert body["trace_id"] == response.headers["X-Request-ID"]
-    assert body["details"]["errors"][0]["loc"] == ["query", "tenant"]
+    assert body["details"] == {"tenant": tenant}
 
 
 @pytest.mark.parametrize("suffix", ["", "/elements", "/chunks"])
@@ -92,10 +92,10 @@ def test_document_read_rejects_tenant_query_parameter(
         f"{DOCUMENTS_URL}/{mine['id']}{suffix}", params={"tenant": "other"}
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "VALIDATION_ERROR"
-    assert body["details"]["errors"][0]["loc"] == ["query", "tenant"]
+    assert body["code"] == "SCOPE_VIOLATION"
+    assert body["details"] == {"tenant": "other"}
 
 
 # ===== 对象级读路径:跨租户 404,与不存在同口径 =====
@@ -142,23 +142,33 @@ def test_same_tenant_detail_elements_and_chunks_are_readable(tenant_clients) -> 
     assert chunks.json()["data"]["chunks"]
 
 
-# ===== 角色:本片管理员与成员都看本租户全部 =====
+# ===== 角色:成员只看自己的,管理员看本租户全部 =====
 
 
-def test_admin_and_member_see_the_whole_tenant(tenant_clients) -> None:
+def test_member_sees_only_own_documents_and_admin_sees_whole_tenant(
+    tenant_clients,
+) -> None:
     member, admin, other = tenant_clients
     members_document = _upload(member, "member.md")
     admins_document = _upload(admin, "admin.md")
     _upload(other, "other.md")
 
-    for client in (member, admin):
-        data = client.get(DOCUMENTS_URL).json()["data"]
-        assert data["total"] == 2
-        assert {item["id"] for item in data["items"]} == {
-            members_document["id"],
-            admins_document["id"],
-        }
+    members_data = member.get(DOCUMENTS_URL).json()["data"]
+    assert members_data["total"] == 1
+    assert [item["id"] for item in members_data["items"]] == [
+        members_document["id"]
+    ]
 
-    # 同租户内互相可读:成员看管理员上传的,管理员看成员上传的
-    assert member.get(f"{DOCUMENTS_URL}/{admins_document['id']}").status_code == 200
+    admin_data = admin.get(DOCUMENTS_URL).json()["data"]
+    assert admin_data["total"] == 2
+    assert {item["id"] for item in admin_data["items"]} == {
+        members_document["id"],
+        admins_document["id"],
+    }
+
+    # 默认不可读:成员看不到管理员上传的,管理员能看到成员上传的
+    assert (
+        member.get(f"{DOCUMENTS_URL}/{admins_document['id']}").status_code
+        == 404
+    )
     assert admin.get(f"{DOCUMENTS_URL}/{members_document['id']}").status_code == 200

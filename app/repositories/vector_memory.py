@@ -54,13 +54,14 @@ class InMemoryVectorStore:
     ) -> list[ScoredChunk]:
         """身份与授权范围过滤都在相似度计算之前:越界向量不进候选。"""
         constraints = scope.effective()
+        document_ids = scope.document_ids
         with self._lock:
             candidates = [
                 entry
                 for entries in self._entries.values()
                 for entry in entries
                 if entry.embedding == embedding
-                and matches_scope(entry.chunk, constraints)
+                and matches_scope(entry.chunk, constraints, document_ids)
             ]
         scored = [
             ScoredChunk(chunk=entry.chunk, score=cosine_similarity(vector, entry.vector))

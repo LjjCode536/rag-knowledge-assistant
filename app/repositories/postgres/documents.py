@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -84,6 +86,9 @@ def build_filter_clause(filters: DocumentFilter) -> tuple[str, list]:
     if filters.doc_type is not None:
         clauses.append("doc_type = %s")
         params.append(filters.doc_type)
+    if filters.document_ids is not None:
+        clauses.append("id = ANY(%s::text[])")
+        params.append(list(filters.document_ids))
     keyword = filters.keyword.strip() if filters.keyword else ""
     if keyword:
         clauses.append("file_name ILIKE %s")
@@ -167,6 +172,32 @@ class PgDocumentRepository:
             cursor.execute(query, (tenant, file_name))
             row = cursor.fetchone()
         return _record_from_row(row) if row is not None else None
+
+    def list_ids(
+        self,
+        *,
+        tenant: str,
+        file_names: Sequence[str] | None = None,
+        owner_id: str | None = None,
+        latest_only: bool = True,
+    ) -> list[str]:
+        """按逻辑文档条件取 id;集合语义由调用方使用,不承诺次序。"""
+        clauses = ["tenant = %s"]
+        params: list = [tenant]
+        if latest_only:
+            clauses.append("is_latest")
+        if file_names is not None:
+            clauses.append("file_name = ANY(%s::text[])")
+            params.append(list(file_names))
+        if owner_id is not None:
+            clauses.append("owner_id = %s")
+            params.append(owner_id)
+        with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                f"SELECT id FROM documents WHERE {' AND '.join(clauses)}", params
+            )
+            rows = cursor.fetchall()
+        return [str(row["id"]) for row in rows]
 
     def list(self, filters: DocumentFilter) -> list[DocumentRecord]:
         """按筛选条件列出档案(T17);口径与内存实现一致。"""

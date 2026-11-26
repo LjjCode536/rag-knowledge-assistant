@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies import (
     reject_tenant_form_field,
@@ -28,10 +28,14 @@ from app.api.dependencies import (
 )
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
+from app.domain.audit import AuditAction
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
+from app.domain.grants import DocumentGrant, GrantSubjectType
 from app.domain.identity import Principal
 from app.domain.retrieval import Scope
+from app.services.audit import AuditService
 from app.services.document_catalog import DocumentCatalogService
+from app.services.grants import DocumentGrantService
 from app.services.ingestion import IngestionService
 from app.services.lifecycle import DocumentLifecycleService
 
@@ -122,6 +126,39 @@ class DocumentListView(BaseModel):
     limit: int
     offset: int
     items: list[DocumentView]
+
+
+class GrantCreateRequest(BaseModel):
+    """添加文档授权:授权主体三类;租户级授权不需要 ``subject_id``。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject_type: GrantSubjectType
+    subject_id: str | None = Field(default=None, max_length=200)
+
+
+class GrantView(BaseModel):
+    """一条文档授权视图:授权主体 + 授予者 + 时间。"""
+
+    grant_id: str
+    tenant: str
+    file_name: str
+    subject_type: GrantSubjectType
+    subject_id: str | None = None
+    granted_by: str
+    created_at: datetime
+
+    @classmethod
+    def of(cls, grant: DocumentGrant) -> GrantView:
+        return cls(**grant.model_dump())
+
+
+class GrantListView(BaseModel):
+    """文档授权清单。"""
+
+    document_id: str
+    total: int
+    items: list[GrantView]
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -279,6 +316,84 @@ def delete_document(
     record = access_service.require_writable_document(
         principal=principal, document_id=document_id
     )
+    # 变更类审计先行:审计失败即请求失败,文档不进入删除流程(ADR-0020)
+    audit_service: AuditService = request.app.state.audit_service
+    audit_service.record_required(
+        tenant=record.tenant,
+        principal_id=principal.id,
+        action=AuditAction.DOCUMENT_DELETE,
+        trace_id=trace_id_of(request),
+        resource_type="document",
+        resource_id=record.id,
+        details={"file_name": record.file_name},
+    )
     service: DocumentLifecycleService = request.app.state.lifecycle_service
     deleted = service.delete(record.id)
     return success_envelope(DocumentView.of(deleted), trace_id=trace_id_of(request))
+
+
+@router.get(
+    "/{document_id}/grants",
+    response_model=ApiEnvelope[GrantListView],
+    summary="文档授权清单(所有者 / 管理员)",
+)
+def list_document_grants(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[GrantListView]:
+    """列出某文档的授权清单;只有文档所有者与租户管理员可查看。"""
+    service: DocumentGrantService = request.app.state.document_grant_service
+    grants = service.list_grants(principal=principal, document_id=document_id)
+    data = GrantListView(
+        document_id=document_id,
+        total=len(grants),
+        items=[GrantView.of(grant) for grant in grants],
+    )
+    return success_envelope(data, trace_id=trace_id_of(request))
+
+
+@router.post(
+    "/{document_id}/grants",
+    response_model=ApiEnvelope[GrantView],
+    status_code=201,
+    summary="添加文档授权(所有者 / 管理员)",
+)
+def add_document_grant(
+    request: Request,
+    document_id: str,
+    body: GrantCreateRequest,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[GrantView]:
+    """把文档授权给用户、部门或整个租户;授权后答档缓存整体失效。"""
+    service: DocumentGrantService = request.app.state.document_grant_service
+    grant = service.add_grant(
+        principal=principal,
+        document_id=document_id,
+        subject_type=body.subject_type,
+        subject_id=body.subject_id,
+        trace_id=trace_id_of(request),
+    )
+    return success_envelope(GrantView.of(grant), trace_id=trace_id_of(request))
+
+
+@router.delete(
+    "/{document_id}/grants/{grant_id}",
+    response_model=ApiEnvelope[GrantView],
+    summary="撤销文档授权(所有者 / 管理员)",
+)
+def remove_document_grant(
+    request: Request,
+    document_id: str,
+    grant_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[GrantView]:
+    """撤销一条授权:权限变更立即失效答档缓存,不需要等缓存过期。"""
+    service: DocumentGrantService = request.app.state.document_grant_service
+    grant = service.remove_grant(
+        principal=principal,
+        document_id=document_id,
+        grant_id=grant_id,
+        trace_id=trace_id_of(request),
+    )
+    return success_envelope(GrantView.of(grant), trace_id=trace_id_of(request))

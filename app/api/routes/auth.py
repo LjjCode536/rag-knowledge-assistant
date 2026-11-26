@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.dependencies import require_principal
+from app.api.dependencies import reject_tenant_parameter, require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.identity import Principal, PrincipalKind, Role
@@ -78,6 +78,7 @@ async def login(request: Request, body: LoginRequest) -> ApiEnvelope[LoginView]:
     "/me",
     response_model=ApiEnvelope[PrincipalView],
     summary="当前主体(租户 / 角色 / 部门)",
+    dependencies=[Depends(reject_tenant_parameter)],
 )
 async def current_principal(
     request: Request,

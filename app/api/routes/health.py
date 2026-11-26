@@ -1,4 +1,8 @@
-"""健康检查端点,附在线问答缓存的命中率统计与上游熔断状态(T15)。"""
+"""健康检查端点:只留存活与粗粒度依赖状态(ADR-0020)。
+
+缓存命中率、上游熔断与向量身份盘点属于诊断内部状态,已移到管理员端点
+``/api/v1/admin/diagnostics``;公开面不再暴露这些细节。
+"""
 
 from __future__ import annotations
 
@@ -8,51 +12,17 @@ from pydantic import BaseModel
 from app.core.config import Settings
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
-from app.services.qa_cache import AnswerCache
 
 router = APIRouter(tags=["system"])
 
 
-class QaCacheStats(BaseModel):
-    """问答答档缓存的命中率统计:累计命中 / 未命中与命中率。"""
-
-    enabled: bool
-    hits: int
-    misses: int
-    hit_rate: float | None = None
-
-
-class UpstreamStats(BaseModel):
-    """上游模型服务的可观测状态:熔断状态(closed / open / half-open)。"""
-
-    circuit_breaker: str
-
-
 class HealthData(BaseModel):
+    """公共健康视图:存活、版本、环境与上游是否已配置(不细述上游状态)。"""
+
     status: str
     version: str
     environment: str
     upstream_configured: bool
-    upstream: UpstreamStats
-    qa_cache: QaCacheStats
-
-
-def _qa_cache_stats(request: Request) -> QaCacheStats:
-    """禁用模式下 app.state.answer_cache 为 None(装配显式关闭),返回关闭形态。"""
-    cache: AnswerCache | None = request.app.state.answer_cache
-    if cache is None:
-        return QaCacheStats(enabled=False, hits=0, misses=0, hit_rate=None)
-    stats = cache.stats()
-    return QaCacheStats(
-        enabled=True, hits=stats.hits, misses=stats.misses, hit_rate=stats.hit_rate
-    )
-
-
-def _upstream_stats(request: Request) -> UpstreamStats:
-    """熔断状态:上游硬挂时 /health 可见(closed / open / half-open)。"""
-    client = getattr(request.app.state, "llm_client", None)
-    state = getattr(client, "circuit_breaker_state", "closed")
-    return UpstreamStats(circuit_breaker=state)
 
 
 @router.get("/health", response_model=ApiEnvelope[HealthData], summary="健康检查")
@@ -63,7 +33,5 @@ async def health(request: Request) -> ApiEnvelope[HealthData]:
         version=settings.app_version,
         environment=settings.environment,
         upstream_configured=settings.upstream_configured,
-        upstream=_upstream_stats(request),
-        qa_cache=_qa_cache_stats(request),
     )
     return success_envelope(data, trace_id=trace_id_of(request))

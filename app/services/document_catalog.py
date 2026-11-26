@@ -68,6 +68,7 @@ class DocumentCatalogService:
             keyword=_blank_to_none(keyword),
             department=_blank_to_none(department),
             doc_type=_blank_to_none(doc_type),
+            document_ids=scope.document_ids,
             latest_only=latest_only,
             limit=limit,
             offset=offset,

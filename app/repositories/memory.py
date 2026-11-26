@@ -6,10 +6,12 @@ import threading
 from collections.abc import Sequence
 from datetime import datetime
 
+from app.domain.audit import AuditAction, AuditEvent
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentFilter, DocumentRecord, DocumentStatus
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.grants import DocumentGrant
 from app.domain.identity import PrincipalAccount
 from app.domain.qa import QueryLog
 from app.domain.stats import (
@@ -58,6 +60,27 @@ class InMemoryDocumentRepository:
         if not candidates:
             return None
         return max(candidates, key=lambda record: record.created_at)
+
+    def list_ids(
+        self,
+        *,
+        tenant: str,
+        file_names: Sequence[str] | None = None,
+        owner_id: str | None = None,
+        latest_only: bool = True,
+    ) -> list[str]:
+        """按逻辑文档条件取 id;集合语义由调用方使用,不承诺次序。"""
+        names = set(file_names) if file_names is not None else None
+        with self._lock:
+            records = list(self._records.values())
+        return [
+            record.id
+            for record in records
+            if record.tenant == tenant
+            and (not latest_only or record.is_latest)
+            and (names is None or record.file_name in names)
+            and (owner_id is None or record.owner_id == owner_id)
+        ]
 
     def list(self, filters: DocumentFilter) -> list[DocumentRecord]:
         """按筛选条件列出档案(T17);口径与 PostgreSQL 实现一致。"""
@@ -423,10 +446,160 @@ def _match_documents(
             continue
         if filters.doc_type is not None and record.doc_type != filters.doc_type:
             continue
+        if (
+            filters.document_ids is not None
+            and record.id not in filters.document_ids
+        ):
+            continue
         if keyword is not None and keyword not in record.file_name.lower():
             continue
         matched.append(record)
     return matched
+
+
+class InMemoryDocumentGrantRepository:
+    """文档授权的内存实现:逻辑文档(租户 + 文件名)+ 授权主体唯一。
+
+    授权挂在逻辑文档上,版本退位不删记录;文档删除由生命周期服务连带清理。
+    """
+
+    def __init__(self) -> None:
+        self._grants: dict[str, DocumentGrant] = {}
+        self._lock = threading.Lock()
+
+    def add(self, grant: DocumentGrant) -> None:
+        with self._lock:
+            for existing_id, existing in list(self._grants.items()):
+                if _same_grant(existing, grant):
+                    self._grants.pop(existing_id, None)
+            self._grants[grant.grant_id] = grant
+
+    def get(self, grant_id: str) -> DocumentGrant | None:
+        with self._lock:
+            return self._grants.get(grant_id)
+
+    def find(
+        self,
+        *,
+        tenant: str,
+        file_name: str,
+        subject_type: str,
+        subject_id: str | None,
+    ) -> DocumentGrant | None:
+        with self._lock:
+            for grant in self._grants.values():
+                if (
+                    grant.tenant == tenant
+                    and grant.file_name == file_name
+                    and grant.subject_type.value == subject_type
+                    and grant.subject_id == subject_id
+                ):
+                    return grant
+        return None
+
+    def list_for_logical(self, *, tenant: str, file_name: str) -> list[DocumentGrant]:
+        with self._lock:
+            grants = list(self._grants.values())
+        return sorted(
+            (
+                grant
+                for grant in grants
+                if grant.tenant == tenant and grant.file_name == file_name
+            ),
+            key=lambda grant: grant.created_at,
+        )
+
+    def list_relevant(
+        self, *, tenant: str, principal_id: str, department: str | None
+    ) -> list[DocumentGrant]:
+        with self._lock:
+            grants = list(self._grants.values())
+        return [
+            grant
+            for grant in grants
+            if grant.tenant == tenant
+            and (
+                grant.subject_type.value == "tenant"
+                or (
+                    grant.subject_type.value == "user"
+                    and grant.subject_id == principal_id
+                )
+                or (
+                    grant.subject_type.value == "department"
+                    and department is not None
+                    and grant.subject_id == department
+                )
+            )
+        ]
+
+    def delete(self, grant_id: str) -> None:
+        with self._lock:
+            self._grants.pop(grant_id, None)
+
+    def delete_for_logical(self, *, tenant: str, file_name: str) -> None:
+        with self._lock:
+            for grant_id, grant in list(self._grants.items()):
+                if grant.tenant == tenant and grant.file_name == file_name:
+                    self._grants.pop(grant_id, None)
+
+
+class InMemoryAuditRepository:
+    """审计事件的内存实现:只追加,按时间倒序列出;重启随进程失忆。"""
+
+    def __init__(self) -> None:
+        self._events: list[AuditEvent] = []
+        self._lock = threading.Lock()
+
+    def add(self, event: AuditEvent) -> None:
+        with self._lock:
+            self._events.append(event)
+
+    def list(
+        self,
+        *,
+        tenant: str,
+        actions: Sequence[AuditAction] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[AuditEvent]:
+        matched = self._matched(
+            tenant=tenant, actions=actions, start=start, end=end
+        )
+        matched.reverse()
+        return matched[offset : offset + limit]
+
+    def count(
+        self,
+        *,
+        tenant: str,
+        actions: Sequence[AuditAction] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> int:
+        return len(
+            self._matched(tenant=tenant, actions=actions, start=start, end=end)
+        )
+
+    def _matched(
+        self,
+        *,
+        tenant: str,
+        actions: Sequence[AuditAction] | None,
+        start: datetime | None,
+        end: datetime | None,
+    ) -> list[AuditEvent]:
+        wanted = set(actions or ())
+        with self._lock:
+            events = list(self._events)
+        return [
+            event
+            for event in events
+            if event.tenant == tenant
+            and (not wanted or event.action in wanted)
+            and _in_range(event.occurred_at, start=start, end=end)
+        ]
 
 
 class InMemoryPrincipalRepository:
@@ -471,11 +644,21 @@ class InMemoryPrincipalRepository:
             return sorted(self._by_id.values(), key=lambda item: item.principal.id)
 
 
+def _same_grant(left: DocumentGrant, right: DocumentGrant) -> bool:
+    """同逻辑文档 + 同授权主体即视为同一条授权(重复授权幂等)。"""
+    return (
+        left.tenant == right.tenant
+        and left.file_name == right.file_name
+        and left.subject_type == right.subject_type
+        and left.subject_id == right.subject_id
+    )
+
+
 def _in_range(
     moment: datetime, *, start: datetime | None, end: datetime | None
 ) -> bool:
-    """闭区间起点 / 开区间终点的时间归属判定。"""
+    """闭区间起点 / 开区间终点的时间归属判定;两端与时刻统一按 UTC 比较。"""
     normalized = as_utc(moment)
-    if start is not None and normalized < start:
+    if start is not None and normalized < as_utc(start):
         return False
-    return not (end is not None and normalized >= end)
+    return not (end is not None and normalized >= as_utc(end))

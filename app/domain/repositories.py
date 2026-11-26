@@ -6,10 +6,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from app.domain.audit import AuditAction, AuditEvent
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentFilter, DocumentRecord
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.grants import DocumentGrant
 from app.domain.identity import PrincipalAccount
 from app.domain.qa import QueryLog
 from app.domain.stats import BucketAggregate, StatsBucketKind, TokenUsageSummary
@@ -41,6 +43,26 @@ class DocumentRepository(Protocol):
         """
         ...
 
+    def list_ids(
+        self,
+        *,
+        tenant: str,
+        file_names: Sequence[str] | None = None,
+        owner_id: str | None = None,
+        latest_only: bool = True,
+    ) -> list[str]:
+        """按逻辑文档条件取文档记录 id(授权解析与清单集合过滤用)。
+
+        - ``tenant`` 必填,没有"不限制"的兜底;
+        - ``file_names`` 给出时按逻辑文档文件名收窄(授权展开);
+        - ``owner_id`` 给出时只取该主体所有的文档;
+        - ``latest_only`` 缺省只取现行版本;文档所有者查历史 / 删除档案时
+          可放开。
+
+        返回次序不承诺,调用方只按集合语义使用。
+        """
+        ...
+
     def list(self, filters: DocumentFilter) -> list[DocumentRecord]:
         """按筛选条件列出知识库文档档案(T17)。
 
@@ -64,6 +86,83 @@ class DocumentRepository(Protocol):
         与 :meth:`list` 同一套筛选条件(分页除外),故 ``total`` 与清单口径
         必然一致。
         """
+        ...
+
+
+class DocumentGrantRepository(Protocol):
+    """文档授权的存取契约(ADR-0021)。
+
+    授权以逻辑文档(租户 + 文件名)为键,按授权主体三类(用户 / 部门 / 租户)
+    解析允许集合。仓储只做存取,不判断谁有权授予。
+    """
+
+    def add(self, grant: DocumentGrant) -> None:
+        """追加一条授权;同逻辑文档 + 同授权主体视为已存在(幂等覆盖)。"""
+        ...
+
+    def get(self, grant_id: str) -> DocumentGrant | None:
+        """按授权 id 取记录;不存在返回 None。"""
+        ...
+
+    def find(
+        self,
+        *,
+        tenant: str,
+        file_name: str,
+        subject_type: str,
+        subject_id: str | None,
+    ) -> DocumentGrant | None:
+        """按逻辑文档 + 授权主体查既有记录(避免重复授权)。"""
+        ...
+
+    def list_for_logical(self, *, tenant: str, file_name: str) -> list[DocumentGrant]:
+        """列出某逻辑文档的全部授权(文档详情页授权清单)。"""
+        ...
+
+    def list_relevant(
+        self, *, tenant: str, principal_id: str, department: str | None
+    ) -> list[DocumentGrant]:
+        """列出可能授予某主体的授权:用户本人 / 其部门 / 整个租户。"""
+        ...
+
+    def delete(self, grant_id: str) -> None:
+        """删除一条授权(撤销);不存在按幂等处理。"""
+        ...
+
+    def delete_for_logical(self, *, tenant: str, file_name: str) -> None:
+        """删除某逻辑文档的全部授权(文档删除连带清理)。"""
+        ...
+
+
+class AuditRepository(Protocol):
+    """审计事件的只追加存取契约(ADR-0020)。"""
+
+    def add(self, event: AuditEvent) -> None:
+        """追加一条审计事件;实现失败必须上抛,由调用方决定请求是否失败。"""
+        ...
+
+    def list(
+        self,
+        *,
+        tenant: str,
+        actions: Sequence[AuditAction] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[AuditEvent]:
+        """按租户、动作与时间区间(闭起点 / 开终点)倒序列出事件。"""
+        ...
+
+    def count(
+        self,
+        *,
+        tenant: str,
+        actions: Sequence[AuditAction] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> int:
+        """返回与 :meth:`list` 同一套筛选条件的事件总数。"""
         ...
 
 

@@ -89,6 +89,7 @@ class AnswerService:
             min_score=min_score,
             scope_effective=scope_effective,
             principal_id=principal_id,
+            document_ids=scope.document_ids,
         )
         if cache_key is not None:
             entry = self._cache.get(cache_key)
@@ -242,11 +243,12 @@ class AnswerService:
         min_score: float,
         scope_effective: dict[str, str],
         principal_id: str,
+        document_ids: frozenset[str] | None = None,
     ) -> str | None:
         """缓存键=None 表示缓存未启用;键覆盖问题、主体与全部过程口径。
 
         主体 id 与有效授权范围都入键:同题不同主体、同题不同租户都不得
-        互相命中答档,权限变化后也不会复用旧答案。
+        互相命中答档,权限变化后也不会复用旧答案;文档级允许集合一并入键。
         """
         if self._cache is None:
             return None
@@ -257,6 +259,7 @@ class AnswerService:
             scope=scope_effective,
             principal_id=principal_id,
             generator=self._generator.kind.value,
+            document_ids=document_ids,
         )
 
     def _sources_of(self, hits: list[ScoredChunk]) -> list[ContextSource]:

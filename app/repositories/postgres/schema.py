@@ -74,6 +74,43 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS principals_by_tenant ON principals (tenant)",
+    # 文档授权(ADR-0021):以逻辑文档(租户 + 文件名)为键,版本退位后仍有效;
+    # 授权主体三类:user / department / tenant。租户级授权 subject_id 为空。
+    """
+    CREATE TABLE IF NOT EXISTS document_grants (
+        grant_id     text PRIMARY KEY,
+        tenant       text NOT NULL,
+        file_name    text NOT NULL,
+        subject_type text NOT NULL,
+        subject_id   text,
+        granted_by   text NOT NULL,
+        created_at   timestamptz NOT NULL DEFAULT now()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS document_grants_by_logical "
+    "ON document_grants (tenant, file_name)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS document_grants_unique_subject "
+    "ON document_grants (tenant, file_name, subject_type, COALESCE(subject_id, ''))",
+    # 审计事件(ADR-0020):只追加;字段即查询口径,细节落 jsonb。
+    """
+    CREATE TABLE IF NOT EXISTS audit_events (
+        seq          bigserial NOT NULL,
+        event_id     text PRIMARY KEY,
+        occurred_at  timestamptz NOT NULL DEFAULT now(),
+        tenant       text NOT NULL,
+        principal_id text,
+        action       text NOT NULL,
+        resource_type text,
+        resource_id  text,
+        result       text NOT NULL,
+        trace_id     text,
+        details      jsonb NOT NULL DEFAULT '{}'::jsonb
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS audit_events_by_tenant_time "
+    "ON audit_events (tenant, occurred_at DESC, seq DESC)",
+    "CREATE INDEX IF NOT EXISTS audit_events_by_action "
+    "ON audit_events (tenant, action, occurred_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS chunks (
         chunk_id            text PRIMARY KEY,

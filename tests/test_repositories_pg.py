@@ -13,10 +13,12 @@ from uuid import uuid4
 
 import pytest
 
+from app.domain.audit import AuditAction, AuditEvent, AuditResult
 from app.domain.chunks import Chunk, ChunkingStrategy
 from app.domain.documents import DocumentRecord, ParsedDocument
 from app.domain.evaluation import EvaluationReport, RetrievalMetrics
 from app.domain.feedback import FeedbackVerdict
+from app.domain.grants import DocumentGrant, GrantSubjectType
 from app.domain.qa import QueryLog
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
@@ -24,8 +26,10 @@ from app.repositories.memory import (
     InMemoryQueryLogRepository,
 )
 from app.repositories.postgres import (
+    PgAuditRepository,
     PgChunkRepository,
     PgDatabase,
+    PgDocumentGrantRepository,
     PgDocumentRepository,
     PgEvaluationRunRepository,
     PgQueryLogRepository,
@@ -529,5 +533,85 @@ def test_schema_migration_is_idempotent(test_pg_database):
 
         assert doc_repo.get(record.id) == record
         assert [c.content for c in chunk_repo.list_by_document("doc-1")] == ["存档"]
+    finally:
+        db.close()
+
+
+def test_document_grants_are_keyed_by_logical_document(test_pg_database):
+    """授权按(租户 + 文件名)存取:重复授权幂等,删除按逻辑文档连带清理。"""
+    db = _make_db(test_pg_database)
+    try:
+        repo = PgDocumentGrantRepository(db)
+        first = DocumentGrant(
+            tenant="acme",
+            file_name="handbook.md",
+            subject_type=GrantSubjectType.USER,
+            subject_id="usr_member",
+            granted_by="usr_owner",
+        )
+        repo.add(first)
+        duplicate = DocumentGrant(
+            tenant="acme",
+            file_name="handbook.md",
+            subject_type=GrantSubjectType.USER,
+            subject_id="usr_member",
+            granted_by="usr_admin",
+        )
+        repo.add(duplicate)
+
+        assert len(repo.list_for_logical(tenant="acme", file_name="handbook.md")) == 1
+        assert (
+            repo.find(
+                tenant="acme",
+                file_name="handbook.md",
+                subject_type="user",
+                subject_id="usr_member",
+            )
+            is not None
+        )
+
+        # 版本退位不删授权:同名新版本仍在同一逻辑文档下
+        assert repo.list_relevant(
+            tenant="acme", principal_id="usr_member", department=None
+        )
+
+        repo.delete_for_logical(tenant="acme", file_name="handbook.md")
+        assert repo.list_for_logical(tenant="acme", file_name="handbook.md") == []
+    finally:
+        db.close()
+
+
+def test_audit_repository_appends_and_filters(test_pg_database):
+    """审计只追加:按租户 / 动作 / 时间过滤,倒序返回。"""
+    db = _make_db(test_pg_database)
+    try:
+        repo = PgAuditRepository(db)
+        for action in (
+            AuditAction.DOCUMENT_GRANT,
+            AuditAction.DOCUMENT_DELETE,
+        ):
+            repo.add(
+                AuditEvent(
+                    tenant="acme",
+                    principal_id="usr_member",
+                    action=action,
+                    resource_type="document",
+                    resource_id="doc-1",
+                    result=AuditResult.SUCCESS,
+                    trace_id="trace-1",
+                    details={"file_name": "handbook.md"},
+                )
+            )
+
+        assert repo.count(tenant="acme") == 2
+        assert (
+            repo.count(tenant="acme", actions=[AuditAction.DOCUMENT_DELETE]) == 1
+        )
+        events = repo.list(
+            tenant="acme", actions=[AuditAction.DOCUMENT_DELETE]
+        )
+        assert [event.action for event in events] == [AuditAction.DOCUMENT_DELETE]
+        assert events[0].details == {"file_name": "handbook.md"}
+        assert repo.count(tenant="other") == 0
     finally:
         db.close()
