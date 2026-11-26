@@ -101,8 +101,8 @@ uv run python scripts/evaluate.py --min-score 0.07 --check \
 | `difficulty` | `easy` / `medium` / `hard`,便于解释失败分布 |
 | `expected_chunks` | 预期切片列表;每条用「文档名 + 文内唯一锚点」定位 |
 | `expected_answer_keywords` | 答案应该覆盖的关键词(评估报告以此展示,规则法忠实度不依赖它) |
-| `forbidden_documents` | 权限边界用例的禁读文档;评估器会跑无过滤对照 |
-| `filters` | 检索前元数据过滤,如 `{tenant: acme}` |
+| `forbidden_documents` | 权限边界用例的禁读文档(另一租户或超出主体授权范围);评估器会跑无过滤对照 |
+| `filters` | 检索前元数据过滤,如 `{tenant: acme}`(目标态:租户由主体携带,用例只声明收窄条件) |
 | `should_refuse` | 知识库没有答案时为 `true`;此类用例不参与 Recall / MRR / NDCG 均值 |
 | `notes` | 来源或边界说明 |
 
@@ -118,6 +118,7 @@ uv run python scripts/evaluate.py --min-score 0.07 --check \
   判"没有高分命中即正确拒答";T09 起 `/chat` 的实际拒答行为按双向口径判定
   (生成口径),两者并存于报告。
 - **权限边界用例**:除 `expected_chunks` 外声明 `forbidden_documents`。评估器检查 top-k 是否泄漏禁读文档,并额外跑一次无过滤检索,证明该文档确实会命中——权限通过不是因为语料无关。
+- **目标口径(ADR-0021,随文档授权切片生效)**:用例由主体驱动——以租户 A 的主体检索,语料里放租户 B 的同主题诱饵;评估器在进程内按语料租户构造授权范围,并用评估模块内部的「无过滤对照」证明诱饵本会命中。不提供 HTTP 层的免鉴权开关。
 
 ## 增加用例
 

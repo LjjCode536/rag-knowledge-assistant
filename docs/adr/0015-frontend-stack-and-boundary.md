@@ -1,6 +1,6 @@
 # ADR-0015: 前端栈与边界——独立 Vue 3 SPA,置于 frontend/ 目录,与后端同源代理
 
-**Status**: accepted
+**Status**: accepted;「前端不做登录与鉴权 / 后端没有用户、会话、鉴权」的条款由 [ADR-0020](0020-identity-and-tenant-isolation.md) 取代,其余决定继续有效
 
 ## Context
 
