@@ -532,7 +532,7 @@ def _tenant_auth_headers(app) -> Callable[[str], dict[str, str]]:
             id="svc_evaluation",
             kind=PrincipalKind.SERVICE,
             tenant=tenant,
-            role=Role.MEMBER,
+            role=Role.ADMIN,
         )
         issued = app.state.token_service.issue(principal)
         return {"Authorization": f"Bearer {issued.access_token}"}

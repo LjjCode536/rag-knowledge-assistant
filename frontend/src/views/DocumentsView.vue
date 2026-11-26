@@ -80,6 +80,14 @@ const uploadDepartment = ref('')
 const uploadDocType = ref('')
 const uploadVersion = ref('v1')
 
+/** 部门只有租户管理员可指定;成员上传的部门固定取登录身份。 */
+const canChooseDepartment = computed(() => authStore.principal?.role === 'admin')
+
+/** 高级设置里实际可填写的字段。 */
+const advancedFieldLabel = computed(() =>
+  canChooseDepartment.value ? '部门 / 文档类型 / 版本' : '文档类型 / 版本',
+)
+
 /** 高级设置是否展开(默认收起:多数上传不需要填)。 */
 const advancedOpen = ref(false)
 
@@ -105,9 +113,10 @@ const extensionError = computed<string>(() => {
 const uploadMutation = useMutation({
   mutationFn: (file: File) =>
     uploadDocument(file, {
-      // 租户由登录身份决定,界面不提供选择(ADR-0020);服务端强制归属见 #29
-      tenant: authStore.principal?.tenant,
-      department: uploadDepartment.value || undefined,
+      // 租户与所有者由登录身份决定,界面不提供选择;部门只有管理员可指定
+      department: canChooseDepartment.value
+        ? uploadDepartment.value || undefined
+        : undefined,
       doc_type: uploadDocType.value || undefined,
       version: uploadVersion.value || undefined,
     }),
@@ -291,7 +300,7 @@ function formatTime(value: string): string {
             data-testid="documents-advanced-toggle"
             @click="advancedOpen = !advancedOpen"
           >
-            {{ advancedOpen ? '收起' : '展开' }}(部门 / 文档类型 / 版本)
+            {{ advancedOpen ? '收起' : '展开' }}({{ advancedFieldLabel }})
           </el-button>
         </el-form-item>
         <el-form-item
@@ -300,6 +309,7 @@ function formatTime(value: string): string {
         >
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             <el-input
+              v-if="canChooseDepartment"
               v-model="uploadDepartment"
               size="small"
               placeholder="部门(可选)"

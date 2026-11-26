@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
+from app.api.dependencies import require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import NotFoundError
 from app.core.tracing import trace_id_of
+from app.domain.identity import Principal, Role
 from app.domain.qa import (
     GenerationUsage,
     GeneratorKind,
@@ -20,6 +23,11 @@ from app.domain.qa import (
 from app.domain.repositories import QueryLogRepository
 
 router = APIRouter(prefix="/api/v1/query-logs", tags=["qa"])
+
+
+def _visible_principal_id(principal: Principal) -> str | None:
+    """读路径主体过滤:成员只看自己的,管理员看本租户全部。"""
+    return None if principal.role is Role.ADMIN else principal.id
 
 
 class QueryHitView(BaseModel):
@@ -43,6 +51,8 @@ class QueryLogView(BaseModel):
 
     query_id: str
     trace_id: str
+    tenant: str
+    principal_id: str
     question: str
     answer: str
     refused: bool
@@ -63,6 +73,8 @@ class QueryLogView(BaseModel):
         return cls(
             query_id=log.query_id,
             trace_id=log.trace_id,
+            tenant=log.tenant,
+            principal_id=log.principal_id,
             question=log.question,
             answer=log.answer,
             refused=log.refused,
@@ -91,12 +103,17 @@ class QueryLogsView(BaseModel):
 @router.get("", response_model=ApiEnvelope[QueryLogsView], summary="查询日志(最近优先)")
 def list_query_logs(
     request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
     limit: int = Query(default=20, ge=1, le=100),
 ) -> ApiEnvelope[QueryLogsView]:
+    """按登录主体返回查询日志:成员只看自己的,管理员看本租户全部。"""
     repository: QueryLogRepository = request.app.state.query_log_repository
-    logs = repository.list_recent(limit=limit)
+    principal_id = _visible_principal_id(principal)
+    logs = repository.list_recent(
+        tenant=principal.tenant, limit=limit, principal_id=principal_id
+    )
     data = QueryLogsView(
-        total=repository.count(),
+        total=repository.count(tenant=principal.tenant, principal_id=principal_id),
         limit=limit,
         items=[QueryLogView.of(log) for log in logs],
     )
@@ -108,9 +125,17 @@ def list_query_logs(
     response_model=ApiEnvelope[QueryLogView],
     summary="按 query_id 查询日志",
 )
-def get_query_log(request: Request, query_id: str) -> ApiEnvelope[QueryLogView]:
+def get_query_log(
+    request: Request,
+    query_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[QueryLogView]:
     repository: QueryLogRepository = request.app.state.query_log_repository
-    log = repository.get(query_id)
+    log = repository.get(
+        query_id,
+        tenant=principal.tenant,
+        principal_id=_visible_principal_id(principal),
+    )
     if log is None:
         raise NotFoundError("查询日志不存在", details={"query_id": query_id})
     return success_envelope(QueryLogView.of(log), trace_id=trace_id_of(request))

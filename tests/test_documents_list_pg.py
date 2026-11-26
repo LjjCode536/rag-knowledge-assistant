@@ -217,10 +217,13 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         update={"vector_store": "pgvector", "database_url": test_pg_database.dsn}
     )
 
-    with authorized_client(
-        create_app(pg_settings, embedder=DeterministicEmbedder()),
-        raise_server_exceptions=False,
-    ) as client:
+    app = create_app(pg_settings, embedder=DeterministicEmbedder())
+    with (
+        authorized_client(app, raise_server_exceptions=False) as client,
+        authorized_client(
+            app, OTHER_TENANT.principal, raise_server_exceptions=False
+        ) as other_client,
+    ):
         upload = client.post(
             DOCUMENTS_URL,
             files={"file": ("employee.md", "# 员工手册\n\n正文。\n".encode(), "text/markdown")},
@@ -232,16 +235,22 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         assert listed["total"] == 1
         assert listed["items"][0]["id"] == document_id
 
-        # 租户由主体决定:不再接受查询参数,携带即 422
+        # 租户由主体决定:查询参数与上传表单都不再接受,携带即 422
         rejected = client.get(DOCUMENTS_URL, params={"tenant": "acme"})
         assert rejected.status_code == 422
         assert rejected.json()["code"] == "VALIDATION_ERROR"
+        rejected_form = client.post(
+            DOCUMENTS_URL,
+            files={"file": ("bad.md", "正文。".encode(), "text/markdown")},
+            data={"tenant": "acme"},
+        )
+        assert rejected_form.status_code == 422
+        assert rejected_form.json()["code"] == "VALIDATION_ERROR"
 
         # 异租户文档不进本租户清单(内存与 PG 走同一份 DocumentFilter)
-        decoy = client.post(
+        decoy = other_client.post(
             DOCUMENTS_URL,
             files={"file": ("other.md", "# 别家手册\n\n正文。\n".encode(), "text/markdown")},
-            data={"tenant": "other"},
         )
         assert decoy.status_code == 201, decoy.text
         assert client.get(DOCUMENTS_URL).json()["data"]["total"] == 1
@@ -281,7 +290,6 @@ def test_document_reads_over_pgvector_follow_principal_scope(
         theirs = other_client.post(
             DOCUMENTS_URL,
             files={"file": ("theirs.md", "# 别家文档\n\n正文。\n".encode(), "text/markdown")},
-            data={"tenant": "other"},
         )
         assert theirs.status_code == 201, theirs.text
         theirs_id = theirs.json()["data"]["id"]

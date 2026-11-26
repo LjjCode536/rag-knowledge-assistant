@@ -80,10 +80,10 @@ def test_list_sorted_by_created_at_descending(client):
 # ===== 筛选维度 =====
 
 
-def test_list_excludes_documents_from_other_tenants(client):
+def test_list_excludes_documents_from_other_tenants(client, other_tenant_client):
     """清单按主体租户收敛:调用方无法再声明租户,异租户文档不出现。"""
     mine = _upload(client, name="mine.md")
-    _upload(client, name="theirs.md", tenant="other")
+    _upload(other_tenant_client, name="theirs.md")
 
     data = _list(client)
     assert data["total"] == 1
@@ -111,25 +111,25 @@ def test_list_filters_by_keyword_case_insensitive_substring(client):
     assert _list(client, keyword="missing")["total"] == 0
 
 
-def test_list_filters_by_department_and_doc_type(client):
-    """部门与文档类型精确匹配。"""
-    _upload(client, name="hr.md", department="人力部", doc_type="制度")
-    _upload(client, name="it.md", department="技术部", doc_type="手册")
+def test_list_filters_by_department_and_doc_type(admin_client):
+    """部门与文档类型精确匹配(管理员可上传任意部门)。"""
+    _upload(admin_client, name="hr.md", department="人力部", doc_type="制度")
+    _upload(admin_client, name="it.md", department="技术部", doc_type="手册")
 
-    assert _list(client, department="人力部")["total"] == 1
-    assert _list(client, doc_type="手册")["total"] == 1
-    assert _list(client, department="人力部", doc_type="手册")["total"] == 0
+    assert _list(admin_client, department="人力部")["total"] == 1
+    assert _list(admin_client, doc_type="手册")["total"] == 1
+    assert _list(admin_client, department="人力部", doc_type="手册")["total"] == 0
 
 
-def test_list_combines_filters_with_and(client):
+def test_list_combines_filters_with_and(admin_client, other_tenant_client):
     """多个筛选条件同时给出时按"与"组合,且始终不越出主体租户。"""
-    _upload(client, name="a.md", department="人力部", doc_type="制度")
-    _upload(client, name="b.md", department="技术部", doc_type="制度")
-    _upload(client, name="c.md", department="人力部", doc_type="制度", tenant="other")
+    _upload(admin_client, name="a.md", department="人力部", doc_type="制度")
+    _upload(admin_client, name="b.md", department="技术部", doc_type="制度")
+    _upload(other_tenant_client, name="c.md", department="市场部", doc_type="制度")
 
-    assert _list(client, department="人力部")["total"] == 1
-    assert _list(client, doc_type="制度")["total"] == 2
-    assert _list(client, department="人力部", doc_type="制度")["total"] == 1
+    assert _list(admin_client, department="人力部")["total"] == 1
+    assert _list(admin_client, doc_type="制度")["total"] == 2
+    assert _list(admin_client, department="人力部", doc_type="制度")["total"] == 1
 
 
 # ===== 分页与总数 =====
@@ -165,11 +165,11 @@ def test_list_offset_beyond_total_returns_empty_with_correct_total(client):
     assert data["offset"] == 100
 
 
-def test_list_total_reflects_filters_not_page_size(client):
+def test_list_total_reflects_filters_not_page_size(client, other_tenant_client):
     """总数是符合筛选条件的总数,不受分页影响,也不计入异租户文档。"""
     for index in range(3):
         _upload(client, name=f"doc-{index}.md")
-    _upload(client, name="other.md", tenant="beta")
+    _upload(other_tenant_client, name="other.md")
 
     data = _list(client, limit=1)
     assert data["total"] == 3
@@ -193,12 +193,13 @@ def test_list_response_uses_envelope_with_trace_id(client):
 
 def test_list_items_expose_document_view_fields(client):
     """清单条目与单份查询的档案视图同形。"""
-    document = _upload(client, name="view.md", department="人力部")
+    document = _upload(client, name="view.md", department="研发部")
 
     item = _list(client)["items"][0]
     assert item["id"] == document["id"]
     assert item["file_name"] == "view.md"
     assert item["tenant"] == "default"
-    assert item["department"] == "人力部"
+    assert item["owner_id"] == "usr_member"
+    assert item["department"] == "研发部"
     assert item["status"] == "parsed"
     assert item["is_latest"] is True

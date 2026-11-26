@@ -140,8 +140,8 @@ def test_same_file_name_in_different_tenants_do_not_supersede(fake_app):
             fake_app, OTHER_TENANT.principal, raise_server_exceptions=False
         ) as other_client,
     ):
-        mine = _index(client, "hr.txt", OLD_TEXT, tenant="default")["document_id"]
-        theirs = _index(other_client, "hr.txt", NEW_TEXT, tenant="other")["document_id"]
+        mine = _index(client, "hr.txt", OLD_TEXT)["document_id"]
+        theirs = _index(other_client, "hr.txt", NEW_TEXT)["document_id"]
 
         assert _fetch(client, mine)["is_latest"] is True
         assert _fetch(other_client, theirs)["is_latest"] is True

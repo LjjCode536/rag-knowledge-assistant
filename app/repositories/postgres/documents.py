@@ -23,7 +23,7 @@ from app.repositories.postgres.rows import document_from_row
 
 _COLUMNS = (
     "id, file_name, file_type, size_bytes, status, error_message, is_latest, "
-    "superseded_at, deleted_at, tenant, department, doc_type, version, "
+    "superseded_at, deleted_at, tenant, owner_id, department, doc_type, version, "
     "page_count, element_count, parsed, chunk_count, chunk_warnings, "
     "created_at, parsed_at, chunked_at, indexed_at, failed_at"
 )
@@ -33,7 +33,8 @@ _SET_COLUMNS = (
     "size_bytes = EXCLUDED.size_bytes, status = EXCLUDED.status, "
     "error_message = EXCLUDED.error_message, is_latest = EXCLUDED.is_latest, "
     "superseded_at = EXCLUDED.superseded_at, deleted_at = EXCLUDED.deleted_at, "
-    "tenant = EXCLUDED.tenant, department = EXCLUDED.department, "
+    "tenant = EXCLUDED.tenant, owner_id = EXCLUDED.owner_id, "
+    "department = EXCLUDED.department, "
     "doc_type = EXCLUDED.doc_type, version = EXCLUDED.version, "
     "page_count = EXCLUDED.page_count, element_count = EXCLUDED.element_count, "
     "parsed = EXCLUDED.parsed, chunk_count = EXCLUDED.chunk_count, "
@@ -112,6 +113,7 @@ def _row_values(record: DocumentRecord) -> tuple:
         record.superseded_at,
         record.deleted_at,
         record.tenant,
+        record.owner_id,
         record.department,
         record.doc_type,
         record.version,

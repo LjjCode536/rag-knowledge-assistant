@@ -310,7 +310,6 @@ describe('api 客户端层', () => {
     )
 
     await uploadDocument(new File(['x'], 'a.txt', { type: 'text/plain' }), {
-      tenant: 'acme',
       department: 'HR',
       doc_type: '制度',
       version: 'v2',
@@ -323,7 +322,8 @@ describe('api 客户端层', () => {
     expect((init?.headers as Record<string, string>)['Content-Type']).toBeUndefined()
     const form = init?.body as FormData
     expect(form.get('file')).toBeInstanceOf(File)
-    expect(form.get('tenant')).toBe('acme')
+    // 租户只来自登录身份:上传表单不再提交 tenant
+    expect(form.get('tenant')).toBeNull()
     expect(form.get('department')).toBe('HR')
     expect(form.get('doc_type')).toBe('制度')
     expect(form.get('version')).toBe('v2')
@@ -334,9 +334,10 @@ describe('api 客户端层', () => {
       new Response(okEnvelope({ id: 'doc-1', status: 'uploaded' }), { status: 201 }),
     )
 
-    await uploadDocument(new File(['x'], 'a.txt'), { tenant: 'acme', department: '' })
+    await uploadDocument(new File(['x'], 'a.txt'), { department: '' })
 
     const form = vi.mocked(fetch).mock.calls[0][1]?.body as FormData
+    expect(form.get('tenant')).toBeNull()
     expect(form.get('department')).toBeNull()
     expect(form.get('doc_type')).toBeNull()
   })

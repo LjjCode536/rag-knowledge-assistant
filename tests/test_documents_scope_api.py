@@ -39,13 +39,11 @@ def tenant_clients(
         yield member_client, admin_client, other_client
 
 
-def _upload(client: TestClient, name: str, *, tenant: str | None = None) -> dict:
-    """上传一份知识库文档;不传租户时归属表单默认租户 ``default``。"""
-    data = {"tenant": tenant} if tenant is not None else None
+def _upload(client: TestClient, name: str) -> dict:
+    """上传一份知识库文档;租户来自客户端携带的真实 JWT。"""
     response = client.post(
         DOCUMENTS_URL,
         files={"file": (name, "正文内容。".encode(), "text/plain")},
-        data=data,
     )
     assert response.status_code == 201, response.text
     return response.json()["data"]
@@ -58,7 +56,7 @@ def test_list_only_returns_principal_tenant_and_total_shrinks(tenant_clients) ->
     member, _, other = tenant_clients
     mine = _upload(member, "mine.md")
     also_mine = _upload(member, "also-mine.md")
-    theirs = _upload(other, "theirs.md", tenant="other")
+    theirs = _upload(other, "theirs.md")
 
     data = member.get(DOCUMENTS_URL).json()["data"]
     assert data["total"] == 2
@@ -106,7 +104,7 @@ def test_document_read_rejects_tenant_query_parameter(
 @pytest.mark.parametrize("suffix", ["", "/elements", "/chunks"])
 def test_cross_tenant_document_read_is_404(tenant_clients, suffix: str) -> None:
     member, _, other = tenant_clients
-    theirs = _upload(other, "theirs.md", tenant="other")
+    theirs = _upload(other, "theirs.md")
 
     response = member.get(f"{DOCUMENTS_URL}/{theirs['id']}{suffix}")
 
@@ -121,7 +119,7 @@ def test_cross_tenant_and_missing_document_share_one_404_shape(
     tenant_clients, suffix: str
 ) -> None:
     member, _, other = tenant_clients
-    theirs = _upload(other, "theirs.md", tenant="other")
+    theirs = _upload(other, "theirs.md")
 
     cross = member.get(f"{DOCUMENTS_URL}/{theirs['id']}{suffix}")
     missing = member.get(f"{DOCUMENTS_URL}/no-such-document{suffix}")
@@ -151,7 +149,7 @@ def test_admin_and_member_see_the_whole_tenant(tenant_clients) -> None:
     member, admin, other = tenant_clients
     members_document = _upload(member, "member.md")
     admins_document = _upload(admin, "admin.md")
-    _upload(other, "other.md", tenant="other")
+    _upload(other, "other.md")
 
     for client in (member, admin):
         data = client.get(DOCUMENTS_URL).json()["data"]

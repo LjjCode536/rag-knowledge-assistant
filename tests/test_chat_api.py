@@ -99,8 +99,7 @@ def indexed_client(settings, upload_dir) -> Iterator[tuple[TestClient, dict]]:
             client,
             "employee.md",
             HANDBOOK,
-            tenant="default",
-            department="人力部",
+            department="研发部",
             doc_type="制度",
             version="v1",
         )
@@ -223,8 +222,7 @@ def test_injected_generator_receives_numbered_context(settings, upload_dir):
             client,
             "employee.md",
             HANDBOOK,
-            tenant="default",
-            department="人力部",
+            department="研发部",
             doc_type="制度",
             version="v1",
         )
@@ -263,7 +261,6 @@ def test_chat_citation_includes_pdf_page_number(settings, upload_dir):
             client,
             "handbook.pdf",
             build_pdf(["Annual leave policy: employees may apply after one year."]),
-            tenant="default",
         )
 
         data = _chat(client, "annual leave policy")
@@ -305,7 +302,7 @@ def test_generator_refusal_leaves_no_citations_or_used_hits(settings, upload_dir
         answer_generator=RefusingGenerator(),
     )
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="default")
+        _index(client, "employee.md", HANDBOOK)
 
         data = _chat(client, LEAVE_QUESTION)
         log = client.get(f"{QUERY_LOGS_URL}/{data['query_id']}").json()["data"]

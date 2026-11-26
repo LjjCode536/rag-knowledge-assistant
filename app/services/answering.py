@@ -104,7 +104,12 @@ class AnswerService:
                 )
             else:
                 return self._answered_from_cache(
-                    entry, question=question, trace_id=trace_id, started=started
+                    entry,
+                    question=question,
+                    tenant=scope.tenant,
+                    principal_id=principal_id,
+                    trace_id=trace_id,
+                    started=started,
                 )
 
         outcome = await self._retrieval.retrieve(
@@ -140,6 +145,8 @@ class AnswerService:
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
         log = QueryLog(
             trace_id=trace_id,
+            tenant=scope.tenant,
+            principal_id=principal_id,
             question=question,
             answer=answer,
             refused=refused,
@@ -183,6 +190,8 @@ class AnswerService:
         entry: CacheEntry,
         *,
         question: str,
+        tenant: str,
+        principal_id: str,
         trace_id: str,
         started: float,
     ) -> AnswerRunResult:
@@ -200,6 +209,9 @@ class AnswerService:
             update={
                 "query_id": f"qry_{uuid4().hex[:12]}",
                 "trace_id": trace_id,
+                # 留痕以本次请求为准:租户与主体也按本次调用写,不沿用缓存条目
+                "tenant": tenant,
+                "principal_id": principal_id,
                 # 留痕以本次请求为准:问题原文记调用方的,答档只贡献答案与证据
                 "question": question,
                 "latency_ms": latency_ms,

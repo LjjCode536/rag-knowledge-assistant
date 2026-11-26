@@ -32,6 +32,9 @@ class FeedbackRecord(BaseModel):
     feedback_id: str = Field(default_factory=lambda: f"fb_{uuid4().hex[:12]}")
     query_id: str
     trace_id: str
+    # 反馈的显式归属:成员只能读自己的反馈,统计按租户收敛(ADR-0020 / #30)
+    tenant: str = Field(min_length=1)
+    principal_id: str = Field(min_length=1)
     verdict: FeedbackVerdict
     # 一句话说明;未填或空白由服务层归一为 None
     comment: str | None = None

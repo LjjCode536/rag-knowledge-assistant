@@ -5,13 +5,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
+from app.api.dependencies import require_writable_document
 from app.api.routes.documents import DocumentView
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import InvalidDocumentStateError
 from app.core.tracing import trace_id_of
+from app.domain.documents import DocumentRecord
 from app.domain.state_machine import StateTransitionError
 from app.services.embedding import EmbeddingRunResult, EmbeddingService
 
@@ -52,11 +56,18 @@ class EmbeddingRunView(BaseModel):
     response_model=ApiEnvelope[EmbeddingRunView],
     summary="向量化并入库(批量,内存向量库)",
 )
-async def embed_document(request: Request, document_id: str) -> ApiEnvelope[EmbeddingRunView]:
-    """批量向量化已切片文档,写入内存向量库;失败落统一上游错误信封。"""
+async def embed_document(
+    request: Request,
+    document_id: str,
+    record: Annotated[DocumentRecord, Depends(require_writable_document)],
+) -> ApiEnvelope[EmbeddingRunView]:
+    """批量向量化已切片文档,写入内存向量库;失败落统一上游错误信封。
+
+    只有文档所有者或租户管理员可向量化;其他主体按对象不可见返回 404。
+    """
     service: EmbeddingService = request.app.state.embedding_service
     try:
-        result = await service.embed_document(document_id)
+        result = await service.embed_document(record.id)
     except StateTransitionError as exc:
         # 状态机不变量被破坏属程序错误,但对外仍回稳定错误码而非 500 堆栈
         raise InvalidDocumentStateError(

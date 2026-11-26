@@ -69,6 +69,7 @@ def test_document_roundtrip_preserves_every_field(test_pg_database):
     repo = PgDocumentRepository(db)
     record = _document(
         tenant="acme",
+        owner_id="usr_owner",
         department="人力部",
         doc_type="制度",
         version="v2",
@@ -79,6 +80,7 @@ def test_document_roundtrip_preserves_every_field(test_pg_database):
     fetched = repo.get(record.id)
 
     assert fetched == record
+    assert fetched.owner_id == "usr_owner"
     assert fetched.parsed.file_name == "handbook.txt"
     db.close()
 
@@ -209,10 +211,19 @@ def test_chunk_list_missing_document_and_delete_idempotent(test_pg_database):
 # ===== query_logs:追加 / 取回 / 倒序列表 / 计数与内存基线同语义 =====
 
 
-def _query_log(question: str, *, query_id: str | None = None, **overrides) -> QueryLog:
+def _query_log(
+    question: str,
+    *,
+    query_id: str | None = None,
+    tenant: str = "acme",
+    principal_id: str = "usr_member",
+    **overrides,
+) -> QueryLog:
     return QueryLog(
         query_id=query_id or f"qry_{uuid4().hex[:12]}",
         trace_id="trace-1",
+        tenant=tenant,
+        principal_id=principal_id,
         question=question,
         answer="根据知识库资料,这是答案。",
         refused=False,
@@ -235,7 +246,7 @@ def test_query_log_roundtrip_preserves_hits_and_usage(test_pg_database):
     )
 
     repo.add(log)
-    fetched = repo.get(log.query_id)
+    fetched = repo.get(log.query_id, tenant="acme")
 
     assert fetched == log
     db.close()
@@ -251,11 +262,13 @@ def test_query_log_list_recent_is_time_desc_with_count(test_pg_database):
         memory.add(log)
         repo.add(log)
 
-    assert [log.question for log in repo.list_recent(limit=3)] == [
-        log.question for log in memory.list_recent(limit=3)
+    assert [
+        log.question for log in repo.list_recent(tenant="acme", limit=3)
+    ] == [
+        log.question for log in memory.list_recent(tenant="acme", limit=3)
     ]
-    assert repo.count() == memory.count() == 4
-    assert repo.get("missing-query-id") is None
+    assert repo.count(tenant="acme") == memory.count(tenant="acme") == 4
+    assert repo.get("missing-query-id", tenant="acme") is None
     db.close()
 
 
@@ -301,11 +314,23 @@ def test_evaluation_run_persists_and_counts(test_pg_database):
 # ===== feedbacks:一问一评 upsert 与内存基线同语义 =====
 
 
-def _feedback(query_id: str, verdict: str = "useful", **overrides):
+def _feedback(
+    query_id: str,
+    verdict: str = "useful",
+    *,
+    tenant: str = "acme",
+    principal_id: str = "usr_member",
+    **overrides,
+):
     from app.domain.feedback import FeedbackRecord
 
     return FeedbackRecord(
-        query_id=query_id, trace_id="trace-1", verdict=FeedbackVerdict(verdict), **overrides
+        query_id=query_id,
+        trace_id="trace-1",
+        tenant=tenant,
+        principal_id=principal_id,
+        verdict=FeedbackVerdict(verdict),
+        **overrides,
     )
 
 
@@ -323,8 +348,12 @@ def test_feedback_repo_matches_memory_semantics(test_pg_database):
         memory.add(record)
         repo.add(record)
 
-    assert repo.get(records[0].feedback_id) == memory.get(records[0].feedback_id)
-    assert repo.get_by_query_id("qry-2") == memory.get_by_query_id("qry-2")
+    assert repo.get(records[0].feedback_id, tenant="acme") == memory.get(
+        records[0].feedback_id, tenant="acme"
+    )
+    assert repo.get_by_query_id("qry-2", tenant="acme") == memory.get_by_query_id(
+        "qry-2", tenant="acme"
+    )
 
     # 服务层一问一评:重复提交复用同一 feedback_id(model_copy 保留 id),即覆盖
     again = records[0].model_copy(
@@ -332,17 +361,80 @@ def test_feedback_repo_matches_memory_semantics(test_pg_database):
     )
     memory.add(again)
     repo.add(again)
-    assert repo.get_by_query_id("qry-1") == memory.get_by_query_id("qry-1") == again
-
-    assert repo.list_recent(limit=10) == memory.list_recent(limit=10)
-    assert repo.list_recent(limit=10, verdict=FeedbackVerdict.USELESS) == memory.list_recent(
-        limit=10, verdict=FeedbackVerdict.USELESS
+    assert (
+        repo.get_by_query_id("qry-1", tenant="acme")
+        == memory.get_by_query_id("qry-1", tenant="acme")
+        == again
     )
-    assert repo.count() == memory.count() == 2
-    assert repo.count(verdict=FeedbackVerdict.USEFUL) == memory.count(
-        verdict=FeedbackVerdict.USEFUL
+
+    assert repo.list_recent(tenant="acme", limit=10) == memory.list_recent(
+        tenant="acme", limit=10
+    )
+    assert repo.list_recent(
+        tenant="acme", limit=10, verdict=FeedbackVerdict.USELESS
+    ) == memory.list_recent(
+        tenant="acme", limit=10, verdict=FeedbackVerdict.USELESS
+    )
+    assert repo.count(tenant="acme") == memory.count(tenant="acme") == 2
+    assert repo.count(tenant="acme", verdict=FeedbackVerdict.USEFUL) == memory.count(
+        tenant="acme", verdict=FeedbackVerdict.USEFUL
     ) == 0
-    assert repo.get("missing-feedback-id") is None
+    assert repo.get("missing-feedback-id", tenant="acme") is None
+    db.close()
+
+
+def test_query_log_feedback_and_stats_visibility_filters_match_memory(
+    test_pg_database,
+):
+    """#30:PG 的租户 / 主体过滤与内存基线一致,统计同样按租户收敛。"""
+    from app.repositories.memory import InMemoryFeedbackRepository
+    from app.repositories.postgres import PgFeedbackRepository, PgStatsRepository
+
+    db = _make_db(test_pg_database)
+    logs = PgQueryLogRepository(db)
+    memory_logs = InMemoryQueryLogRepository()
+    feedbacks = PgFeedbackRepository(db)
+    memory_feedbacks = InMemoryFeedbackRepository()
+    stats = PgStatsRepository(db=db)
+
+    acme_member = _query_log(
+        "年假怎么算?", tenant="acme", principal_id="usr_member"
+    )
+    acme_other = _query_log(
+        "报销怎么走?", tenant="acme", principal_id="usr_other"
+    )
+    beta_member = _query_log(
+        "年假怎么算?", tenant="beta", principal_id="usr_member"
+    )
+    for log in (acme_member, acme_other, beta_member):
+        logs.add(log)
+        memory_logs.add(log)
+
+    assert logs.list_recent(tenant="acme") == memory_logs.list_recent(tenant="acme")
+    assert logs.list_recent(
+        tenant="acme", principal_id="usr_member"
+    ) == memory_logs.list_recent(tenant="acme", principal_id="usr_member")
+    assert logs.count(tenant="acme") == memory_logs.count(tenant="acme") == 2
+    assert logs.get(beta_member.query_id, tenant="acme") is None
+    assert logs.get(beta_member.query_id, tenant="beta") == beta_member
+
+    assert stats.count_queries(tenant="acme") == 2
+    assert stats.count_queries(tenant="beta") == 1
+
+    feedback_member = _feedback("qry-1", "useless", comment="答非所问")
+    feedback_other = _feedback(
+        "qry-2", "useless", principal_id="usr_other", comment="没有命中"
+    )
+    for record in (feedback_member, feedback_other):
+        feedbacks.add(record)
+        memory_feedbacks.add(record)
+
+    assert feedbacks.list_recent(
+        tenant="acme", principal_id="usr_member"
+    ) == memory_feedbacks.list_recent(tenant="acme", principal_id="usr_member")
+    assert feedbacks.count(tenant="acme") == memory_feedbacks.count(tenant="acme") == 2
+    assert feedbacks.get(feedback_other.feedback_id, tenant="acme") == feedback_other
+    assert feedbacks.get(feedback_other.feedback_id, tenant="beta") is None
     db.close()
 
 

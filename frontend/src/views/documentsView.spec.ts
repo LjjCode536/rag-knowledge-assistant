@@ -298,8 +298,8 @@ describe('知识库文档页组件行为', () => {
         .mocked(fetch)
         .mock.calls.find(([url]) => String(url) === '/api/v1/documents')?.[1]?.body as FormData
       expect((form.get('file') as File).name).toBe('manual.txt')
-      // 租户取登录主体,不由界面选择
-      expect(form.get('tenant')).toBe('default')
+      // 租户只来自登录身份:上传表单不再提交 tenant
+      expect(form.get('tenant')).toBeNull()
       expect(form.get('version')).toBe('v1')
     })
 
@@ -577,6 +577,16 @@ describe('知识库文档页组件行为', () => {
         }),
       })
       const wrapper = mountView(DocumentsView)
+      // 管理员可显式指定部门;租户仍只来自登录身份
+      useAuthStore().principal = {
+        id: 'usr_admin',
+        username: 'admin',
+        kind: 'user',
+        tenant: 'acme',
+        role: 'admin',
+        department: '平台部',
+        display_name: 'admin',
+      }
       await waitForList(wrapper)
 
       await wrapper.find('[data-testid="documents-detail-doc-bad"]').trigger('click')
@@ -606,8 +616,8 @@ describe('知识库文档页组件行为', () => {
         .mocked(fetch)
         .mock.calls.find(([url, init]) => String(url) === '/api/v1/documents' && init?.method === 'POST')?.[1]
         ?.body as FormData
-      // 租户 / 部门 / 文档类型 / 版本都取失败档案自己的,不是上传表单的值
-      expect(form.get('tenant')).toBe('acme')
+      // 租户不再随表单提交;管理员可带档案自己的部门 / 文档类型 / 版本
+      expect(form.get('tenant')).toBeNull()
       expect(form.get('department')).toBe('HR')
       expect(form.get('doc_type')).toBe('制度')
       expect(form.get('version')).toBe('v3')

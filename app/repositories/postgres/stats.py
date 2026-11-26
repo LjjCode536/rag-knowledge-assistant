@@ -46,34 +46,42 @@ _COMPLETION_TOKENS = _usage_tokens_sql("completion_tokens")
 
 
 def build_range_clause(
-    start: datetime | None, end: datetime | None, *, params: list
+    start: datetime | None,
+    end: datetime | None,
+    *,
+    tenant: str,
+    params: list,
 ) -> str:
-    """区间 WHERE 片段:起点闭区间(含)/ 终点开区间(不含);无界则不加条件。
+    """租户 + 区间 WHERE 片段:租户是硬边界,时间为闭起点 / 开终点。
 
-    参数按出现的顺序追加到 ``params``:先起点后终点,与 SQL 里的占位顺序一致。
+    参数按出现的顺序追加到 ``params``:先租户,再起点、终点,与 SQL 里的
+    占位顺序一致。
     """
-    clauses: list[str] = []
+    clauses: list[str] = ["tenant = %s"]
+    params.append(tenant)
     if start is not None:
         clauses.append("created_at >= %s")
         params.append(as_utc(start))
     if end is not None:
         clauses.append("created_at < %s")
         params.append(as_utc(end))
-    return " AND ".join(clauses) if clauses else "true"
+    return " AND ".join(clauses)
 
 
 def build_bucket_query(
     start: datetime | None,
     end: datetime | None,
     bucket: StatsBucketKind,
+    *,
+    tenant: str,
 ) -> tuple[str, list]:
     """分桶聚合 SQL 与参数。
 
-    参数顺序:``date_trunc`` 的单位占位最先(在 SELECT 里),区间参数在后
-    (在 WHERE 里)——占位与参数必须同序,否则过滤条件会错位。
+    参数顺序:``date_trunc`` 的单位占位最先(在 SELECT 里),租户与区间参数
+    在后(在 WHERE 里)—— 占位与参数必须同序,否则过滤条件会错位。
     """
     params: list = []
-    where = build_range_clause(start, end, params=params)
+    where = build_range_clause(start, end, tenant=tenant, params=params)
     sql = (
         "SELECT date_trunc(%s, created_at AT TIME ZONE 'UTC') AS bucket_start, "
         "count(*) AS query_count, "
@@ -88,10 +96,12 @@ def build_bucket_query(
     return sql, [bucket.trunc_unit, *params]
 
 
-def build_sum_query(start: datetime | None, end: datetime | None) -> tuple[str, list]:
+def build_sum_query(
+    start: datetime | None, end: datetime | None, *, tenant: str
+) -> tuple[str, list]:
     """Token 用量求和 SQL 与参数。"""
     params: list = []
-    where = build_range_clause(start, end, params=params)
+    where = build_range_clause(start, end, tenant=tenant, params=params)
     sql = (
         "SELECT "
         f"coalesce(sum({_PROMPT_TOKENS}), 0) AS prompt_tokens, "
@@ -112,27 +122,46 @@ class PgStatsRepository:
     def __init__(self, *, db: PgDatabase) -> None:
         self._db = db
 
-    def count_documents(self, *, latest_only: bool = True) -> int:
-        where = "is_latest" if latest_only else "true"
-        return int(self._scalar(f"SELECT count(*) AS total FROM documents WHERE {where}"))
-
-    def count_indexed_documents(self, *, latest_only: bool = True) -> int:
-        clauses = ["status = 'indexed'"]
+    def count_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        clauses = ["tenant = %s"]
+        params: list = [tenant]
         if latest_only:
             clauses.append("is_latest")
         where = " AND ".join(clauses)
         return int(
-            self._scalar(f"SELECT count(*) AS total FROM documents WHERE {where}")
+            self._scalar(
+                f"SELECT count(*) AS total FROM documents WHERE {where}", params
+            )
         )
 
-    def count_chunks(self) -> int:
-        return int(self._scalar("SELECT count(*) AS total FROM chunks"))
+    def count_indexed_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        clauses = ["tenant = %s", "status = 'indexed'"]
+        params: list = [tenant]
+        if latest_only:
+            clauses.append("is_latest")
+        where = " AND ".join(clauses)
+        return int(
+            self._scalar(
+                f"SELECT count(*) AS total FROM documents WHERE {where}", params
+            )
+        )
+
+    def count_chunks(self, *, tenant: str) -> int:
+        return int(
+            self._scalar(
+                "SELECT count(*) AS total FROM chunks WHERE tenant = %s", [tenant]
+            )
+        )
 
     def count_queries(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
         params: list = []
-        where = build_range_clause(start, end, params=params)
+        where = build_range_clause(start, end, tenant=tenant, params=params)
         return int(
             self._scalar(
                 f"SELECT count(*) AS total FROM query_logs WHERE {where}", params
@@ -140,10 +169,14 @@ class PgStatsRepository:
         )
 
     def count_refusals(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
         params: list = []
-        where = build_range_clause(start, end, params=params)
+        where = build_range_clause(start, end, tenant=tenant, params=params)
         return int(
             self._scalar(
                 f"SELECT count(*) AS total FROM query_logs WHERE {where} AND refused",
@@ -152,19 +185,27 @@ class PgStatsRepository:
         )
 
     def avg_latency_ms(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> float | None:
         params: list = []
-        where = build_range_clause(start, end, params=params)
+        where = build_range_clause(start, end, tenant=tenant, params=params)
         value = self._scalar(
             f"SELECT avg(latency_ms) AS value FROM query_logs WHERE {where}", params
         )
         return None if value is None else round(float(value), 2)
 
     def sum_token_usage(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> TokenUsageSummary:
-        sql, params = build_sum_query(start, end)
+        sql, params = build_sum_query(start, end, tenant=tenant)
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(sql, params)
             row = cursor.fetchone()
@@ -179,12 +220,13 @@ class PgStatsRepository:
     def bucket_queries(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
         bucket: StatsBucketKind = StatsBucketKind.DAY,
     ) -> list[BucketAggregate]:
         """按自然小时 / 自然日切桶聚合;没有问答的桶不出现(不补零桶)。"""
-        sql, params = build_bucket_query(start, end, bucket)
+        sql, params = build_bucket_query(start, end, bucket, tenant=tenant)
         delta = bucket.delta
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(sql, params)

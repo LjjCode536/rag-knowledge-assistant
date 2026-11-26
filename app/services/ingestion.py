@@ -15,9 +15,11 @@ import structlog
 
 from app.core.errors import DocumentParseError, NotFoundError
 from app.domain.documents import DocumentElement, DocumentFormat, DocumentRecord, DocumentStatus
+from app.domain.identity import Principal
 from app.domain.repositories import DocumentRepository
 from app.domain.state_machine import ensure_transition
 from app.integrations.parsing.factory import get_parser
+from app.services.access import AccessService
 from app.services.lifecycle import DocumentLifecycleService
 from app.services.storage import LocalDocumentStorage
 
@@ -43,10 +45,12 @@ class IngestionService:
         repository: DocumentRepository,
         storage: LocalDocumentStorage,
         lifecycle_service: DocumentLifecycleService,
+        access_service: AccessService,
     ) -> None:
         self._repository = repository
         self._storage = storage
         self._lifecycle_service = lifecycle_service
+        self._access_service = access_service
         # 并发上传同一标识(租户 + 文件名)时,身份查找 → 退位 → 登记必须串行:
         # 这是一个进程内的关键段,M3 生产形态由数据库事务接管同一语义(ADR-0009)
         self._version_lock = threading.Lock()
@@ -56,14 +60,16 @@ class IngestionService:
         *,
         file_name: str,
         content: bytes,
-        tenant: str = "default",
+        principal: Principal,
         department: str | None = None,
         doc_type: str | None = None,
         version: str = "v1",
     ) -> DocumentRecord:
         """登记一次上传:校验格式、旧版本退位、登记档案并落盘,停在 uploaded。
 
-        立即可返回;解析及后续处理由调用方调度(后台管线或请求内同步)。
+        租户与所有者都来自已认证主体;部门缺省取主体部门,管理员可显式
+        指定其他部门。成员重传他人同名文档在策略层直接 404。立即可返回;
+        解析及后续处理由调用方调度(后台管线或请求内同步)。
         """
         file_name = _base_name(file_name)
         file_type = DocumentFormat.from_filename(file_name)
@@ -71,18 +77,27 @@ class IngestionService:
         # 同标识(租户 + 文件名)的旧版本在上新即退位;退位失败不落残档——
         # 新档案此刻尚未登记,旧档案原状保留,重传即从退位步骤重试(ADR-0009)
         with self._version_lock:
-            previous = self._repository.find_latest_by_file(
-                tenant=tenant, file_name=file_name
+            authorization = self._access_service.authorize_upload(
+                principal=principal,
+                file_name=file_name,
+                department=department,
             )
-            if previous is not None:
-                self._lifecycle_service.supersede(previous)
+            if authorization.previous is not None:
+                self._lifecycle_service.supersede(authorization.previous)
 
             record = DocumentRecord(
                 file_name=file_name,
                 file_type=file_type,
                 size_bytes=len(content),
-                tenant=tenant,
-                department=department,
+                tenant=principal.tenant,
+                # 重传同名文档时所有者保持不变(管理员代传也不改变既有归属)
+                owner_id=(
+                    authorization.previous.owner_id
+                    if authorization.previous is not None
+                    and authorization.previous.owner_id is not None
+                    else principal.id
+                ),
+                department=authorization.department,
                 doc_type=doc_type,
                 version=version,
             )

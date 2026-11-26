@@ -6,11 +6,21 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from app.core.errors import NotFoundError, ScopeViolationError
 from app.domain.documents import DocumentRecord
-from app.domain.identity import Principal, ScopeNarrowing
+from app.domain.identity import Principal, Role, ScopeNarrowing
 from app.domain.repositories import DocumentRepository
 from app.domain.retrieval import Scope
+
+
+@dataclass(frozen=True, slots=True)
+class UploadAuthorization:
+    """一次上传被解析后的归属:部门取主体默认或管理员显式指定,旧版本待退位。"""
+
+    department: str | None
+    previous: DocumentRecord | None
 
 
 class AccessService:
@@ -44,3 +54,73 @@ class AccessService:
                 "知识库文档不存在", details={"document_id": document_id}
             )
         return record
+
+    def authorize_upload(
+        self,
+        *,
+        principal: Principal,
+        file_name: str,
+        department: str | None,
+    ) -> UploadAuthorization:
+        """上传写路径的策略收口:租户固定取主体,部门与同名覆盖按角色判定。
+
+        - 部门缺省取主体部门;只有 ``admin`` 能显式指定其他部门,成员越界
+          返回 403 ``SCOPE_VIOLATION``(不静默改成自己的部门);
+        - 同名文档已存在时,成员只能重传自己所有的文档,否则按对象不可见
+          返回 404;管理员可重传本租户任意文档。所有者的既有归属不因
+          重传而改变。
+        """
+        requested = _blank_to_none(department)
+        if (
+            requested is not None
+            and requested != principal.department
+            and principal.role is not Role.ADMIN
+        ):
+            raise ScopeViolationError(
+                "上传部门超出主体授权范围", details={"department": requested}
+            )
+        previous = self._documents.find_latest_by_file(
+            tenant=principal.tenant, file_name=file_name
+        )
+        if (
+            previous is not None
+            and previous.owner_id != principal.id
+            and principal.role is not Role.ADMIN
+        ):
+            raise NotFoundError(
+                "知识库文档不存在", details={"file_name": file_name}
+            )
+        return UploadAuthorization(
+            department=requested or principal.department,
+            previous=previous,
+        )
+
+    def require_writable_document(
+        self, *, principal: Principal, document_id: str
+    ) -> DocumentRecord:
+        """写路径对象级入口:切片 / 向量化 / 删除只允许所有者或租户管理员。
+
+        跨租户、非所有者成员与不存在的对象共用同一个 404,不泄露存在性;
+        管理员可操作本租户全部文档。
+        """
+        record = self._documents.get(document_id)
+        if (
+            record is None
+            or record.tenant != principal.tenant
+            or (
+                principal.role is not Role.ADMIN
+                and record.owner_id != principal.id
+            )
+        ):
+            raise NotFoundError(
+                "知识库文档不存在", details={"document_id": document_id}
+            )
+        return record
+
+
+def _blank_to_none(value: str | None) -> str | None:
+    """空白串按未提供处理,避免把空表单值写成空部门。"""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None

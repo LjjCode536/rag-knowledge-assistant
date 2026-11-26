@@ -43,7 +43,7 @@ export async function deleteDocument(documentId: string) {
 /** 上传知识库文档:返回任务句柄(status 恒为 `uploaded`,入库进度须轮询)。 */
 export async function uploadDocument(
   file: File,
-  fields: { tenant?: string; department?: string; doc_type?: string; version?: string } = {},
+  fields: { department?: string; doc_type?: string; version?: string } = {},
 ) {
   const form = new FormData()
   form.append('file', file)

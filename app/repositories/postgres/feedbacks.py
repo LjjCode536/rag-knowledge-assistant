@@ -12,9 +12,12 @@ from app.domain.feedback import FeedbackRecord, FeedbackVerdict
 from app.repositories.postgres.base import PgDatabase, placeholder_sql
 from app.repositories.postgres.rows import feedback_from_row
 
-_COLUMNS = "feedback_id, query_id, trace_id, verdict, comment, created_at"
+_COLUMNS = (
+    "feedback_id, query_id, trace_id, tenant, principal_id, verdict, comment, created_at"
+)
 _SET_COLUMNS = (
     "query_id = EXCLUDED.query_id, trace_id = EXCLUDED.trace_id, "
+    "tenant = EXCLUDED.tenant, principal_id = EXCLUDED.principal_id, "
     "verdict = EXCLUDED.verdict, comment = EXCLUDED.comment, "
     "created_at = EXCLUDED.created_at"
 )
@@ -33,6 +36,8 @@ def _row_values(record: FeedbackRecord) -> tuple:
         record.feedback_id,
         record.query_id,
         record.trace_id,
+        record.tenant,
+        record.principal_id,
         record.verdict.value,
         record.comment,
         record.created_at,
@@ -42,6 +47,18 @@ def _row_values(record: FeedbackRecord) -> tuple:
 def _record_from_row(row: dict) -> FeedbackRecord:
     """行 → 回答反馈:映射口径收口在 :mod:`app.repositories.postgres.rows`。"""
     return feedback_from_row(row)
+
+
+def _visibility_clause(
+    *, tenant: str, principal_id: str | None, params: list
+) -> tuple[str, list]:
+    """读路径 WHERE 片段:租户必填,``principal_id`` 给出时再收窄到单一主体。"""
+    clauses = ["tenant = %s"]
+    params.append(tenant)
+    if principal_id is not None:
+        clauses.append("principal_id = %s")
+        params.append(principal_id)
+    return " AND ".join(clauses), params
 
 
 class PgFeedbackRepository:
@@ -54,45 +71,71 @@ class PgFeedbackRepository:
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(_UPSERT, _row_values(record))
 
-    def get(self, feedback_id: str) -> FeedbackRecord | None:
+    def get(
+        self, feedback_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        where, params = _visibility_clause(
+            tenant=tenant, principal_id=principal_id, params=[feedback_id]
+        )
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(f"{_SELECT} WHERE feedback_id = %s", (feedback_id,))
+            cursor.execute(f"{_SELECT} WHERE feedback_id = %s AND {where}", params)
             row = cursor.fetchone()
         return _record_from_row(row) if row is not None else None
 
-    def get_by_query_id(self, query_id: str) -> FeedbackRecord | None:
+    def get_by_query_id(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        where, params = _visibility_clause(
+            tenant=tenant, principal_id=principal_id, params=[query_id]
+        )
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
-                f"{_SELECT} WHERE query_id = %s ORDER BY created_at DESC, seq DESC LIMIT 1",
-                (query_id,),
+                f"{_SELECT} WHERE query_id = %s AND {where} "
+                "ORDER BY created_at DESC, seq DESC LIMIT 1",
+                params,
             )
             row = cursor.fetchone()
         return _record_from_row(row) if row is not None else None
 
     def list_recent(
-        self, *, limit: int, verdict: FeedbackVerdict | None = None
+        self,
+        *,
+        tenant: str,
+        limit: int,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
     ) -> list[FeedbackRecord]:
+        where, params = _visibility_clause(
+            tenant=tenant, principal_id=principal_id, params=[]
+        )
+        if verdict is not None:
+            where = f"{where} AND verdict = %s"
+            params.append(verdict.value)
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
-            if verdict is None:
-                cursor.execute(
-                    f"{_SELECT} ORDER BY created_at DESC, seq DESC LIMIT %s", (limit,)
-                )
-            else:
-                cursor.execute(
-                    f"{_SELECT} WHERE verdict = %s ORDER BY created_at DESC, seq DESC LIMIT %s",
-                    (verdict.value, limit),
-                )
+            cursor.execute(
+                f"{_SELECT} WHERE {where} "
+                "ORDER BY created_at DESC, seq DESC LIMIT %s",
+                [*params, limit],
+            )
             rows = cursor.fetchall()
         return [_record_from_row(row) for row in rows]
 
-    def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
+    def count(
+        self,
+        *,
+        tenant: str,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
+    ) -> int:
+        where, params = _visibility_clause(
+            tenant=tenant, principal_id=principal_id, params=[]
+        )
+        if verdict is not None:
+            where = f"{where} AND verdict = %s"
+            params.append(verdict.value)
         with self._db.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
-            if verdict is None:
-                cursor.execute("SELECT count(*) AS total FROM feedbacks")
-            else:
-                cursor.execute(
-                    "SELECT count(*) AS total FROM feedbacks WHERE verdict = %s",
-                    (verdict.value,),
-                )
+            cursor.execute(
+                f"SELECT count(*) AS total FROM feedbacks WHERE {where}", params
+            )
             row = cursor.fetchone()
         return int(row["total"]) if row is not None else 0

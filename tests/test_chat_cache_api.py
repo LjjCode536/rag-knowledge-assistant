@@ -142,11 +142,11 @@ def test_cache_disabled_asks_fresh_every_time(settings, upload_dir):
 
 def test_cache_key_respects_top_k_and_filters(settings, upload_dir):
     for client, generator in _cache_client(settings):
-        _index(client, "employee.md", HANDBOOK, title="休假制度", department="人力部")
+        _index(client, "employee.md", HANDBOOK, title="休假制度", department="研发部")
 
         _chat(client, LEAVE_QUESTION)
         _chat(client, LEAVE_QUESTION, top_k=1)
-        _chat(client, LEAVE_QUESTION, top_k=1, filters={"department": "人力部"})
+        _chat(client, LEAVE_QUESTION, top_k=1, filters={"department": "研发部"})
         _chat(client, LEAVE_QUESTION, top_k=1)
         _chat(client, LEAVE_QUESTION, top_k=3)
 

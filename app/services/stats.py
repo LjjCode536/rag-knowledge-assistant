@@ -43,25 +43,39 @@ class StatsService:
     def knowledge_base_stats(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
         bucket: StatsBucketKind | None = None,
     ) -> KnowledgeBaseStats:
         """/stats 一屏:知识库规模 + 问答健康度 + 估算成本 + 分桶序列。
 
-        ``bucket`` 缺省时用配置里的默认粒度(:attr:`default_bucket`)。
+        全部指标强制收敛在主体租户内;``bucket`` 缺省时用配置里的默认粒度
+        (:attr:`default_bucket`)。
         """
         bucket = bucket or self.default_bucket
         start, end = _normalize_range(start, end)
-        query_count = self._repository.count_queries(start=start, end=end)
-        refused_count = self._repository.count_refusals(start=start, end=end)
-        avg_latency = self._repository.avg_latency_ms(start=start, end=end)
-        usage = self._repository.sum_token_usage(start=start, end=end)
-        buckets = self._bucket_stats(start=start, end=end, bucket=bucket)
+        query_count = self._repository.count_queries(
+            tenant=tenant, start=start, end=end
+        )
+        refused_count = self._repository.count_refusals(
+            tenant=tenant, start=start, end=end
+        )
+        avg_latency = self._repository.avg_latency_ms(
+            tenant=tenant, start=start, end=end
+        )
+        usage = self._repository.sum_token_usage(
+            tenant=tenant, start=start, end=end
+        )
+        buckets = self._bucket_stats(
+            tenant=tenant, start=start, end=end, bucket=bucket
+        )
         return KnowledgeBaseStats(
-            document_count=self._repository.count_documents(),
-            indexed_document_count=self._repository.count_indexed_documents(),
-            chunk_count=self._repository.count_chunks(),
+            document_count=self._repository.count_documents(tenant=tenant),
+            indexed_document_count=self._repository.count_indexed_documents(
+                tenant=tenant
+            ),
+            chunk_count=self._repository.count_chunks(tenant=tenant),
             qa=QaStats(
                 query_count=query_count,
                 refused_count=refused_count,
@@ -79,15 +93,17 @@ class StatsService:
     def cost_summary(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> CostSummary:
-        """成本明细:区间内的 Token 用量折算出的估算成本。"""
-        return self.cost_report(start=start, end=end).cost
+        """成本明细:租户在区间内的 Token 用量折算出的估算成本。"""
+        return self.cost_report(tenant=tenant, start=start, end=end).cost
 
     def cost_report(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> CostReport:
@@ -97,7 +113,9 @@ class StatsService:
         :meth:`knowledge_base_stats` 里。
         """
         start, end = _normalize_range(start, end)
-        usage = self._repository.sum_token_usage(start=start, end=end)
+        usage = self._repository.sum_token_usage(
+            tenant=tenant, start=start, end=end
+        )
         return CostReport(
             token_usage=usage,
             cost=self.estimate_cost(usage),
@@ -125,13 +143,14 @@ class StatsService:
     def _bucket_stats(
         self,
         *,
+        tenant: str,
         start: datetime | None,
         end: datetime | None,
         bucket: StatsBucketKind,
     ) -> list[StatsBucket]:
-        """把仓储的分桶原始量折算成带拒答率的分桶指标。"""
+        """把仓储的租户内分桶原始量折算成带拒答率的分桶指标。"""
         aggregates: list[BucketAggregate] = self._repository.bucket_queries(
-            start=start, end=end, bucket=bucket
+            tenant=tenant, start=start, end=end, bucket=bucket
         )
         return [
             StatsBucket(

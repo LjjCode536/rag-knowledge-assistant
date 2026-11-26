@@ -43,7 +43,6 @@ def test_chunk_with_default_strategy_carries_complete_metadata(client):
         name="guide.md",
         content=MARKDOWN.encode(),
         mime="text/markdown",
-        tenant="default",
         department="研发部",
         doc_type="运维手册",
         version="v2",

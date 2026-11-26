@@ -86,6 +86,9 @@ class QueryLog(BaseModel):
 
     query_id: str = Field(default_factory=lambda: f"qry_{uuid4().hex[:12]}")
     trace_id: str
+    # 查询日志的显式归属:统计与列表据此按租户 / 主体收敛(ADR-0020 / #30)
+    tenant: str = Field(min_length=1)
+    principal_id: str = Field(min_length=1)
     question: str
     answer: str
     refused: bool

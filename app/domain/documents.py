@@ -131,6 +131,8 @@ class DocumentRecord(BaseModel):
     deleted_at: datetime | None = None
     # ===== 知识库文档元数据(切片时冗余进切片元数据)=====
     tenant: str = "default"
+    # 文档所有者:上传该文档的主体;历史数据未知时为 None(ADR-0020 / #29)
+    owner_id: str | None = None
     department: str | None = None
     doc_type: str | None = None
     version: str = "v1"

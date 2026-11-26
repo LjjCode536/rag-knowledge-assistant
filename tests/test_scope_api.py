@@ -41,8 +41,8 @@ def scoped_clients(settings, upload_dir) -> Iterator[tuple[TestClient, TestClien
         yield default_client, other_client
 
 
-def _index(client: TestClient, name: str, content: str, *, tenant: str) -> dict:
-    document_id = _upload(client, name, content, tenant=tenant)["data"]["id"]
+def _index(client: TestClient, name: str, content: str) -> dict:
+    document_id = _upload(client, name, content)["data"]["id"]
     chunks = _chunk(client, document_id)
     assert _embed(client, document_id).status_code == 200
     return {"document_id": document_id, "chunks": chunks}
@@ -104,8 +104,8 @@ def test_search_and_chat_reject_tenant_query_parameter(
 
 def test_search_and_chat_only_see_the_principals_tenant(scoped_clients) -> None:
     default_client, other_client = scoped_clients
-    mine = _index(default_client, "hr.txt", ALPHA_TEXT, tenant="default")
-    theirs = _index(other_client, "hr-other.txt", ALPHA_TEXT, tenant="other")
+    mine = _index(default_client, "hr.txt", ALPHA_TEXT)
+    theirs = _index(other_client, "hr-other.txt", ALPHA_TEXT)
 
     search = default_client.post(SEARCH_URL, json={"query": QUESTION, "top_k": 10})
     assert search.status_code == 200, search.text
@@ -140,8 +140,8 @@ def test_tenant_isolation_holds_when_both_tenants_have_the_same_topic(
 ) -> None:
     """同题诱饵:两租户各有同主题文档,任一方都不得看到对方切片。"""
     default_client, other_client = scoped_clients
-    mine = _index(default_client, "handbook.md", ALPHA_TEXT, tenant="default")
-    theirs = _index(other_client, "handbook.md", BETA_TEXT, tenant="other")
+    mine = _index(default_client, "handbook.md", ALPHA_TEXT)
+    theirs = _index(other_client, "handbook.md", BETA_TEXT)
 
     default_hits = default_client.post(
         SEARCH_URL, json={"query": "休假 工资 运维", "top_k": 10}
@@ -163,8 +163,8 @@ def test_tenant_isolation_holds_when_both_tenants_have_the_same_topic(
 
 def test_document_id_narrowing_outside_scope_is_rejected(scoped_clients) -> None:
     default_client, other_client = scoped_clients
-    mine = _index(default_client, "hr.txt", ALPHA_TEXT, tenant="default")
-    theirs = _index(other_client, "hr-other.txt", BETA_TEXT, tenant="other")
+    mine = _index(default_client, "hr.txt", ALPHA_TEXT)
+    theirs = _index(other_client, "hr-other.txt", BETA_TEXT)
 
     response = default_client.post(
         SEARCH_URL,
@@ -220,7 +220,7 @@ def cache_app(settings, upload_dir) -> Iterator[tuple[TestClient, CountingGenera
         settings, embedder=DeterministicEmbedder(), answer_generator=generator
     )
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "hr.txt", ALPHA_TEXT, tenant="default")
+        _index(client, "hr.txt", ALPHA_TEXT)
         yield client, generator
 
 

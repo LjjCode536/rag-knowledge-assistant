@@ -38,6 +38,31 @@ def reject_tenant_parameter(request: Request) -> None:
         )
 
 
+async def reject_tenant_form_field(request: Request) -> None:
+    """上传表单不接受 ``tenant``:租户只来自主体,携带即 422(ADR-0020)。
+
+    只在表单型请求上解析表单;Starlette 会缓存解析结果,后续端点读取
+    ``UploadFile`` 与其它字段时不会重复消费请求体。
+    """
+    content_type = request.headers.get("content-type", "")
+    if not content_type.startswith(
+        ("multipart/form-data", "application/x-www-form-urlencoded")
+    ):
+        return
+    form = await request.form()
+    if "tenant" in form:
+        raise RequestValidationError(
+            [
+                {
+                    "type": "extra_forbidden",
+                    "loc": ("body", "tenant"),
+                    "msg": "Extra inputs are not permitted",
+                    "input": form["tenant"],
+                }
+            ]
+        )
+
+
 def require_principal(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
@@ -75,3 +100,15 @@ def require_document_in_scope(
     """对象级读路径的统一入口:跨租户与不存在一律 404,不泄露存在性。"""
     access_service: AccessService = request.app.state.access_service
     return access_service.require_document(scope=scope, document_id=document_id)
+
+
+def require_writable_document(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> DocumentRecord:
+    """对象级写路径入口:切片 / 向量化 / 删除只允许所有者或租户管理员。"""
+    access_service: AccessService = request.app.state.access_service
+    return access_service.require_writable_document(
+        principal=principal, document_id=document_id
+    )

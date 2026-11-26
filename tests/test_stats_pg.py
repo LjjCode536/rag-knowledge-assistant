@@ -41,6 +41,8 @@ def _log(
     return QueryLog(
         query_id=f"qry_{uuid4().hex[:12]}",
         trace_id="trace-stats-pg-0001",
+        tenant="acme",
+        principal_id="usr_member",
         question="入职多久可以申请年假?",
         answer="根据当前资料无法确认。" if refused else "入职满一年可申请年假。",
         refused=refused,
@@ -71,9 +73,9 @@ def test_pg_stats_counts_queries_refusals_and_latency(test_pg_database):
     repo.add(_log(minutes_ago=1, latency_ms=20.0))
     repo.add(_log(minutes_ago=2, refused=True, latency_ms=30.0))
 
-    assert stats.count_queries() == 3
-    assert stats.count_refusals() == 1
-    assert stats.avg_latency_ms() == pytest.approx(20.0)
+    assert stats.count_queries(tenant="acme") == 3
+    assert stats.count_refusals(tenant="acme") == 1
+    assert stats.avg_latency_ms(tenant="acme") == pytest.approx(20.0)
     db.close()
 
 
@@ -87,8 +89,10 @@ def test_pg_stats_respects_time_range_boundaries(test_pg_database):
     repo.add(_log(minutes_ago=30))  # 恰在起点上,含
     repo.add(_log(minutes_ago=60))  # 起点之前,不含
 
-    assert stats.count_queries(start=_BASE - timedelta(minutes=30), end=_BASE) == 1
-    assert stats.count_queries() == 3
+    assert stats.count_queries(
+        tenant="acme", start=_BASE - timedelta(minutes=30), end=_BASE
+    ) == 1
+    assert stats.count_queries(tenant="acme") == 3
     db.close()
 
 
@@ -101,7 +105,7 @@ def test_pg_stats_sums_token_usage_from_jsonb(test_pg_database):
     repo.add(_log(minutes_ago=0, prompt_tokens=1000, completion_tokens=500))
     repo.add(_log(minutes_ago=1, prompt_tokens=2000, completion_tokens=1000))
 
-    usage = stats.sum_token_usage()
+    usage = stats.sum_token_usage(tenant="acme")
 
     assert usage.prompt_tokens == 3000
     assert usage.completion_tokens == 1500
@@ -119,7 +123,7 @@ def test_pg_stats_buckets_split_by_hour(test_pg_database):
     repo.add(_log(minutes_ago=10))  # 07:50
     repo.add(_log(minutes_ago=70))  # 06:50
 
-    buckets = stats.bucket_queries(bucket=StatsBucketKind.HOUR)
+    buckets = stats.bucket_queries(tenant="acme", bucket=StatsBucketKind.HOUR)
 
     assert [b.bucket_start for b in buckets] == [
         datetime(2026, 10, 30, 6, 0, tzinfo=UTC),
@@ -140,7 +144,7 @@ def test_pg_stats_daily_bucket_groups_same_day_queries(test_pg_database):
     repo.add(_log(minutes_ago=0))
     repo.add(_log(minutes_ago=120))
 
-    buckets = stats.bucket_queries(bucket=StatsBucketKind.DAY)
+    buckets = stats.bucket_queries(tenant="acme", bucket=StatsBucketKind.DAY)
 
     assert len(buckets) == 1
     assert buckets[0].bucket_start == datetime(2026, 10, 30, 0, 0, tzinfo=UTC)
@@ -160,7 +164,11 @@ def test_pg_stats_counts_documents_and_chunks(test_pg_database):
     stats = _stats_repo(db)
 
     live = DocumentRecord(
-        file_name="handbook.txt", file_type="txt", size_bytes=32, status="indexed"
+        file_name="handbook.txt",
+        file_type="txt",
+        size_bytes=32,
+        status="indexed",
+        tenant="acme",
     )
     retired = DocumentRecord(
         file_name="handbook.txt",
@@ -168,6 +176,7 @@ def test_pg_stats_counts_documents_and_chunks(test_pg_database):
         size_bytes=32,
         status="superseded",
         is_latest=False,
+        tenant="acme",
     )
     documents.add(live)
     documents.add(retired)
@@ -186,10 +195,10 @@ def test_pg_stats_counts_documents_and_chunks(test_pg_database):
         ],
     )
 
-    assert stats.count_documents() == 1
-    assert stats.count_documents(latest_only=False) == 2
-    assert stats.count_indexed_documents() == 1
-    assert stats.count_chunks() == 1
+    assert stats.count_documents(tenant="acme") == 1
+    assert stats.count_documents(tenant="acme", latest_only=False) == 2
+    assert stats.count_indexed_documents(tenant="acme") == 1
+    assert stats.count_chunks(tenant="acme") == 1
     db.close()
 
 

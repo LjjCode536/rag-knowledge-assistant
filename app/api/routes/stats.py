@@ -14,11 +14,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
+from app.api.dependencies import require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
+from app.domain.identity import Principal
 from app.domain.stats import (
     CostReport,
     CostSummary,
@@ -135,6 +137,7 @@ class CostSummaryView(BaseModel):
 )
 def get_stats(
     request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
     start: Annotated[datetime | None, Query(description="区间起点(含)")] = None,
     end: Annotated[datetime | None, Query(description="区间终点(不含)")] = None,
     bucket: Annotated[
@@ -143,11 +146,14 @@ def get_stats(
 ) -> ApiEnvelope[KnowledgeBaseStatsView]:
     """一屏看清系统健康度:知识库规模 + 问答健康度 + 估算成本 + 分桶序列。
 
-    区间起点不早于终点时返回 400 `BAD_REQUEST`(判定在服务层,口径唯一);
-    分桶粒度缺省取配置(`STATS_DEFAULT_BUCKET`)。
+    所有数字只统计登录主体所在租户;区间起点不早于终点时返回 400
+    `BAD_REQUEST`(判定在服务层,口径唯一);分桶粒度缺省取配置
+    (`STATS_DEFAULT_BUCKET`)。
     """
     service: StatsService = request.app.state.stats_service
-    stats = service.knowledge_base_stats(start=start, end=end, bucket=bucket)
+    stats = service.knowledge_base_stats(
+        tenant=principal.tenant, start=start, end=end, bucket=bucket
+    )
     return success_envelope(
         KnowledgeBaseStatsView.of(stats), trace_id=trace_id_of(request)
     )
@@ -160,14 +166,15 @@ def get_stats(
 )
 def get_cost(
     request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
     start: Annotated[datetime | None, Query(description="区间起点(含)")] = None,
     end: Annotated[datetime | None, Query(description="区间终点(不含)")] = None,
 ) -> ApiEnvelope[CostSummaryView]:
-    """Token 用量按配置单价折算的估算成本;不含上游账单口径。
+    """Token 用量按配置单价折算的估算成本;不含上游账单口径,只算本租户。
 
     成本是**区间汇总值**,不按桶拆分 —— 分桶序列在 `/stats` 里,这里只给
     一条时间段的用量与金额,避免同一个"bucket"参数在两个端点含义不同。
     """
     service: StatsService = request.app.state.stats_service
-    report = service.cost_report(start=start, end=end)
+    report = service.cost_report(tenant=principal.tenant, start=start, end=end)
     return success_envelope(CostSummaryView.of(report), trace_id=trace_id_of(request))

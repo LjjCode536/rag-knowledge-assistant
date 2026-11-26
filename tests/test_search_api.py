@@ -37,8 +37,7 @@ def _seed(
             client,
             "hr.txt",
             ALPHA_TEXT,
-            tenant="default",
-            department="人力部",
+            department="研发部",
             doc_type="政策",
             version="v2",
         )["data"]["id"]
@@ -49,8 +48,7 @@ def _seed(
             other_client,
             "ops.txt",
             BETA_TEXT,
-            tenant="other",
-            department="运维部",
+            department="市场部",
             doc_type="手册",
         )["data"]["id"]
         beta_chunks = _chunk(other_client, beta)
@@ -152,10 +150,10 @@ def test_chroma_backend_metadata_filter_is_pre_retrieval_permission(
         chroma_client,
         query="休假 工资 运维",
         top_k=3,
-        filters={"department": "人力部"},
+        filters={"department": "研发部"},
     )
 
-    assert data["filters"] == {"tenant": "default", "department": "人力部"}
+    assert data["filters"] == {"tenant": "default", "department": "研发部"}
     assert data["total"] == 3
     assert all(hit["chunk"]["tenant"] == "default" for hit in data["hits"])
     assert all(hit["chunk"]["document_id"] == indexed["alpha_id"] for hit in data["hits"])
@@ -190,7 +188,7 @@ def test_search_returns_scored_chunks_with_full_metadata(indexed_client):
     chunk = hit["chunk"]
     assert chunk["document_id"] == indexed["alpha_id"]
     assert chunk["tenant"] == "default"
-    assert chunk["department"] == "人力部"
+    assert chunk["department"] == "研发部"
     assert chunk["doc_type"] == "政策"
     assert chunk["version"] == "v2"
     for field in ("chunk_id", "index", "content", "page_number", "title"):
@@ -235,7 +233,7 @@ def test_search_filters_combine_across_metadata_fields(indexed_client):
     data = _search(
         other_client,
         query="休假 工资 运维",
-        filters={"department": "运维部", "doc_type": "手册"},
+        filters={"department": "市场部", "doc_type": "手册"},
     )
     assert data["total"] == 1
     assert data["hits"][0]["chunk"]["document_id"] == indexed["beta_id"]

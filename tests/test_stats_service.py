@@ -40,6 +40,8 @@ def _log(
     """构造一条查询日志:时间相对 ``_BASE`` 回溯,便于断言分桶边界。"""
     return QueryLog(
         trace_id="trace-stats-0001",
+        tenant="default",
+        principal_id="usr_member",
         question="入职多久可以申请年假?",
         answer="根据当前资料无法确认。" if refused else "入职满一年可申请年假。",
         refused=refused,
@@ -82,7 +84,7 @@ def test_stats_reports_refusal_rate_and_average_latency(repository, settings):
     repository._query_logs.add(_log(minutes_ago=2, refused=True, latency_ms=30.0))
 
     service = StatsService(repository=repository, settings=settings)
-    stats = service.knowledge_base_stats()
+    stats = service.knowledge_base_stats(tenant="default")
 
     assert stats.qa.query_count == 3
     assert stats.qa.refused_count == 1
@@ -94,7 +96,7 @@ def test_stats_without_queries_reports_none_ratios(repository, settings):
     """没有样本不等于比率 0:拒答率与延迟均值都是 None。"""
     service = StatsService(repository=repository, settings=settings)
 
-    stats = service.knowledge_base_stats()
+    stats = service.knowledge_base_stats(tenant="default")
 
     assert stats.qa.query_count == 0
     assert stats.qa.refusal_rate is None
@@ -110,7 +112,7 @@ def test_cost_estimate_applies_configured_prices(repository, settings):
     )
 
     service = StatsService(repository=repository, settings=settings)
-    cost = service.cost_summary()
+    cost = service.cost_summary(tenant="default")
 
     # prompt 1000 token x 0.002 元/千 = 0.002;completion 500 x 0.006/千 = 0.003
     assert cost.prompt_cost == pytest.approx(0.002)
@@ -126,7 +128,9 @@ def test_stats_respects_time_range_boundaries(repository, settings):
     repository._query_logs.add(_log(minutes_ago=60))  # _BASE - 1h(起点之前,不含)
 
     service = StatsService(repository=repository, settings=settings)
-    stats = service.knowledge_base_stats(start=_BASE - timedelta(minutes=30), end=_BASE)
+    stats = service.knowledge_base_stats(
+        tenant="default", start=_BASE - timedelta(minutes=30), end=_BASE
+    )
 
     assert stats.qa.query_count == 1
     assert stats.start == _BASE - timedelta(minutes=30)
@@ -138,7 +142,9 @@ def test_stats_rejects_inverted_time_range(repository, settings):
     service = StatsService(repository=repository, settings=settings)
 
     with pytest.raises(BadRequestError, match="起点必须早于终点"):
-        service.knowledge_base_stats(start=_BASE, end=_BASE - timedelta(hours=1))
+        service.knowledge_base_stats(
+            tenant="default", start=_BASE, end=_BASE - timedelta(hours=1)
+        )
 
 
 def test_stats_accepts_mixed_naive_and_aware_datetimes(repository, settings):
@@ -147,7 +153,9 @@ def test_stats_accepts_mixed_naive_and_aware_datetimes(repository, settings):
     service = StatsService(repository=repository, settings=settings)
 
     stats = service.knowledge_base_stats(
-        start=datetime(2026, 10, 30, 7, 0), end=_BASE + timedelta(hours=1)
+        tenant="default",
+        start=datetime(2026, 10, 30, 7, 0),
+        end=_BASE + timedelta(hours=1),
     )
 
     assert stats.qa.query_count == 1
@@ -160,7 +168,7 @@ def test_stats_buckets_split_by_hour(repository, settings):
     repository._query_logs.add(_log(minutes_ago=70))  # 06:50
 
     service = StatsService(repository=repository, settings=settings)
-    stats = service.knowledge_base_stats(bucket=StatsBucketKind.HOUR)
+    stats = service.knowledge_base_stats(tenant="default", bucket=StatsBucketKind.HOUR)
 
     starts = [bucket.bucket_start for bucket in stats.buckets]
     assert starts == [
@@ -178,7 +186,7 @@ def test_stats_daily_bucket_groups_same_day_queries(repository, settings):
     repository._query_logs.add(_log(minutes_ago=120))
 
     service = StatsService(repository=repository, settings=settings)
-    stats = service.knowledge_base_stats(bucket=StatsBucketKind.DAY)
+    stats = service.knowledge_base_stats(tenant="default", bucket=StatsBucketKind.DAY)
 
     assert len(stats.buckets) == 1
     assert stats.buckets[0].bucket_start == datetime(2026, 10, 30, 0, 0, tzinfo=UTC)

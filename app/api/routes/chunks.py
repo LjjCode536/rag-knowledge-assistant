@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, model_validator
 
-from app.api.dependencies import require_document_in_scope
+from app.api.dependencies import require_document_in_scope, require_writable_document
 from app.api.routes.documents import DocumentView
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import InvalidDocumentStateError
@@ -103,13 +103,19 @@ class ChunkRequest(BaseModel):
     summary="切分文档(策略与参数可选,重切即换)",
 )
 def chunk_document(
-    request: Request, document_id: str, body: ChunkRequest | None = None
+    request: Request,
+    document_id: str,
+    record: Annotated[DocumentRecord, Depends(require_writable_document)],
+    body: ChunkRequest | None = None,
 ) -> ApiEnvelope[ChunkRunView]:
-    """按给定策略与参数切分已解析的文档;失败落入 failed 状态,原因可查。"""
+    """按给定策略与参数切分已解析的文档;失败落入 failed 状态,原因可查。
+
+    只有文档所有者或租户管理员可切分;其他主体按对象不可见返回 404。
+    """
     service: ChunkingService = request.app.state.chunking_service
     try:
         result = service.chunk(
-            document_id,
+            record.id,
             strategy=body.strategy if body else None,
             chunk_size=body.chunk_size if body else None,
             chunk_overlap=body.chunk_overlap if body else None,

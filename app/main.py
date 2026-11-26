@@ -285,6 +285,7 @@ def create_app(
         repository=document_repository,
         storage=document_storage,
         lifecycle_service=lifecycle_service,
+        access_service=access_service,
     )
     chunking_service = ChunkingService(
         document_repository=document_repository,

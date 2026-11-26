@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.dependencies import require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.errors import NotFoundError
 from app.core.tracing import trace_id_of
@@ -18,10 +20,16 @@ from app.domain.feedback import (
     FeedbackVerdict,
     GoldenCaseCandidate,
 )
+from app.domain.identity import Principal, Role
 from app.domain.qa import RefusalReason
 from app.services.feedback import FeedbackService
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["qa"])
+
+
+def _visible_principal_id(principal: Principal) -> str | None:
+    """读路径主体过滤:成员只看自己的,管理员看本租户全部。"""
+    return None if principal.role is Role.ADMIN else principal.id
 
 _CANDIDATE_CSV_CONTENT_TYPE = "text/csv; charset=utf-8"
 _CANDIDATE_CSV_HEADER = (
@@ -51,6 +59,8 @@ class FeedbackView(BaseModel):
     feedback_id: str
     query_id: str
     trace_id: str
+    tenant: str
+    principal_id: str
     verdict: FeedbackVerdict
     comment: str | None = None
     created_at: datetime
@@ -119,10 +129,23 @@ class NegativeCandidatesView(BaseModel):
     response_model=ApiEnvelope[FeedbackView],
     summary="提交回答反馈(有用 / 无用,可附一句话说明)",
 )
-def submit_feedback(request: Request, body: FeedbackIn) -> ApiEnvelope[FeedbackView]:
-    """反馈经 query_id 关联查询日志并复制其 trace_id;同一问答重复提交按现有反馈覆盖。"""
+def submit_feedback(
+    request: Request,
+    body: FeedbackIn,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[FeedbackView]:
+    """反馈经 query_id 关联查询日志并复制其 trace_id;同一问答重复提交按现有反馈覆盖。
+
+    反馈只能挂在自己的问答上:成员与管理员用他人 query_id 提交都返回 404。
+    """
     service: FeedbackService = request.app.state.feedback_service
-    record = service.submit(body.query_id, body.verdict, comment=body.comment)
+    record = service.submit(
+        body.query_id,
+        body.verdict,
+        comment=body.comment,
+        tenant=principal.tenant,
+        principal_id=principal.id,
+    )
     return success_envelope(FeedbackView.of(record), trace_id=trace_id_of(request))
 
 
@@ -133,12 +156,19 @@ def submit_feedback(request: Request, body: FeedbackIn) -> ApiEnvelope[FeedbackV
 )
 def list_negative_candidates(
     request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
     limit: int = Query(default=20, ge=1, le=200),
     export_format: str | None = Query(default=None, pattern="^(json|csv)$", alias="format"),
 ) -> Response | ApiEnvelope[NegativeCandidatesView]:
-    """同问题差评聚成待改进项;``format=csv`` 时返回可直接留档的 CSV 文件。"""
+    """同问题差评聚成待改进项;``format=csv`` 时返回可直接留档的 CSV 文件。
+
+    只统计本租户;成员只统计自己的差评,管理员看本租户全部。
+    """
     service: FeedbackService = request.app.state.feedback_service
-    candidates = service.negative_candidates(limit=limit)
+    principal_id = _visible_principal_id(principal)
+    candidates = service.negative_candidates(
+        tenant=principal.tenant, limit=limit, principal_id=principal_id
+    )
     if export_format == "csv":
         return Response(
             content=_render_candidates_csv(candidates),
@@ -146,7 +176,11 @@ def list_negative_candidates(
             headers={"Content-Disposition": 'attachment; filename="negative_candidates.csv"'},
         )
     data = NegativeCandidatesView(
-        total=service.count(verdict=FeedbackVerdict.USELESS),
+        total=service.count(
+            tenant=principal.tenant,
+            verdict=FeedbackVerdict.USELESS,
+            principal_id=principal_id,
+        ),
         limit=limit,
         items=[GoldenCaseCandidateView.of(candidate) for candidate in candidates],
     )
@@ -179,23 +213,36 @@ def _render_candidates_csv(candidates: list[GoldenCaseCandidate]) -> str:
 @router.get("", response_model=ApiEnvelope[FeedbackViewList], summary="反馈列表(最近优先)")
 def list_feedback(
     request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
     verdict: FeedbackVerdict | None = None,
     query_id: str | None = None,
     limit: int = Query(default=20, ge=1, le=100),
 ) -> ApiEnvelope[FeedbackViewList]:
-    """查询日志反向可查反馈:按 verdict 过滤,或锁定到单次问答(一问一评)。"""
+    """查询日志反向可查反馈:成员只看自己的,管理员看本租户全部。"""
     service: FeedbackService = request.app.state.feedback_service
+    principal_id = _visible_principal_id(principal)
     if query_id is not None:
-        record = service.get_by_query_id(query_id)
+        record = service.get_by_query_id(
+            query_id, tenant=principal.tenant, principal_id=principal_id
+        )
         items = [record] if record is not None and verdict in (None, record.verdict) else []
         data = FeedbackViewList(
             total=len(items), limit=limit, items=[FeedbackView.of(item) for item in items]
         )
         return success_envelope(data, trace_id=trace_id_of(request))
 
-    records = service.list_recent(limit=limit, verdict=verdict)
+    records = service.list_recent(
+        tenant=principal.tenant,
+        limit=limit,
+        verdict=verdict,
+        principal_id=principal_id,
+    )
     data = FeedbackViewList(
-        total=service.count(verdict=verdict),
+        total=service.count(
+            tenant=principal.tenant,
+            verdict=verdict,
+            principal_id=principal_id,
+        ),
         limit=limit,
         items=[FeedbackView.of(record) for record in records],
     )
@@ -207,9 +254,17 @@ def list_feedback(
     response_model=ApiEnvelope[FeedbackView],
     summary="按 feedback_id 查询反馈",
 )
-def get_feedback(request: Request, feedback_id: str) -> ApiEnvelope[FeedbackView]:
+def get_feedback(
+    request: Request,
+    feedback_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[FeedbackView]:
     service: FeedbackService = request.app.state.feedback_service
-    record = service.get(feedback_id)
+    record = service.get(
+        feedback_id,
+        tenant=principal.tenant,
+        principal_id=_visible_principal_id(principal),
+    )
     if record is None:
         raise NotFoundError("反馈不存在", details={"feedback_id": feedback_id})
     return success_envelope(FeedbackView.of(record), trace_id=trace_id_of(request))

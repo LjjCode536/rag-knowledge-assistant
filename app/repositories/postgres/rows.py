@@ -54,6 +54,7 @@ class _DocumentRow(_RowModel):
     superseded_at: datetime | None = None
     deleted_at: datetime | None = None
     tenant: str = "default"
+    owner_id: str | None = None
     department: str | None = None
     doc_type: str | None = None
     version: str = "v1"
@@ -120,6 +121,8 @@ class _ChunkRow(_RowModel):
 class _QueryLogRow(_RowModel):
     query_id: str
     trace_id: str
+    tenant: str
+    principal_id: str
     question: str
     answer: str
     refused: bool
@@ -140,6 +143,8 @@ class _FeedbackRow(_RowModel):
     feedback_id: str
     query_id: str
     trace_id: str
+    tenant: str
+    principal_id: str
     verdict: FeedbackVerdict
     comment: str | None = None
     created_at: datetime
@@ -165,6 +170,7 @@ def _document(row: _DocumentRow) -> DocumentRecord:
         superseded_at=row.superseded_at,
         deleted_at=row.deleted_at,
         tenant=row.tenant,
+        owner_id=row.owner_id,
         department=row.department,
         doc_type=row.doc_type,
         version=row.version,
@@ -207,6 +213,8 @@ def query_log_from_row(row: Mapping[str, Any]) -> QueryLog:
     return QueryLog(
         query_id=parsed.query_id,
         trace_id=parsed.trace_id,
+        tenant=parsed.tenant,
+        principal_id=parsed.principal_id,
         question=parsed.question,
         answer=parsed.answer,
         refused=parsed.refused,
@@ -231,6 +239,8 @@ def feedback_from_row(row: Mapping[str, Any]) -> FeedbackRecord:
         feedback_id=parsed.feedback_id,
         query_id=parsed.query_id,
         trace_id=parsed.trace_id,
+        tenant=parsed.tenant,
+        principal_id=parsed.principal_id,
         verdict=parsed.verdict,
         comment=parsed.comment,
         created_at=parsed.created_at,

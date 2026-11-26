@@ -213,7 +213,6 @@ class EvaluationService:
                 tenant=corpus.tenant,
                 files={"file": (path.name, path.read_bytes(), "text/markdown")},
                 data={
-                    "tenant": corpus.tenant,
                     "department": corpus.department or "",
                     "doc_type": corpus.doc_type or "",
                     "version": corpus.version,

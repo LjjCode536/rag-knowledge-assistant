@@ -30,6 +30,7 @@ import {
   statusLabel,
   statusTagType,
 } from '@/components/documentLogic'
+import { useAuthStore } from '@/stores/auth'
 import type { DocumentStatus } from '@/types/documents'
 
 const props = defineProps<{
@@ -45,6 +46,7 @@ const emit = defineEmits<{
 }>()
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 
 /**
  * 入库进度的终态:到了就不再推进,轮询没有意义。
@@ -135,16 +137,21 @@ const reuploadExtensionError = computed<string>(() => {
 })
 
 /**
- * 重新上传的元数据:取**失败档案自己的**租户 / 部门 / 文档类型 / 版本。
+ * 重新上传的元数据:租户由登录身份决定(不再随表单提交),部门只有管理员
+ * 可显式指定;成员只在档案部门与自己的部门一致时透传,避免越界被拒。
  *
- * 后端的文档身份是 `(租户, 文件名)` —— 租户错了就不是同标识,重试会落到
- * 另一份档案上,原来那份既没被退位也没被重试。
+ * 后端的文档身份是 `(租户, 文件名)` —— 租户不再随表单提交,同标识完全由
+ * 登录主体决定。
  */
 const reuploadFields = computed(() => {
   const target = detailQuery.data.value
+  const role = authStore.principal?.role
+  const department =
+    role === 'admin' || target?.department === authStore.principal?.department
+      ? target?.department ?? undefined
+      : undefined
   return {
-    tenant: target?.tenant ?? 'default',
-    department: target?.department ?? undefined,
+    department,
     doc_type: target?.doc_type ?? undefined,
     version: target?.version ?? 'v1',
   }

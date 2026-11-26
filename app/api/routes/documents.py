@@ -20,10 +20,16 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, UploadFile
 from pydantic import BaseModel
 
-from app.api.dependencies import require_document_in_scope, require_scope
+from app.api.dependencies import (
+    reject_tenant_form_field,
+    require_document_in_scope,
+    require_principal,
+    require_scope,
+)
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
+from app.domain.identity import Principal
 from app.domain.retrieval import Scope
 from app.services.document_catalog import DocumentCatalogService
 from app.services.ingestion import IngestionService
@@ -40,6 +46,7 @@ class DocumentView(BaseModel):
     file_type: DocumentFormat
     size_bytes: int
     tenant: str
+    owner_id: str | None = None
     department: str | None = None
     doc_type: str | None = None
     version: str
@@ -65,6 +72,7 @@ class DocumentView(BaseModel):
             file_type=record.file_type,
             size_bytes=record.size_bytes,
             tenant=record.tenant,
+            owner_id=record.owner_id,
             department=record.department,
             doc_type=record.doc_type,
             version=record.version,
@@ -127,12 +135,13 @@ def _blank_to_none(value: str | None) -> str | None:
     response_model=ApiEnvelope[DocumentView],
     status_code=201,
     summary="上传知识库文档(登记,后台入库)",
+    dependencies=[Depends(reject_tenant_form_field)],
 )
 def upload_document(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile,
-    tenant: Annotated[str, Form()] = "default",
+    principal: Annotated[Principal, Depends(require_principal)],
     department: Annotated[str | None, Form()] = None,
     doc_type: Annotated[str | None, Form()] = None,
     version: Annotated[str, Form()] = "v1",
@@ -146,7 +155,8 @@ def upload_document(
     状态机位置全程可查,到 indexed 即可问答。
     `ingestion_async=false` 时同一服务在请求内同步完成解析(行为一致口径)。
 
-    元数据字段(租户 / 部门 / 文档类型 / 版本)进入文档档案并随切片冗余;
+    租户与所有者只来自登录主体,表单携带 `tenant` 即 422;部门缺省取主体
+    部门,管理员可显式指定其他部门。文档类型与版本进入档案并随切片冗余;
     不支持的扩展名返回 415,不生成档案。
     """
     service: IngestionService = request.app.state.ingestion_service
@@ -154,7 +164,7 @@ def upload_document(
     record = service.register(
         file_name=file.filename or "",
         content=content,
-        tenant=tenant.strip() or "default",
+        principal=principal,
         department=_blank_to_none(department),
         doc_type=_blank_to_none(doc_type),
         version=version.strip() or "v1",
@@ -255,11 +265,20 @@ def get_document_elements(
     response_model=ApiEnvelope[DocumentView],
     summary="删除文档(切片与向量连带清理)",
 )
-def delete_document(request: Request, document_id: str) -> ApiEnvelope[DocumentView]:
+def delete_document(
+    request: Request,
+    document_id: str,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[DocumentView]:
     """删除知识库文档:状态机迁移到 deleted 终态,切片、向量、关键词通道条目与
     落盘文件连带清理;档案保留可查(终态、失败原因)、重复删除幂等。
+    只有文档所有者或租户管理员可删除;其他主体按对象不可见返回 404。
     清理失败返回 `DOCUMENT_DELETE_FAILED`,档案原状保留、可重试。
     """
+    access_service = request.app.state.access_service
+    record = access_service.require_writable_document(
+        principal=principal, document_id=document_id
+    )
     service: DocumentLifecycleService = request.app.state.lifecycle_service
-    record = service.delete(document_id)
-    return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))
+    deleted = service.delete(record.id)
+    return success_envelope(DocumentView.of(deleted), trace_id=trace_id_of(request))

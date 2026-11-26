@@ -122,16 +122,25 @@ class QueryLogRepository(Protocol):
         """追加一条查询日志。"""
         ...
 
-    def get(self, query_id: str) -> QueryLog | None:
-        """按 query_id 取日志,不存在返回 None。"""
+    def get(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> QueryLog | None:
+        """按 query_id 取日志;跨租户或主体不可见的日志返回 None。
+
+        ``tenant`` 必填且无「缺省即全库」兜底;``principal_id`` 只在调用方
+        需要进一步收窄到单一主体时给出(None 表示租户内全部主体,仅
+        ``admin`` 的读路径会这样调用)。
+        """
         ...
 
-    def list_recent(self, *, limit: int) -> list[QueryLog]:
-        """按时间倒序返回最近至多 limit 条日志。"""
+    def list_recent(
+        self, *, tenant: str, limit: int, principal_id: str | None = None
+    ) -> list[QueryLog]:
+        """按时间倒序返回租户内最近至多 limit 条日志(可按主体收窄)。"""
         ...
 
-    def count(self) -> int:
-        """返回当前日志总数。"""
+    def count(self, *, tenant: str, principal_id: str | None = None) -> int:
+        """返回租户内的日志总数(可按主体收窄)。"""
         ...
 
 
@@ -146,22 +155,37 @@ class FeedbackRepository(Protocol):
         """落库一条反馈;同 feedback_id 重复落库为覆盖(upsert 语义)。"""
         ...
 
-    def get(self, feedback_id: str) -> FeedbackRecord | None:
-        """按 feedback_id 取反馈,不存在返回 None。"""
+    def get(
+        self, feedback_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        """按 feedback_id 取反馈;跨租户或主体不可见的反馈返回 None。"""
         ...
 
-    def get_by_query_id(self, query_id: str) -> FeedbackRecord | None:
-        """按 query_id 取该次问答的现行反馈(一问一评),不存在返回 None。"""
+    def get_by_query_id(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        """按 query_id 取该次问答的现行反馈(一问一评),不可见返回 None。"""
         ...
 
     def list_recent(
-        self, *, limit: int, verdict: FeedbackVerdict | None = None
+        self,
+        *,
+        tenant: str,
+        limit: int,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
     ) -> list[FeedbackRecord]:
-        """按时间倒序返回最近至多 limit 条反馈;给 verdict 时只返回该判定。"""
+        """按时间倒序返回租户内最近至多 limit 条反馈(可按判定 / 主体收窄)。"""
         ...
 
-    def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
-        """返回反馈总数;给 verdict 时只统计该判定。"""
+    def count(
+        self,
+        *,
+        tenant: str,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
+    ) -> int:
+        """返回租户内的反馈总数(可按判定 / 主体收窄)。"""
         ...
 
 
@@ -192,8 +216,8 @@ class StatsRepository(Protocol):
     :attr:`end` 不含);``None`` 表示该侧不设界(至今全部)。
     """
 
-    def count_documents(self, *, latest_only: bool = True) -> int:
-        """返回文档数;``latest_only`` 只数 ``is_latest`` 的现行版本。
+    def count_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        """返回租户内的文档数;``latest_only`` 只数 ``is_latest`` 的现行版本。
 
         现行版本 = 未退位且未删除的版本(``is_latest=true``);已入库
         (``indexed``)与否不在本口径内 —— 那是
@@ -201,49 +225,66 @@ class StatsRepository(Protocol):
         """
         ...
 
-    def count_indexed_documents(self, *, latest_only: bool = True) -> int:
-        """返回已向量化入库(indexed)的文档数。
+    def count_indexed_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        """返回租户内已向量化入库(indexed)的文档数。
 
         ``latest_only`` 同样只数 ``is_latest`` 的现行版本。
         """
         ...
 
-    def count_chunks(self) -> int:
-        """返回切片总数(全部文档的切片合计)。"""
+    def count_chunks(self, *, tenant: str) -> int:
+        """返回租户内的切片总数。"""
         ...
 
     def count_queries(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
-        """返回统计区间内的问答量(查询日志条数)。"""
+        """返回租户在统计区间内的问答量(查询日志条数)。"""
         ...
 
     def count_refusals(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
-        """返回统计区间内的拒答量。"""
+        """返回租户在统计区间内的拒答量。"""
         ...
 
     def avg_latency_ms(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> float | None:
-        """返回统计区间内的端到端延迟均值;无问答时返回 None。"""
+        """返回租户在统计区间内的端到端延迟均值;无问答时返回 None。"""
         ...
 
     def sum_token_usage(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> TokenUsageSummary:
-        """返回统计区间内的 Token 用量合计(prompt / completion / total)。"""
+        """返回租户在统计区间内的 Token 用量合计(prompt / completion / total)。"""
         ...
 
     def bucket_queries(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
         bucket: StatsBucketKind = StatsBucketKind.DAY,
     ) -> list[BucketAggregate]:
-        """按分桶粒度返回统计区间内的问答聚合(按桶起点升序)。
+        """按分桶粒度返回租户在统计区间内的问答聚合(按桶起点升序)。
 
         空区间返回空列表;没有问答的桶不出现(不补零桶)。
         """

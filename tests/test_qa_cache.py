@@ -9,6 +9,8 @@ from app.services.qa_cache import AnswerCache
 def _log(question: str = "入职多久可以申请年假?") -> QueryLog:
     return QueryLog(
         trace_id="trace-1",
+        tenant="default",
+        principal_id="usr_member",
         question=question,
         answer="入职满一年后可以申请年假。",
         refused=False,

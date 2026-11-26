@@ -114,17 +114,32 @@ class InMemoryQueryLogRepository:
         with self._lock:
             self._logs[log.query_id] = log
 
-    def get(self, query_id: str) -> QueryLog | None:
+    def get(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> QueryLog | None:
         with self._lock:
-            return self._logs.get(query_id)
+            log = self._logs.get(query_id)
+        if log is None:
+            return None
+        return log if _visible(log, tenant=tenant, principal_id=principal_id) else None
 
-    def list_recent(self, *, limit: int) -> list[QueryLog]:
+    def list_recent(
+        self, *, tenant: str, limit: int, principal_id: str | None = None
+    ) -> list[QueryLog]:
         with self._lock:
-            return list(reversed(self._logs.values()))[:limit]
+            logs = list(reversed(self._logs.values()))
+        return [
+            log
+            for log in logs
+            if _visible(log, tenant=tenant, principal_id=principal_id)
+        ][:limit]
 
-    def count(self) -> int:
+    def count(self, *, tenant: str, principal_id: str | None = None) -> int:
         with self._lock:
-            return len(self._logs)
+            logs = list(self._logs.values())
+        return sum(
+            1 for log in logs if _visible(log, tenant=tenant, principal_id=principal_id)
+        )
 
 
 class InMemoryFeedbackRepository:
@@ -142,35 +157,59 @@ class InMemoryFeedbackRepository:
         with self._lock:
             self._records[record.feedback_id] = record
 
-    def get(self, feedback_id: str) -> FeedbackRecord | None:
+    def get(
+        self, feedback_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
         with self._lock:
-            return self._records.get(feedback_id)
+            record = self._records.get(feedback_id)
+        if record is None:
+            return None
+        return record if _visible(record, tenant=tenant, principal_id=principal_id) else None
 
-    def get_by_query_id(self, query_id: str) -> FeedbackRecord | None:
+    def get_by_query_id(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
         with self._lock:
-            for record in reversed(self._records.values()):
-                if record.query_id == query_id:
-                    return record
+            records = list(self._records.values())
+        for record in reversed(records):
+            if record.query_id == query_id and _visible(
+                record, tenant=tenant, principal_id=principal_id
+            ):
+                return record
         return None
 
     def list_recent(
-        self, *, limit: int, verdict: FeedbackVerdict | None = None
+        self,
+        *,
+        tenant: str,
+        limit: int,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
     ) -> list[FeedbackRecord]:
         with self._lock:
-            records = [
-                record
-                for record in reversed(self._records.values())
-                if verdict is None or record.verdict == verdict
-            ]
-        return records[:limit]
+            records = list(reversed(self._records.values()))
+        return [
+            record
+            for record in records
+            if _visible(record, tenant=tenant, principal_id=principal_id)
+            and (verdict is None or record.verdict == verdict)
+        ][:limit]
 
-    def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
+    def count(
+        self,
+        *,
+        tenant: str,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
+    ) -> int:
         with self._lock:
-            return sum(
-                1
-                for record in self._records.values()
-                if verdict is None or record.verdict == verdict
-            )
+            records = list(self._records.values())
+        return sum(
+            1
+            for record in records
+            if _visible(record, tenant=tenant, principal_id=principal_id)
+            and (verdict is None or record.verdict == verdict)
+        )
 
 
 class InMemoryEvaluationRunRepository:
@@ -210,63 +249,97 @@ class InMemoryStatsRepository:
         self._chunks = chunks
         self._query_logs = query_logs
 
-    def count_documents(self, *, latest_only: bool = True) -> int:
-        """文档数;``latest_only`` 只数现行版本(退位 / 删除的版本不计)。"""
+    def count_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        """租户内文档数;``latest_only`` 只数现行版本(退位 / 删除的版本不计)。"""
         with self._documents._lock:
             records = list(self._documents._records.values())
+        records = [record for record in records if record.tenant == tenant]
         if latest_only:
             records = [record for record in records if record.is_latest]
         return len(records)
 
-    def count_indexed_documents(self, *, latest_only: bool = True) -> int:
-        """已向量化入库(indexed)的文档数。"""
+    def count_indexed_documents(self, *, tenant: str, latest_only: bool = True) -> int:
+        """租户内已向量化入库(indexed)的文档数。"""
         with self._documents._lock:
             records = list(self._documents._records.values())
         records = [
-            record for record in records if record.status == DocumentStatus.INDEXED
+            record
+            for record in records
+            if record.tenant == tenant and record.status == DocumentStatus.INDEXED
         ]
         if latest_only:
             records = [record for record in records if record.is_latest]
         return len(records)
 
-    def count_chunks(self) -> int:
-        """切片总数:全部文档的切片合计。"""
+    def count_chunks(self, *, tenant: str) -> int:
+        """租户内切片总数:只数该租户文档名下的切片。"""
+        with self._documents._lock:
+            document_ids = {
+                record.id
+                for record in self._documents._records.values()
+                if record.tenant == tenant
+            }
         with self._chunks._lock:
-            return sum(len(chunks) for chunks in self._chunks._chunks.values())
+            return sum(
+                len(chunks)
+                for document_id, chunks in self._chunks._chunks.items()
+                if document_id in document_ids
+            )
 
     def count_queries(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
-        return len(self._logs_in_range(start=start, end=end))
+        return len(self._logs_in_range(tenant=tenant, start=start, end=end))
 
     def count_refusals(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> int:
-        return sum(1 for log in self._logs_in_range(start=start, end=end) if log.refused)
+        return sum(
+            1
+            for log in self._logs_in_range(tenant=tenant, start=start, end=end)
+            if log.refused
+        )
 
     def avg_latency_ms(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> float | None:
-        logs = self._logs_in_range(start=start, end=end)
+        logs = self._logs_in_range(tenant=tenant, start=start, end=end)
         if not logs:
             return None
         return round(sum(log.latency_ms for log in logs) / len(logs), 2)
 
     def sum_token_usage(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> TokenUsageSummary:
-        logs = self._logs_in_range(start=start, end=end)
+        logs = self._logs_in_range(tenant=tenant, start=start, end=end)
         return TokenUsageSummary().accumulate(log.token_usage for log in logs)
 
     def bucket_queries(
         self,
         *,
+        tenant: str,
         start: datetime | None = None,
         end: datetime | None = None,
         bucket: StatsBucketKind = StatsBucketKind.DAY,
     ) -> list[BucketAggregate]:
         """按自然小时 / 自然日切桶;没有问答的桶不出现(不补零桶)。"""
-        logs = self._logs_in_range(start=start, end=end)
+        logs = self._logs_in_range(tenant=tenant, start=start, end=end)
         buckets: dict[datetime, list[QueryLog]] = {}
         for log in logs:
             buckets.setdefault(bucket_start_of(log.created_at, bucket), []).append(log)
@@ -289,17 +362,33 @@ class InMemoryStatsRepository:
         return aggregates
 
     def _logs_in_range(
-        self, *, start: datetime | None = None, end: datetime | None = None
+        self,
+        *,
+        tenant: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> list[QueryLog]:
-        """区间内的查询日志(闭区间起点 / 开区间终点),按时间升序。"""
+        """租户内区间查询日志(闭区间起点 / 开区间终点),按时间升序。"""
         with self._query_logs._lock:
             logs = list(self._query_logs._logs.values())
         selected = [
             log
             for log in logs
-            if _in_range(log.created_at, start=start, end=end)
+            if log.tenant == tenant and _in_range(log.created_at, start=start, end=end)
         ]
         return sorted(selected, key=lambda log: log.created_at)
+
+
+def _visible(
+    record: QueryLog | FeedbackRecord,
+    *,
+    tenant: str,
+    principal_id: str | None,
+) -> bool:
+    """读路径可见性:租户是硬边界,``principal_id`` 给出时再收窄到单一主体。"""
+    if record.tenant != tenant:
+        return False
+    return principal_id is None or record.principal_id == principal_id
 
 
 def _match_documents(

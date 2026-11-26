@@ -79,12 +79,16 @@ def auth_header(app, principal: Principal = MEMBER.principal) -> dict[str, str]:
 
 
 def auth_header_for_tenant(app, tenant: str) -> dict[str, str]:
-    """评估器专用:按语料 / 用例租户签发服务账号的真实 token。"""
+    """评估器专用:按语料 / 用例租户签发服务账号的真实 token。
+
+    评估期间要按语料声明部门,服务账号取租户管理员角色(可指定部门);
+    这不是绕过鉴权 —— 仍然走真实 JWT 与授权范围。
+    """
     principal = Principal(
         id="svc_evaluation",
         kind=PrincipalKind.SERVICE,
         tenant=tenant,
-        role=Role.MEMBER,
+        role=Role.ADMIN,
     )
     return auth_header(app, principal)
 

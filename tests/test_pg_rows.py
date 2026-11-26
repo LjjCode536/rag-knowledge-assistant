@@ -42,6 +42,7 @@ def test_document_row_maps_every_field():
         "superseded_at": None,
         "deleted_at": None,
         "tenant": "acme",
+        "owner_id": "usr_owner",
         "department": "人力部",
         "doc_type": "制度",
         "version": "v2",
@@ -71,6 +72,7 @@ def test_document_row_maps_every_field():
     assert record.status is DocumentStatus.INDEXED
     assert isinstance(record.parsed, ParsedDocument)
     assert record.chunk_warnings[0].code.value == "CHUNK_TOO_SHORT"
+    assert record.owner_id == "usr_owner"
     assert record.created_at == CREATED_AT
 
 
@@ -135,6 +137,8 @@ def test_query_log_row_maps_enums_and_jsonb():
     row = {
         "query_id": "qry-1",
         "trace_id": "trace-1",
+        "tenant": "acme",
+        "principal_id": "usr_member",
         "question": "年假怎么算?",
         "answer": "按工龄计算。",
         "refused": False,
@@ -159,12 +163,15 @@ def test_query_log_row_maps_enums_and_jsonb():
     assert log.hits[0].chunk_id == "c1"
     assert log.token_usage.total_tokens == 3
     assert log.filters == {"tenant": "acme"}
+    assert (log.tenant, log.principal_id) == ("acme", "usr_member")
 
 
 def test_query_log_row_maps_refusal_reason():
     row = {
         "query_id": "qry-1",
         "trace_id": "trace-1",
+        "tenant": "acme",
+        "principal_id": "usr_member",
         "question": "年假怎么算?",
         "answer": "根据当前资料无法确认。",
         "refused": True,
@@ -192,6 +199,8 @@ def test_feedback_row_maps_verdict():
         "feedback_id": "fb-1",
         "query_id": "qry-1",
         "trace_id": "trace-1",
+        "tenant": "acme",
+        "principal_id": "usr_member",
         "verdict": "useful",
         "comment": "命中很准",
         "created_at": CREATED_AT,
@@ -202,6 +211,7 @@ def test_feedback_row_maps_verdict():
     assert isinstance(record, FeedbackRecord)
     assert record.verdict is FeedbackVerdict.USEFUL
     assert record.comment == "命中很准"
+    assert (record.tenant, record.principal_id) == ("acme", "usr_member")
 
 
 @pytest.mark.parametrize(

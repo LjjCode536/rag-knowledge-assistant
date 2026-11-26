@@ -36,6 +36,7 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         superseded_at  timestamptz,
         deleted_at     timestamptz,
         tenant         text NOT NULL DEFAULT 'default',
+        owner_id       text,
         department     text,
         doc_type       text,
         version        text NOT NULL DEFAULT 'v1',
@@ -54,6 +55,8 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS documents_latest_by_file "
     "ON documents (tenant, file_name) WHERE is_latest",
+    # 已有库补列:历史文档没有所有者记录,保持 NULL(不伪造归属)
+    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS owner_id text",
     # 主体表(ADR-0020):服务启动不建号;种子脚本显式 upsert。username 只对
     # 用户主体有值(服务账号可为空),唯一约束保证登录名不歧义。
     """
@@ -122,6 +125,8 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         seq                 bigserial NOT NULL,
         query_id            text PRIMARY KEY,
         trace_id            text NOT NULL,
+        tenant              text NOT NULL DEFAULT 'default',
+        principal_id        text NOT NULL DEFAULT 'system',
         question            text NOT NULL,
         answer              text NOT NULL,
         refused             boolean NOT NULL,
@@ -139,19 +144,30 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS query_logs_recent ON query_logs (created_at DESC)",
+    # 已有库补列:存量日志落在种子租户 default,主体未知记为 system
+    "ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS tenant text NOT NULL DEFAULT 'default'",
+    "ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS principal_id text NOT NULL DEFAULT 'system'",
+    "CREATE INDEX IF NOT EXISTS query_logs_by_tenant_principal "
+    "ON query_logs (tenant, principal_id, created_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS feedbacks (
         seq         bigserial NOT NULL,
         feedback_id text PRIMARY KEY,
         query_id    text NOT NULL,
         trace_id    text NOT NULL,
+        tenant      text NOT NULL DEFAULT 'default',
+        principal_id text NOT NULL DEFAULT 'system',
         verdict     text NOT NULL,
         comment     text,
         created_at  timestamptz NOT NULL DEFAULT now()
     )
     """,
+    "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS tenant text NOT NULL DEFAULT 'default'",
+    "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS principal_id text NOT NULL DEFAULT 'system'",
     "CREATE INDEX IF NOT EXISTS feedbacks_by_query ON feedbacks (query_id)",
     "CREATE INDEX IF NOT EXISTS feedbacks_by_verdict ON feedbacks (verdict)",
+    "CREATE INDEX IF NOT EXISTS feedbacks_by_tenant_principal "
+    "ON feedbacks (tenant, principal_id, created_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS evaluation_runs (
         run_id          text PRIMARY KEY,

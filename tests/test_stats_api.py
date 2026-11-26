@@ -59,7 +59,7 @@ def indexed_client(settings, upload_dir) -> Iterator[TestClient]:
     """注入假向量替身,预置一份已入库的员工手册。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="default")
+        _index(client, "employee.md", HANDBOOK)
         yield client
 
 
@@ -162,7 +162,7 @@ def test_cost_endpoint_prices_tokens_with_configured_rates(settings, upload_dir)
         answer_generator=_UsageGenerator(),
     )
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="default")
+        _index(client, "employee.md", HANDBOOK)
         _chat(client, LEAVE_QUESTION)
 
         data = client.get(f"{STATS_URL}/cost").json()["data"]
@@ -261,7 +261,7 @@ def test_cost_excludes_cached_answers_from_token_usage(settings, upload_dir):
         answer_generator=_UsageGenerator(),
     )
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="default")
+        _index(client, "employee.md", HANDBOOK)
 
         first = client.post(CHAT_URL, json={"question": LEAVE_QUESTION})
         assert first.status_code == 200, first.text

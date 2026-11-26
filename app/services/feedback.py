@@ -40,57 +40,110 @@ class FeedbackService:
         query_id: str,
         verdict: FeedbackVerdict,
         comment: str | None = None,
+        *,
+        tenant: str,
+        principal_id: str,
     ) -> FeedbackRecord:
-        """记录对一次问答的反馈;查询日志不存在则无法关联,视为业务错误。"""
-        log = self.query_log_repository.get(query_id)
+        """记录对一次问答的反馈;查询日志必须属于当前主体且同租户。
+
+        成员只能对自己的问答提交反馈,管理员也不例外 —— 反馈不挂到别人的
+        问答上;不可见与不存在共用同一个 404。
+        """
+        log = self.query_log_repository.get(
+            query_id, tenant=tenant, principal_id=principal_id
+        )
         if log is None:
             raise NotFoundError(
                 "查询日志不存在,无法关联反馈", details={"query_id": query_id}
             )
-        existing = self.feedback_repository.get_by_query_id(query_id)
+        existing = self.feedback_repository.get_by_query_id(
+            query_id, tenant=tenant, principal_id=principal_id
+        )
         record = (
             existing.model_copy(update={"verdict": verdict, "comment": comment})
             if existing is not None
             else FeedbackRecord(
-                query_id=query_id, trace_id=log.trace_id, verdict=verdict, comment=comment
+                query_id=query_id,
+                trace_id=log.trace_id,
+                tenant=tenant,
+                principal_id=principal_id,
+                verdict=verdict,
+                comment=comment,
             )
         )
         self.feedback_repository.add(record)
         return record
 
     def list_recent(
-        self, *, limit: int, verdict: FeedbackVerdict | None = None
+        self,
+        *,
+        tenant: str,
+        limit: int,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
     ) -> list[FeedbackRecord]:
-        """按时间倒序返回最近反馈;给 verdict 时只返回该判定。"""
-        return self.feedback_repository.list_recent(limit=limit, verdict=verdict)
+        """按时间倒序返回租户内最近反馈(可按判定 / 主体收窄)。"""
+        return self.feedback_repository.list_recent(
+            tenant=tenant, limit=limit, verdict=verdict, principal_id=principal_id
+        )
 
-    def get(self, feedback_id: str) -> FeedbackRecord | None:
-        """按 feedback_id 取反馈,不存在返回 None。"""
-        return self.feedback_repository.get(feedback_id)
+    def get(
+        self, feedback_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        """按 feedback_id 取可见反馈,不存在或不可见返回 None。"""
+        return self.feedback_repository.get(
+            feedback_id, tenant=tenant, principal_id=principal_id
+        )
 
-    def get_by_query_id(self, query_id: str) -> FeedbackRecord | None:
-        """按 query_id 取该次问答的现行反馈(一问一评),不存在返回 None。"""
-        return self.feedback_repository.get_by_query_id(query_id)
+    def get_by_query_id(
+        self, query_id: str, *, tenant: str, principal_id: str | None = None
+    ) -> FeedbackRecord | None:
+        """按 query_id 取该次问答的可见现行反馈(一问一评),不可见返回 None。"""
+        return self.feedback_repository.get_by_query_id(
+            query_id, tenant=tenant, principal_id=principal_id
+        )
 
-    def count(self, *, verdict: FeedbackVerdict | None = None) -> int:
-        """返回反馈总数;给 verdict 时只统计该判定。"""
-        return self.feedback_repository.count(verdict=verdict)
+    def count(
+        self,
+        *,
+        tenant: str,
+        verdict: FeedbackVerdict | None = None,
+        principal_id: str | None = None,
+    ) -> int:
+        """返回租户内的反馈总数(可按判定 / 主体收窄)。"""
+        return self.feedback_repository.count(
+            tenant=tenant, verdict=verdict, principal_id=principal_id
+        )
 
-    def negative_candidates(self, *, limit: int = _CANDIDATE_LIMIT) -> list[GoldenCaseCandidate]:
+    def negative_candidates(
+        self,
+        *,
+        tenant: str,
+        limit: int = _CANDIDATE_LIMIT,
+        principal_id: str | None = None,
+    ) -> list[GoldenCaseCandidate]:
         """把差评按问题聚类成黄金用例候选,频次高 / 时间近的排前面。
 
+        - 只统计本租户;``principal_id`` 给出时再收窄到该主体自己的反馈;
         - 频次差评(同问题多次差评)排最前:它们最可能是系统性缺陷;
         - 同一候选下的多条差评合并 comments(去重、按时间正序);
         - 候选 id 由问题文本确定性生成,跨导出稳定,便于人工跟踪与去重。
         """
-        total = self.feedback_repository.count(verdict=FeedbackVerdict.USELESS)
+        total = self.feedback_repository.count(
+            tenant=tenant, verdict=FeedbackVerdict.USELESS, principal_id=principal_id
+        )
         useless = self.feedback_repository.list_recent(
-            limit=total, verdict=FeedbackVerdict.USELESS
+            tenant=tenant,
+            limit=total,
+            verdict=FeedbackVerdict.USELESS,
+            principal_id=principal_id,
         )
         # 记录按问题原文聚组:同一问题的差评归并为一个候选
         grouped: dict[str, list[tuple[FeedbackRecord, QueryLog | None]]] = {}
         for record in useless:
-            log = self.query_log_repository.get(record.query_id)
+            log = self.query_log_repository.get(
+                record.query_id, tenant=tenant, principal_id=record.principal_id
+            )
             question = log.question if log is not None else record.query_id
             grouped.setdefault(question, []).append((record, log))
 

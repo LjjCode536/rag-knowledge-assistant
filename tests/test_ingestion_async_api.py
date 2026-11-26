@@ -183,8 +183,7 @@ def test_async_and_sync_paths_land_same_state_and_same_search_results(settings):
                 in_pipeline_client,
                 name="hr.txt",
                 content=ALPHA_TEXT.encode(),
-                tenant="default",
-                department="人力部",
+                department="研发部",
                 doc_type="政策",
                 version="v2",
             )

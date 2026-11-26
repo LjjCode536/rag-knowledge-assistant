@@ -20,6 +20,8 @@ from app.services.feedback import FeedbackService
 def _query_log(question: str, *, trace_id: str, refused: bool = False) -> QueryLog:
     return QueryLog(
         trace_id=trace_id,
+        tenant="default",
+        principal_id="usr_member",
         question=question,
         answer="根据当前资料无法确认。" if refused else "根据知识库资料,这是回答。",
         refused=refused,
@@ -42,31 +44,61 @@ def service() -> FeedbackService:
     )
 
 
+def _submit(service: FeedbackService, query_id: str, verdict: FeedbackVerdict, comment=None):
+    return service.submit(
+        query_id,
+        verdict,
+        comment=comment,
+        tenant="default",
+        principal_id="usr_member",
+    )
+
+
+def _candidates(service: FeedbackService, limit: int = 50):
+    return service.negative_candidates(
+        tenant="default", limit=limit, principal_id="usr_member"
+    )
+
+
 def test_repository_roundtrip_filter_and_count():
     repository = InMemoryFeedbackRepository()
     useful = FeedbackRecord(
-        query_id="qry_1", trace_id="t1", verdict=FeedbackVerdict.USEFUL
+        query_id="qry_1",
+        trace_id="t1",
+        tenant="default",
+        principal_id="usr_member",
+        verdict=FeedbackVerdict.USEFUL,
     )
     useless = FeedbackRecord(
-        query_id="qry_2", trace_id="t2", verdict=FeedbackVerdict.USELESS, comment="差评"
+        query_id="qry_2",
+        trace_id="t2",
+        tenant="default",
+        principal_id="usr_member",
+        verdict=FeedbackVerdict.USELESS,
+        comment="差评",
     )
     repository.add(useful)
     repository.add(useless)
 
-    assert repository.get(useful.feedback_id) == useful
-    assert repository.get("missing") is None
-    assert repository.get_by_query_id("qry_2") == useless
-    assert repository.get_by_query_id("qry_missing") is None
-    assert repository.count() == 2
-    assert repository.count(verdict=FeedbackVerdict.USELESS) == 1
+    assert repository.get(useful.feedback_id, tenant="default") == useful
+    assert repository.get("missing", tenant="default") is None
+    assert repository.get_by_query_id("qry_2", tenant="default") == useless
+    assert repository.get_by_query_id("qry_missing", tenant="default") is None
+    assert repository.count(tenant="default") == 2
+    assert repository.count(tenant="default", verdict=FeedbackVerdict.USELESS) == 1
     # 最近优先:插入顺序的倒序
-    assert [item.feedback_id for item in repository.list_recent(limit=2)] == [
+    assert [
+        item.feedback_id
+        for item in repository.list_recent(tenant="default", limit=2)
+    ] == [
         useless.feedback_id,
         useful.feedback_id,
     ]
     assert [
         item.feedback_id
-        for item in repository.list_recent(limit=10, verdict=FeedbackVerdict.USELESS)
+        for item in repository.list_recent(
+            tenant="default", limit=10, verdict=FeedbackVerdict.USELESS
+        )
     ] == [useless.feedback_id]
 
 
@@ -74,7 +106,13 @@ def test_submit_links_trace_id_from_query_log(service):
     log = _query_log("入职多久可以申请年假?", trace_id="trace-svc-0001")
     service.query_log_repository.add(log)
 
-    record = service.submit(log.query_id, FeedbackVerdict.USEFUL, comment="很好")
+    record = service.submit(
+        log.query_id,
+        FeedbackVerdict.USEFUL,
+        comment="很好",
+        tenant="default",
+        principal_id="usr_member",
+    )
 
     assert record.trace_id == "trace-svc-0001"
     assert record.query_id == log.query_id
@@ -82,7 +120,12 @@ def test_submit_links_trace_id_from_query_log(service):
 
 def test_submit_unknown_query_raises_not_found(service):
     with pytest.raises(NotFoundError) as exc_info:
-        service.submit("no-such-query", FeedbackVerdict.USEFUL)
+        service.submit(
+            "no-such-query",
+            FeedbackVerdict.USEFUL,
+            tenant="default",
+            principal_id="usr_member",
+        )
     assert exc_info.value.details == {"query_id": "no-such-query"}
 
 
@@ -90,13 +133,15 @@ def test_submit_upserts_by_query_and_keeps_first_submission_time(service):
     log = _query_log("入职多久可以申请年假?", trace_id="t1")
     service.query_log_repository.add(log)
 
-    first = service.submit(log.query_id, FeedbackVerdict.USEFUL)
-    second = service.submit(log.query_id, FeedbackVerdict.USELESS, comment="引用错了")
+    first = _submit(service, log.query_id, FeedbackVerdict.USEFUL)
+    second = _submit(
+        service, log.query_id, FeedbackVerdict.USELESS, comment="引用错了"
+    )
 
     assert second.feedback_id == first.feedback_id
     assert second.verdict == FeedbackVerdict.USELESS
     assert second.created_at == first.created_at
-    assert service.feedback_repository.count() == 1
+    assert service.feedback_repository.count(tenant="default") == 1
 
 
 def test_negative_candidates_group_by_question(service):
@@ -104,10 +149,10 @@ def test_negative_candidates_group_by_question(service):
     answered = _query_log("入职多久可以申请年假?", trace_id="t1")
     for log in (refused, answered):
         service.query_log_repository.add(log)
-    service.submit(refused.query_id, FeedbackVerdict.USELESS, comment="没答到我关心的")
-    service.submit(answered.query_id, FeedbackVerdict.USELESS, comment="太空泛")
+    _submit(service, refused.query_id, FeedbackVerdict.USELESS, comment="没答到我关心的")
+    _submit(service, answered.query_id, FeedbackVerdict.USELESS, comment="太空泛")
 
-    candidates = service.negative_candidates()
+    candidates = _candidates(service)
 
     assert len(candidates) == 2
     by_question = {candidate.question: candidate for candidate in candidates}
@@ -125,18 +170,18 @@ def test_negative_candidates_group_by_question(service):
 def test_negative_candidates_ignore_useful_feedback(service):
     log = _query_log("入职多久可以申请年假?", trace_id="t1")
     service.query_log_repository.add(log)
-    service.submit(log.query_id, FeedbackVerdict.USEFUL)
+    _submit(service, log.query_id, FeedbackVerdict.USEFUL)
 
-    assert service.negative_candidates() == []
+    assert _candidates(service) == []
 
 
 def test_negative_candidates_order_recent_first(service):
     for index in range(3):
         log = _query_log(f"问题{index}?", trace_id=f"t{index}", refused=True)
         service.query_log_repository.add(log)
-        service.submit(log.query_id, FeedbackVerdict.USELESS)
+        _submit(service, log.query_id, FeedbackVerdict.USELESS)
 
-    assert [candidate.question for candidate in service.negative_candidates(limit=2)] == [
+    assert [candidate.question for candidate in _candidates(service, limit=2)] == [
         "问题2?",
         "问题1?",
     ]
@@ -147,18 +192,22 @@ def test_negative_candidates_deterministic_id_and_occurrence(service):
     second = _query_log("入职多久可以申请年假?", trace_id="t2")
     for log in (first, second):
         service.query_log_repository.add(log)
-        service.submit(log.query_id, FeedbackVerdict.USELESS)
+        _submit(service, log.query_id, FeedbackVerdict.USELESS)
 
-    (candidate,) = service.negative_candidates()
+    (candidate,) = _candidates(service)
 
     assert candidate.occurrences == 2
     assert candidate.id.startswith("cand_")
     # first_seen / last_seen 以反馈落库时间为准,与两次提交的实际先后一致
-    first_record = service.feedback_repository.get_by_query_id(first.query_id)
-    second_record = service.feedback_repository.get_by_query_id(second.query_id)
+    first_record = service.feedback_repository.get_by_query_id(
+        first.query_id, tenant="default"
+    )
+    second_record = service.feedback_repository.get_by_query_id(
+        second.query_id, tenant="default"
+    )
     assert candidate.first_seen == min(
         first_record.created_at, second_record.created_at
     )
     assert candidate.last_seen == max(first_record.created_at, second_record.created_at)
     # 候选 id 只由问题文本决定:聚合两次结果一致,同一问题跨导出稳定
-    assert candidate.id == service.negative_candidates()[0].id
+    assert candidate.id == _candidates(service)[0].id
