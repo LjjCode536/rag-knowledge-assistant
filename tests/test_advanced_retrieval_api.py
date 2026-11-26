@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
+from tests.support import authorized_client
 from tests.test_embeddings_api import ALPHA_TEXT, _chunk, _embed, _upload
 from tests.test_retrieval_pipeline import FakeReranker
 
@@ -47,7 +48,7 @@ def hybrid_settings(settings: Settings) -> Settings:
 @pytest.fixture
 def hybrid_client(hybrid_settings: Settings):
     app = create_app(hybrid_settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         yield client
 
 
@@ -57,7 +58,7 @@ def rerank_client(settings: Settings):
     app = create_app(
         settings, embedder=DeterministicEmbedder(), reranker=FakeReranker()
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         yield client
 
 
@@ -123,7 +124,7 @@ def test_search_flag_off_keeps_legacy_scores(settings: Settings) -> None:
         }
     )
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index_alpha(client)
 
         data = client.post(

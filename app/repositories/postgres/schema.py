@@ -1,7 +1,8 @@
-"""六张生产表的幂等 DDL(T13,教材第 42 / 45 章生产表)。
+"""生产表的幂等 DDL(T13,教材第 42 / 45 章生产表)。
 
 documents / chunks / embeddings / query_logs / feedbacks / evaluation_runs,
-全部 ``IF NOT EXISTS``:同一句法可重复执行,重启容器与重复建库不动既有数据。
+外加身份底座的主体表 principals(ADR-0020);全部 ``IF NOT EXISTS``:
+同一句法可重复执行,重启容器与重复建库不动既有数据。
 
 设计要点(与内存基线的语义对齐见各仓储实现):
 
@@ -53,6 +54,23 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS documents_latest_by_file "
     "ON documents (tenant, file_name) WHERE is_latest",
+    # 主体表(ADR-0020):服务启动不建号;种子脚本显式 upsert。username 只对
+    # 用户主体有值(服务账号可为空),唯一约束保证登录名不歧义。
+    """
+    CREATE TABLE IF NOT EXISTS principals (
+        principal_id text PRIMARY KEY,
+        username     text UNIQUE,
+        kind         text NOT NULL,
+        tenant       text NOT NULL,
+        role         text NOT NULL,
+        department   text,
+        display_name text,
+        -- 服务账号只建模、不签发:允许没有口令哈希;用户账号由种子脚本写入
+        password_hash text,
+        created_at   timestamptz NOT NULL DEFAULT now()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS principals_by_tenant ON principals (tenant)",
     """
     CREATE TABLE IF NOT EXISTS chunks (
         chunk_id            text PRIMARY KEY,

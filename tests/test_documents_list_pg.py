@@ -9,13 +9,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi.testclient import TestClient
-
 from app.domain.documents import DocumentFilter, DocumentStatus
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.repositories.memory import InMemoryDocumentRepository
 from app.repositories.postgres import PgDatabase, PgDocumentRepository
+from tests.support import authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 
@@ -218,7 +217,7 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         update={"vector_store": "pgvector", "database_url": test_pg_database.dsn}
     )
 
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:
@@ -241,7 +240,7 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         ] == 0
 
     # "重启容器":全新应用实例挂同库 —— 清单仍在
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:

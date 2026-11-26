@@ -7,6 +7,7 @@ export { ApiError, isApiError } from './errors'
 export { buildQuery, request, requestRaw, OK_CODE } from './client'
 export type { EnvelopeResult, RequestOptions } from './client'
 
+export { getCurrentPrincipal, login } from './auth'
 export {
   deleteDocument,
   getDocument,

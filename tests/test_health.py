@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support import authorized_client
+
 
 def test_health_returns_unified_envelope(client):
     response = client.get("/health")
@@ -40,25 +42,23 @@ def test_health_replaces_malformed_trace_id(client):
 
 
 def test_health_reports_configured_upstream(settings):
-    from fastapi.testclient import TestClient
 
     from app.main import create_app
 
     configured = settings.model_copy(update={"siliconflow_api_key": "sk-test-placeholder"})
-    with TestClient(create_app(configured)) as client:
+    with authorized_client(create_app(configured)) as client:
         response = client.get("/health")
 
     assert response.json()["data"]["upstream_configured"] is True
 
 
 def test_health_reports_cache_stats_from_answered_traffic(settings, upload_dir):
-    from fastapi.testclient import TestClient
 
     from app.integrations.llm.deterministic import DeterministicEmbedder
     from app.main import create_app
 
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app) as client:
+    with authorized_client(app) as client:
         client.post("/api/v1/chat", json={"question": "入职多久可以申请年假?"})
         client.post("/api/v1/chat", json={"question": "入职多久可以申请年假?"})
 
@@ -68,12 +68,11 @@ def test_health_reports_cache_stats_from_answered_traffic(settings, upload_dir):
 
 
 def test_health_reports_cache_disabled(settings, upload_dir):
-    from fastapi.testclient import TestClient
 
     from app.main import create_app
 
     configured = settings.model_copy(update={"qa_cache_enabled": False})
-    with TestClient(create_app(configured)) as client:
+    with authorized_client(create_app(configured)) as client:
         data = client.get("/health").json()["data"]
 
     assert data["qa_cache"] == {"enabled": False, "hits": 0, "misses": 0, "hit_rate": None}

@@ -15,7 +15,7 @@ from app.domain.qa import AnswerContext, GenerationUsage, GeneratorKind
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.services.generation import GeneratedAnswer
-from tests.support import json_log_entries
+from tests.support import authorized_client, json_log_entries
 
 DOCUMENTS_URL = "/api/v1/documents"
 CHAT_URL = "/api/v1/chat"
@@ -85,7 +85,7 @@ def _cache_client(settings, **create: object) -> Iterator[tuple[TestClient, Cont
         answer_generator=generator,
         **create,
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         yield client, generator
 
 

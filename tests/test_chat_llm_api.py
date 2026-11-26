@@ -23,6 +23,7 @@ from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.integrations.llm.transport import TransportResponse
 from app.main import create_app
 from app.services.generation import SiliconFlowAnswerGenerator
+from tests.support import authorized_client
 from tests.test_llm_client import FakeTransport
 
 CHAT_URL = "/api/v1/chat"
@@ -118,7 +119,7 @@ def llm_indexed_client(settings: Settings) -> Iterator[tuple[TestClient, FakeTra
         embedder=DeterministicEmbedder(),
         answer_generator=SiliconFlowAnswerGenerator(llm_client),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
         yield client, transport
 
@@ -134,7 +135,7 @@ def test_default_qa_generator_is_llm_and_surfaces_unified_error(upload_dir) -> N
     assert settings.qa_generator == "llm"
 
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
         response = client.post(CHAT_URL, json={"question": LEAVE_QUESTION})
 
@@ -177,7 +178,7 @@ def test_llm_refusal_on_insufficient_context_is_stable(
         embedder=DeterministicEmbedder(),
         answer_generator=SiliconFlowAnswerGenerator(llm_client),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
 
         data = _chat(client, "公司健身房开放到几点?")
@@ -208,7 +209,7 @@ def test_llm_upstream_becomes_unified_error_codes_at_api_seam(
         embedder=DeterministicEmbedder(),
         answer_generator=SiliconFlowAnswerGenerator(llm_client),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
         response = client.post(CHAT_URL, json={"question": LEAVE_QUESTION})
 
@@ -233,7 +234,7 @@ def test_query_log_records_rewritten_and_expanded_questions(
         embedder=DeterministicEmbedder(),
         query_planner=StubQueryPlanner(plan),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
         data = _chat(client, LEAVE_QUESTION)
         log = client.get(f"{QUERY_LOGS_URL}/{data['query_id']}").json()["data"]
@@ -255,7 +256,7 @@ def test_query_log_keeps_original_when_rewrite_disabled(
         embedder=DeterministicEmbedder(),
         query_planner=StubQueryPlanner(plan),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client)
         data = _chat(client, LEAVE_QUESTION)
         log = client.get(f"{QUERY_LOGS_URL}/{data['query_id']}").json()["data"]

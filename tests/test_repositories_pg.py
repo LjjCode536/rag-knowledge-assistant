@@ -30,6 +30,7 @@ from app.repositories.postgres import (
     PgEvaluationRunRepository,
     PgQueryLogRepository,
 )
+from tests.support import authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 SEARCH_URL = "/api/v1/search"
@@ -388,16 +389,15 @@ def test_full_pipeline_over_pgvector_and_restart_survives(settings, test_pg_data
     pg_settings = settings.model_copy(
         update={"vector_store": "pgvector", "database_url": test_pg_database.dsn}
     )
-    from fastapi.testclient import TestClient
 
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:
         indexed = _run_full_pipeline(client)
 
     # “重启容器”:全新应用实例挂同库 —— 内存态俱已清零,落库数据必须在
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:

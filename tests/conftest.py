@@ -9,7 +9,20 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.core.errors import NotFoundError
 from app.main import create_app
+from app.repositories.memory import InMemoryPrincipalRepository
 from tests.pg_utils import PgTestDatabase, fresh_test_database, pg_available
+from tests.support import (
+    ADMIN,
+    OTHER_TENANT,
+    PLATFORM_OPERATOR,
+    seed_principal_repository,
+)
+from tests.support import (
+    anonymous_client as make_anonymous_client,
+)
+from tests.support import (
+    authorized_client as make_authorized_client,
+)
 
 
 @pytest.fixture
@@ -55,13 +68,45 @@ def settings(upload_dir: Path) -> Settings:
 
 
 @pytest.fixture
-def app(settings: Settings):
-    return create_app(settings)
+def principal_repository() -> InMemoryPrincipalRepository:
+    """内存种子主体:登录端点与真实 token 共用同一组账号。"""
+    return seed_principal_repository()
+
+
+@pytest.fixture
+def app(settings: Settings, principal_repository: InMemoryPrincipalRepository):
+    return create_app(settings, principal_repository=principal_repository)
 
 
 @pytest.fixture
 def client(app) -> Iterator[TestClient]:
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+    """默认客户端:种子租户 ``default`` 的 member,携带真实 JWT。"""
+    with make_authorized_client(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def anonymous_client(app) -> Iterator[TestClient]:
+    """匿名客户端:不带凭证,用于断言 401。"""
+    with make_anonymous_client(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def admin_client(app) -> Iterator[TestClient]:
+    with make_authorized_client(app, ADMIN.principal) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def other_tenant_client(app) -> Iterator[TestClient]:
+    with make_authorized_client(app, OTHER_TENANT.principal) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def platform_operator_client(app) -> Iterator[TestClient]:
+    with make_authorized_client(app, PLATFORM_OPERATOR.principal) as test_client:
         yield test_client
 
 
@@ -86,5 +131,6 @@ def probe_app(app):
 
 @pytest.fixture
 def probe_client(probe_app) -> Iterator[TestClient]:
-    with TestClient(probe_app, raise_server_exceptions=False) as test_client:
+    # 探针端点不在受保护路由表里,匿名客户端即可触发各错误路径
+    with make_anonymous_client(probe_app) as test_client:
         yield test_client

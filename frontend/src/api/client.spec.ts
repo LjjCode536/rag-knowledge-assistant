@@ -12,6 +12,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/errors'
 import { buildQuery, request, requestRaw } from '@/api/client'
 import {
+  clearAuthToken,
+  getAuthToken,
+  onUnauthorized,
+  setAuthToken,
+} from '@/auth/session'
+import {
   deleteDocument,
   getDocumentElements,
   listDocuments,
@@ -58,6 +64,52 @@ describe('api 客户端层', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    clearAuthToken()
+    window.sessionStorage.clear()
+  })
+
+  it('携带 token 时统一注入 Authorization 头', async () => {
+    setAuthToken('token-abc')
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(okEnvelope({ total: 0, items: [] }), { status: 200 }),
+    )
+
+    await request('/api/v1/documents')
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer token-abc')
+  })
+
+  it('401 清理 token 并通知外壳回登录页', async () => {
+    setAuthToken('token-expired')
+    const onExpired = vi.fn()
+    const unsubscribe = onUnauthorized(onExpired)
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(errorEnvelope('UNAUTHENTICATED', '凭证无效或已过期'), { status: 401 }),
+    )
+
+    await request('/api/v1/documents').catch(() => undefined)
+
+    expect(getAuthToken()).toBeNull()
+    expect(onExpired).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
+  it('登录失败(本来没有 token)不触发会话失效', async () => {
+    const onExpired = vi.fn()
+    const unsubscribe = onUnauthorized(onExpired)
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(errorEnvelope('UNAUTHENTICATED', '账号或口令不正确'), { status: 401 }),
+    )
+
+    const error = await request('/api/v1/auth/login', {
+      method: 'POST',
+      body: { username: 'member', password: 'wrong' },
+    }).catch((cause: unknown) => cause)
+
+    expect((error as ApiError).code).toBe('UNAUTHENTICATED')
+    expect(onExpired).not.toHaveBeenCalled()
+    unsubscribe()
   })
 
   it('成功信封能取出数据与 trace_id', async () => {
@@ -148,7 +200,6 @@ describe('api 客户端层', () => {
     )
 
     await listDocuments({
-      tenant: 'acme',
       keyword: '手册',
       status: 'indexed',
       include_history: true,
@@ -158,7 +209,7 @@ describe('api 客户端层', () => {
 
     const [url, init] = vi.mocked(fetch).mock.calls[0]
     expect(url).toBe(
-      '/api/v1/documents?tenant=acme&keyword=%E6%89%8B%E5%86%8C&status=indexed&include_history=true&limit=20&offset=40',
+      '/api/v1/documents?keyword=%E6%89%8B%E5%86%8C&status=indexed&include_history=true&limit=20&offset=40',
     )
     expect(init?.method).toBe('GET')
   })
@@ -166,14 +217,14 @@ describe('api 客户端层', () => {
   it('问答请求体与后端契约一致', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(okEnvelope({}), { status: 200 }))
 
-    await ask('年假怎么算?', { top_k: 3, filters: { tenant: 'acme' } })
+    await ask('年假怎么算?', { top_k: 3, filters: { department: '研发部' } })
 
     const [, init] = vi.mocked(fetch).mock.calls[0]
     expect(init?.method).toBe('POST')
     expect(JSON.parse(String(init?.body))).toEqual({
       question: '年假怎么算?',
       top_k: 3,
-      filters: { tenant: 'acme' },
+      filters: { department: '研发部' },
     })
   })
 

@@ -6,7 +6,9 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 
 import App from './App.vue'
+import { onUnauthorized } from './auth/session'
 import router from './router'
+import { useAuthStore } from './stores/auth'
 import './styles/theme.scss'
 import './styles/main.scss'
 
@@ -26,7 +28,22 @@ app.use(VueQueryPlugin, {
   },
 })
 
-// 跨页面客户端状态(当前租户筛选)归 Pinia
-app.use(createPinia())
+// 跨页面客户端状态(登录 token 与当前主体)归 Pinia
+const pinia = createPinia()
+app.use(pinia)
+
+// 401:清凭证并回登录页;客户端层只上报,跳转由外壳决定(ADR-0020)
+const authStore = useAuthStore(pinia)
+onUnauthorized(() => {
+  authStore.signOut()
+  const current = router.currentRoute.value
+  if (current.name !== 'login') {
+    void router.replace({
+      name: 'login',
+      query: { redirect: current.fullPath },
+    })
+  }
+})
+
 app.use(router)
 app.mount('#app')

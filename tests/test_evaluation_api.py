@@ -25,6 +25,7 @@ from app.services.evaluation import (
     render_json,
     render_markdown,
 )
+from tests.support import PLATFORM_OPERATOR, auth_header
 
 DATASET_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "golden_dataset.yaml"
 
@@ -44,7 +45,11 @@ async def _run_evaluation(settings, dataset, *, k: int = 3):
         mode="in-process",
         command="uv run python scripts/evaluate.py --dataset evaluation/golden_dataset.yaml",
     )
-    async with httpx.AsyncClient(transport=transport, base_url="http://evaluation") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://evaluation",
+        headers=auth_header(app, PLATFORM_OPERATOR.principal),
+    ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,
@@ -182,7 +187,11 @@ async def test_dataset_anchor_without_a_match_fails_loudly(settings, tmp_path) -
     )
     app = create_app(settings, embedder=DeterministicEmbedder(dim=EVALUATION_DIM))
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://evaluation") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://evaluation",
+        headers=auth_header(app, PLATFORM_OPERATOR.principal),
+    ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,

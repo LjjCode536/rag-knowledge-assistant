@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.core.errors import DimensionMismatchError
@@ -26,7 +25,7 @@ from app.repositories.memory import InMemoryChunkRepository, InMemoryDocumentRep
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.embedding import EmbeddingService
 from app.services.retrieval import RetrievalService
-from tests.support import json_log_entries
+from tests.support import authorized_client, json_log_entries
 
 _DIM = 4
 _REF = EmbeddingRef(model="fake", version="v1", dimension=_DIM)
@@ -200,7 +199,7 @@ def test_startup_warns_about_stale_identity(settings, capsys) -> None:
     )
     app = create_app(settings, embedder=DeterministicEmbedder(), vector_store=store)
 
-    with TestClient(app):
+    with authorized_client(app):
         pass
 
     entries = [

@@ -1,31 +1,64 @@
 <script setup lang="ts">
 /**
- * 应用外壳:左侧边栏导航 + 顶部标题栏 + 内容区。
+ * 应用外壳:侧边导航 + 顶部标题 + 内容区,以及登录后的主体信息(ADR-0020)。
  *
- * 骨架阶段的取舍(issue #20):
- * - 全局租户选择器在骨架阶段就立起来(数据源后接),选择结果在页面间保持;
- * - 窄屏下侧边栏折叠为抽屉,主要内容区不横向溢出;
- * - 界面文案遵循 `GLOSSARY.md` 的规范术语(知识库文档 / 切片 / 引用 /
- *   查询日志 / 拒答 / 入库进度),不使用其 `_Avoid_` 清单里的同义词。
+ * 租户不再由界面选择:租户、角色与部门来自登录身份,只读展示。登录页不渲染
+ * 应用外壳,避免未认证时看到导航。
+ *
+ * 窄屏下侧栏折叠为抽屉;内容区保持唯一滚动容器。
  */
 import { computed, ref, watch } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
-import TenantSelector from '@/components/TenantSelector.vue'
-import { useTenantOptions } from '@/composables/useTenantOptions'
 import { navItems } from '@/router'
+import { useAuthStore } from '@/stores/auth'
+import type { PrincipalRole } from '@/types/auth'
 
 const MOBILE_BREAKPOINT = 768
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 
-// 租户选项取自后端文档清单的真实租户维度(应用级,不挂在某个页面上)
-useTenantOptions()
+const ROLE_LABELS: Record<PrincipalRole, string> = {
+  member: '成员',
+  admin: '租户管理员',
+  platform_operator: '平台管理员',
+}
 
-/** 窄屏:侧边栏折叠为抽屉。 */
+/** 当前主体的可读名称;主体尚未取回时留空,不伪造身份。 */
+const principalName = computed<string>(
+  () => authStore.principal?.display_name || authStore.principal?.username || '',
+)
+
+/** 当前主体的角色文案。 */
+const roleLabel = computed<string>(() =>
+  authStore.principal ? ROLE_LABELS[authStore.principal.role] : '',
+)
+
+/** 当前主体的租户与部门(只读展示,不提供切换)。 */
+const scopeLabel = computed<string>(() => {
+  const principal = authStore.principal
+  if (!principal) {
+    return ''
+  }
+  const department = principal.department ? ` · ${principal.department}` : ''
+  return `租户 ${principal.tenant}${department}`
+})
+
+/** 登录页不渲染应用外壳。 */
+const isLoginPage = computed<boolean>(() => route.name === 'login')
+
+/** 退出登录:清本地凭证并回登录页(无服务端会话可注销)。 */
+async function onSignOut(): Promise<void> {
+  authStore.signOut()
+  await router.push({ name: 'login' })
+}
+
+/** 窄屏:侧栏折叠为抽屉。 */
 const isNarrow = ref(false)
-/** 抽屉是否展开(窄屏下)。 */
+/** 导航抽屉是否展开(窄屏)。 */
 const drawerOpen = ref(false)
 
 function syncViewport(): void {
@@ -35,13 +68,10 @@ function syncViewport(): void {
 syncViewport()
 window.addEventListener('resize', syncViewport)
 
-/** 当前页标题:取路由 meta 上的标题。 */
-const pageTitle = computed<string>(() => {
-  const title = route.meta.title
-  return typeof title === 'string' ? title : ''
-})
+/** 当前页面标题:取路由 meta 上的标题。 */
+const pageTitle = computed<string>(() => route.meta.title ?? '')
 
-/** 路由切换后收起抽屉(窄屏下导航完应回到内容区)。 */
+/** 路由切换后收起抽屉(窄屏下的导航应答)。 */
 watch(
   () => route.path,
   () => {
@@ -52,8 +82,13 @@ watch(
 
 <template>
   <el-config-provider :locale="zhCn">
-    <el-container class="app-layout">
-      <!-- 宽屏:常驻侧边栏 -->
+    <router-view v-if="isLoginPage" />
+
+    <el-container
+      v-else
+      class="app-layout"
+    >
+      <!-- 宽屏:常驻侧栏 -->
       <el-aside
         v-if="!isNarrow"
         class="app-sidebar"
@@ -62,7 +97,6 @@ watch(
         <div class="app-sidebar__brand">
           企业 AI 知识库
         </div>
-        <TenantSelector />
         <el-menu
           :default-active="route.path"
           router
@@ -78,14 +112,13 @@ watch(
         </el-menu>
       </el-aside>
 
-      <!-- 窄屏:抽屉式侧边栏 -->
+      <!-- 窄屏:抽屉式导航 -->
       <el-drawer
         v-model="drawerOpen"
         direction="ltr"
         size="220px"
         title="企业 AI 知识库"
       >
-        <TenantSelector />
         <el-menu
           :default-active="route.path"
           router
@@ -109,9 +142,30 @@ watch(
               aria-label="打开导航"
               @click="drawerOpen = true"
             >
-              菜单
+              导航
             </el-button>
             <span class="app-header__title">{{ pageTitle }}</span>
+          </div>
+          <div
+            class="app-header__identity"
+            data-testid="app-identity"
+          >
+            <span
+              v-if="principalName"
+              class="app-header__identity-name"
+            >{{ principalName }}</span>
+            <span
+              v-if="scopeLabel"
+              class="app-header__identity-scope"
+            >{{ roleLabel }} · {{ scopeLabel }}</span>
+            <el-button
+              size="small"
+              text
+              data-testid="app-sign-out"
+              @click="onSignOut"
+            >
+              退出登录
+            </el-button>
           </div>
         </el-header>
         <el-main class="app-content">

@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["local", "test", "production"] = "local"
 
+    # ===== 身份与短期 JWT(ADR-0020)=====
+    # 本地演示由后端签发 HS256 token;生产路径应换 OIDC / JWKS(接企业 IdP)。
+    # 默认值只供本地与测试,production 环境必须显式配置,否则启动失败。
+    auth_jwt_secret: str = Field(
+        default="local-dev-only-insecure-secret-change-me",
+        min_length=24,
+    )
+    auth_jwt_issuer: str = "rag-knowledge-assistant"
+    auth_jwt_audience: str = "rag-knowledge-assistant-web"
+    # 短期凭证:默认 1 小时;无 refresh token,过期即重新登录。
+    auth_token_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+
     # ===== 日志 =====
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -168,6 +180,16 @@ class Settings(BaseSettings):
                     "retrieval_vector_weight 与 retrieval_keyword_weight 不可同时为 0"
                 )
         return value
+
+    @model_validator(mode="after")
+    def _production_requires_explicit_auth_secret(self) -> Settings:
+        """生产环境不得使用仓库里的演示签名密钥:身份边界的信任根必须显式。"""
+        if (
+            self.environment == "production"
+            and self.auth_jwt_secret == "local-dev-only-insecure-secret-change-me"
+        ):
+            raise ValueError("production 环境必须显式配置 auth_jwt_secret(至少 24 字符)")
+        return self
 
     @model_validator(mode="after")
     def _pgvector_requires_database_url(self) -> Settings:

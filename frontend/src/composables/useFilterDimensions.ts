@@ -5,8 +5,8 @@
  * 提交(检索页与问答页都是同一套)。散成四个 `ref('')` 会让每个用到它们的
  * 页面都重复一遍"取值 → 判空 → 拼对象"的形状,且容易漏掉某一维。
  *
- * **租户不在这里**:租户是全局筛选(store),不是单次检索的参数 —— 见
- * `stores/tenant.ts`。
+ * **租户不在这里**:租户来自登录身份,后端据 token 收窄;界面不再提供
+ * 租户筛选,也不允许把租户塞进单次检索参数(ADR-0020)。
  */
 import { computed, reactive } from 'vue'
 
@@ -27,9 +27,9 @@ export interface FilterDimensions {
 /**
  * 过滤维度的表单状态与提交口径。
  *
- * @param baseFilters 每次提交都要带上的基础过滤(如全局租户筛选)
+ * 这些维度只是客户端收窄条件;授权范围由服务端按主体构造,越界返回 403。
  */
-export function useFilterDimensions(baseFilters: () => ChunkFilter) {
+export function useFilterDimensions() {
   const dimensions = reactive<FilterDimensions>({
     department: '',
     docType: '',
@@ -44,7 +44,6 @@ export function useFilterDimensions(baseFilters: () => ChunkFilter) {
    * 清空的输入框不该变成"匹配空字符串"的约束。
    */
   const filters = computed<ChunkFilter>(() => ({
-    ...baseFilters(),
     ...(dimensions.department ? { department: dimensions.department } : {}),
     ...(dimensions.docType ? { doc_type: dimensions.docType } : {}),
     ...(dimensions.version ? { version: dimensions.version } : {}),

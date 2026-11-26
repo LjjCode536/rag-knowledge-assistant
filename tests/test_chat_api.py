@@ -16,6 +16,7 @@ from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.services.generation import GeneratedAnswer
 from tests.fake_pdf import build_pdf
+from tests.support import authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 CHAT_URL = "/api/v1/chat"
@@ -93,7 +94,7 @@ def _chat(
 def indexed_client(settings, upload_dir) -> Iterator[tuple[TestClient, dict]]:
     """注入假向量替身,预置一份已入库的员工手册。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         indexed = _index(
             client,
             "employee.md",
@@ -217,7 +218,7 @@ def test_injected_generator_receives_numbered_context(settings, upload_dir):
     app = create_app(
         settings, embedder=DeterministicEmbedder(), answer_generator=generator
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         indexed = _index(
             client,
             "employee.md",
@@ -244,7 +245,7 @@ def test_injected_generator_receives_numbered_context(settings, upload_dir):
 
 def test_chat_on_empty_index_refuses_with_no_hits(settings, upload_dir):
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         data = _chat(client, LEAVE_QUESTION)
         logs = client.get(QUERY_LOGS_URL).json()["data"]
 
@@ -257,7 +258,7 @@ def test_chat_on_empty_index_refuses_with_no_hits(settings, upload_dir):
 
 def test_chat_citation_includes_pdf_page_number(settings, upload_dir):
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         indexed = _index(
             client,
             "handbook.pdf",
@@ -303,7 +304,7 @@ def test_generator_refusal_leaves_no_citations_or_used_hits(settings, upload_dir
         embedder=DeterministicEmbedder(),
         answer_generator=RefusingGenerator(),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client, "employee.md", HANDBOOK, tenant="acme")
 
         data = _chat(client, LEAVE_QUESTION)

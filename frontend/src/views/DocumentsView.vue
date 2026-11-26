@@ -29,10 +29,10 @@ import {
   statusTagType,
 } from '@/components/documentLogic'
 import { useDebounced } from '@/composables/useDebounced'
-import { useTenantStore } from '@/stores/tenant'
+import { useAuthStore } from '@/stores/auth'
 import type { DocumentStatus, DocumentView } from '@/types/documents'
 
-const tenantStore = useTenantStore()
+const authStore = useAuthStore()
 const queryClient = useQueryClient()
 
 /** 关键字输入框的值(用户即时输入)。 */
@@ -53,7 +53,6 @@ const listQuery = useQuery({
       [
         'documents',
         {
-          tenant: tenantStore.filter,
           keyword: keyword.value,
           status: statusFilter.value,
           includeHistory: includeHistory.value,
@@ -64,7 +63,6 @@ const listQuery = useQuery({
   ),
   queryFn: () =>
     listDocuments({
-      tenant: tenantStore.filter,
       keyword: keyword.value || undefined,
       status: statusFilter.value || undefined,
       include_history: includeHistory.value,
@@ -107,7 +105,8 @@ const extensionError = computed<string>(() => {
 const uploadMutation = useMutation({
   mutationFn: (file: File) =>
     uploadDocument(file, {
-      tenant: tenantStore.filter ?? 'default',
+      // 租户由登录身份决定,界面不提供选择(ADR-0020);服务端强制归属见 #29
+      tenant: authStore.principal?.tenant,
       department: uploadDepartment.value || undefined,
       doc_type: uploadDocType.value || undefined,
       version: uploadVersion.value || undefined,
@@ -284,10 +283,6 @@ function formatTime(value: string): string {
         style="margin-top: 12px"
         @submit.prevent="onUpload"
       >
-        <el-form-item label="租户">
-          <span>{{ tenantStore.currentLabel }}</span>
-        </el-form-item>
-
         <el-form-item label="高级设置">
           <el-button
             size="small"
@@ -378,18 +373,6 @@ function formatTime(value: string): string {
             :value="option.value"
           />
         </el-select>
-        <!--
-          租户筛选用**全局租户选择器**的值(不另设一个):后端当前没有用户、
-          会话与鉴权,租户只是一个筛选维度(ADR-0015)。另设一个输入框会
-          造出"两套租户真相"。
-        -->
-        <el-tag
-          size="small"
-          type="info"
-          data-testid="documents-tenant-filter"
-        >
-          租户:{{ tenantStore.currentLabel }}
-        </el-tag>
         <el-checkbox
           v-model="includeHistory"
           data-testid="documents-include-history"

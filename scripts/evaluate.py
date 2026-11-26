@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import Settings, get_settings
 from app.domain.chunks import ChunkingStrategy
 from app.domain.evaluation import EvaluationReport, GenerationMetrics
+from app.domain.identity import Principal, PrincipalKind, Role
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
 from app.services.evaluation import (
@@ -448,7 +449,10 @@ async def _run(
         transport = httpx.ASGITransport(app=app)
         try:
             async with httpx.AsyncClient(
-                transport=transport, base_url="http://evaluation", timeout=120.0
+                transport=transport,
+                base_url="http://evaluation",
+                timeout=120.0,
+                headers=_evaluation_auth_headers(app),
             ) as client:
                 service = EvaluationService(
                     client=client,
@@ -514,6 +518,22 @@ async def _run_ablation(
     return runs, skipped
 
 
+def _evaluation_auth_headers(app) -> dict[str, str]:
+    """进程内评估用的真实 token(平台管理员主体)。
+
+    评估器不经过 HTTP 鉴权豁免(ADR-0020 禁止 ``EVAL_BYPASS``);它和普通
+    调用方一样出示凭证,只是主体由评估进程显式构造。
+    """
+    principal = Principal(
+        id="svc_evaluation",
+        kind=PrincipalKind.SERVICE,
+        tenant="default",
+        role=Role.MEMBER,
+    )
+    issued = app.state.token_service.issue(principal)
+    return {"Authorization": f"Bearer {issued.access_token}"}
+
+
 async def _run_combo(
     dataset,
     *,
@@ -537,7 +557,10 @@ async def _run_combo(
         transport = httpx.ASGITransport(app=app)
         try:
             async with httpx.AsyncClient(
-                transport=transport, base_url="http://evaluation", timeout=120.0
+                transport=transport,
+                base_url="http://evaluation",
+                timeout=120.0,
+                headers=_evaluation_auth_headers(app),
             ) as client:
                 service = EvaluationService(
                     client=client,

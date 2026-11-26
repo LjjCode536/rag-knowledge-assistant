@@ -4,9 +4,12 @@
  * 术语遵循 `GLOSSARY.md`:切片 / 引用 / 有据回答 / 拒答 / 查询日志。
  */
 
-/** 检索前切片元数据过滤条件(权限维度):未给的字段一律放行。 */
+/**
+ * 检索前收窄条件:未给的字段不构成约束。
+ *
+ * 租户不在其中:授权范围由服务端按登录身份构造(ADR-0020)。
+ */
 export interface ChunkFilter {
-  tenant?: string
   department?: string
   doc_type?: string
   version?: string

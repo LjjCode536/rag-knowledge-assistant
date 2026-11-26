@@ -50,11 +50,6 @@ body {
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.app-sidebar__tenant {
-  padding: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
 .app-main {
   display: flex;
   flex-direction: column;
@@ -76,6 +71,26 @@ body {
 .app-header__title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.app-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.app-header__identity-name {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.app-header__identity-scope {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-content {

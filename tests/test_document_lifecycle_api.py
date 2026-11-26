@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.repositories.vector_memory import InMemoryVectorStore
-from tests.support import json_log_entries
+from tests.support import authorized_client, json_log_entries
 from tests.test_embeddings_api import _chunk, _embed, _index
 
 DOCUMENTS_URL = "/api/v1/documents"
@@ -57,7 +57,7 @@ def fake_app(settings):
 
 
 def test_new_version_supersedes_old_version(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         old = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         before = _fetch(client, old)
         assert before["status"] == "indexed"
@@ -88,7 +88,7 @@ def test_new_version_supersedes_old_version(fake_app):
 
 
 def test_superseded_version_keeps_chunk_history_but_not_retrieval(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         old = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         old_chunks = client.get(f"{DOCUMENTS_URL}/{old}/chunks").json()["data"]["chunks"]
         assert old_chunks
@@ -107,7 +107,7 @@ def test_superseded_version_keeps_chunk_history_but_not_retrieval(fake_app):
 
 def test_superseded_document_cannot_reenter_pipeline(fake_app):
     """终态防线:退位版本不得通过切片 / 向量化端点重新进入检索池。"""
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         old = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         _upload_raw(client, NEW_TEXT)
         assert _fetch(client, old)["status"] == "superseded"
@@ -120,7 +120,7 @@ def test_superseded_document_cannot_reenter_pipeline(fake_app):
 def test_hybrid_keyword_channel_also_faces_latest_version(settings):
     settings = settings.model_copy(update={"use_hybrid": True})
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         old = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         new = _upload_raw(client, NEW_TEXT)["id"]
         _chunk(client, new)
@@ -134,7 +134,7 @@ def test_hybrid_keyword_channel_also_faces_latest_version(settings):
 
 
 def test_same_file_name_in_different_tenants_do_not_supersede(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         acme = _index(client, "hr.txt", OLD_TEXT, tenant="acme")["document_id"]
         beta = _index(client, "hr.txt", NEW_TEXT, tenant="beta")["document_id"]
 
@@ -151,7 +151,7 @@ def test_same_file_name_in_different_tenants_do_not_supersede(fake_app):
 
 
 def test_delete_cascades_chunks_and_vectors(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         alive = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         doomed_indexed = _index(client, "ops.txt", "运维 值班 监控告警\n")
         doomed = doomed_indexed["document_id"]
@@ -184,7 +184,7 @@ def test_delete_cascades_chunks_and_vectors(fake_app):
 
 
 def test_delete_is_idempotent(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         doomed = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         first = client.delete(f"{DOCUMENTS_URL}/{doomed}")
         assert first.status_code == 200
@@ -196,7 +196,7 @@ def test_delete_is_idempotent(fake_app):
 
 
 def test_delete_unknown_document_returns_404(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         response = client.delete(f"{DOCUMENTS_URL}/no-such-document")
 
         assert response.status_code == 404
@@ -205,7 +205,7 @@ def test_delete_unknown_document_returns_404(fake_app):
 
 
 def test_delete_failed_document_lands_in_deleted_state(fake_app):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         doomed = client.post(
             DOCUMENTS_URL,
             files={"file": ("broken.pdf", b"this is not a pdf", "application/pdf")},
@@ -239,7 +239,7 @@ def test_delete_failure_keeps_record_and_reason_then_retry_succeeds(settings):
     app = create_app(
         settings, embedder=DeterministicEmbedder(), vector_store=FailedOnceVectorStore()
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         doomed = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         before = _fetch(client, doomed)
 
@@ -272,7 +272,7 @@ def test_supersede_failure_keeps_latest_and_reason_then_retry_succeeds(settings)
     app = create_app(
         settings, embedder=DeterministicEmbedder(), vector_store=FailedOnceVectorStore()
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         old = _index(client, "hr.txt", OLD_TEXT)["document_id"]
 
         response = client.post(
@@ -306,7 +306,7 @@ def test_supersede_failure_keeps_latest_and_reason_then_retry_succeeds(settings)
 
 
 def test_supersede_and_delete_log_structured_events(fake_app, capsys):
-    with TestClient(fake_app, raise_server_exceptions=False) as client:
+    with authorized_client(fake_app, raise_server_exceptions=False) as client:
         doomed = _index(client, "hr.txt", OLD_TEXT)["document_id"]
         # 新版本上新:旧版本退位;随后删除退位版本:终态与日志全程可查
         _upload_raw(client, NEW_TEXT)

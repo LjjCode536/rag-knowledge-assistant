@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
+from tests.support import authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 CHAT_URL = "/api/v1/chat"
@@ -61,7 +62,7 @@ def _chat(
 def indexed_client(settings, upload_dir) -> Iterator[TestClient]:
     """注入假向量替身,预置一份已入库的员工手册。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client, "employee.md", HANDBOOK, tenant="acme")
         yield client
 

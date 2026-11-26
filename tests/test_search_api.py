@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.integrations.llm.deterministic import DeterministicEmbedder
+from tests.support import authorized_client
 from tests.test_embeddings_api import (
     ALPHA_TEXT,
     BETA_TEXT,
@@ -35,7 +36,7 @@ def indexed_client(settings):
     from app.main import create_app
 
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         alpha = _upload(
             client,
             "hr.txt",
@@ -95,7 +96,7 @@ def chroma_indexed_client(settings, tmp_path):
     from app.main import create_app
 
     app = create_app(chroma_settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         alpha = _upload(
             client,
             "hr.txt",
@@ -246,7 +247,7 @@ def test_search_empty_index_returns_zero_hits(settings, upload_dir):
     from app.main import create_app
 
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app) as client:
+    with authorized_client(app) as client:
         data = _search(client, query="垃圾分类怎么处理")
     assert data["total"] == 0
     assert data["hits"] == []

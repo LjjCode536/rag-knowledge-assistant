@@ -19,6 +19,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useAuthStore } from '@/stores/auth'
 import DocumentsView from '@/views/DocumentsView.vue'
 
 /** 构造一个成功信封。 */
@@ -264,9 +265,19 @@ describe('知识库文档页组件行为', () => {
       expect(uploadCalls).toHaveLength(0)
     })
 
-    it('受支持的文件可以上传,并带上租户与高级设置字段', async () => {
+    it('受支持的文件可以上传:租户取登录身份,高级设置照常提交', async () => {
       stubDocuments({})
       const wrapper = mountView(DocumentsView)
+      // 登录主体携带租户:上传归属它,界面不提供租户选择器
+      useAuthStore().principal = {
+        id: 'usr_member',
+        username: 'member',
+        kind: 'user',
+        tenant: 'default',
+        role: 'member',
+        department: '研发部',
+        display_name: 'member',
+      }
       await waitForList(wrapper)
 
       await pickFile(wrapper, makeFile('manual.txt'))
@@ -287,7 +298,7 @@ describe('知识库文档页组件行为', () => {
         .mocked(fetch)
         .mock.calls.find(([url]) => String(url) === '/api/v1/documents')?.[1]?.body as FormData
       expect((form.get('file') as File).name).toBe('manual.txt')
-      // 租户取全局租户选择器的值
+      // 租户取登录主体,不由界面选择
       expect(form.get('tenant')).toBe('default')
       expect(form.get('version')).toBe('v1')
     })
@@ -778,7 +789,7 @@ describe('知识库文档页组件行为', () => {
       expect(wrapper.find('[data-testid="documents-copy-id"]').text()).toContain('doc-1')
     })
 
-    it('租户筛选维度来自清单回传的租户', async () => {
+    it('租户是档案上的只读字段,不再提供筛选器', async () => {
       stubDocuments({
         list: {
           total: 1,

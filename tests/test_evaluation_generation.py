@@ -22,6 +22,7 @@ from app.domain.evaluation import (
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
 from app.services.evaluation import EvaluationConfig, EvaluationService
+from tests.support import PLATFORM_OPERATOR, auth_header
 
 CORPUS = """# 售后服务制度
 
@@ -66,7 +67,11 @@ def _dataset(tmp_path: Path, extra_cases: list[GoldenCase]) -> GoldenDataset:
 async def _run(settings, dataset: GoldenDataset, tmp_path: Path):
     app = create_app(settings, embedder=DeterministicEmbedder(dim=EVALUATION_DIM))
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://evaluation") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://evaluation",
+        headers=auth_header(app, PLATFORM_OPERATOR.principal),
+    ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,

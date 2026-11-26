@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from app.api.dependencies import require_principal
+from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.chunks import router as chunks_router
 from app.api.routes.documents import router as documents_router
@@ -27,6 +29,7 @@ from app.domain.repositories import (
     ChunkRepository,
     DocumentRepository,
     FeedbackRepository,
+    PrincipalRepository,
     QueryLogRepository,
     StatsRepository,
 )
@@ -42,11 +45,13 @@ from app.repositories.memory import (
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
     InMemoryFeedbackRepository,
+    InMemoryPrincipalRepository,
     InMemoryQueryLogRepository,
     InMemoryStatsRepository,
 )
 from app.repositories.vector_memory import InMemoryVectorStore
 from app.services.answering import AnswerService
+from app.services.auth import AuthService, TokenService
 from app.services.chunking import ChunkingService
 from app.services.document_catalog import DocumentCatalogService
 from app.services.embedding import Embedder, EmbeddingService
@@ -143,6 +148,7 @@ class _Persistence:
     query_logs: QueryLogRepository
     feedbacks: FeedbackRepository
     stats: StatsRepository
+    principals: PrincipalRepository
     store: VectorStore
     # pgvector 模式下四仓储与向量库共用;memory / chroma 模式恒为 None
     pg: PgDatabase | None = None
@@ -164,6 +170,7 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
             PgDatabase,
             PgDocumentRepository,
             PgFeedbackRepository,
+            PgPrincipalRepository,
             PgQueryLogRepository,
             PgStatsRepository,
         )
@@ -179,6 +186,7 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
             query_logs=query_logs,
             feedbacks=PgFeedbackRepository(pg_database),
             stats=PgStatsRepository(db=pg_database),
+            principals=PgPrincipalRepository(pg_database),
             store=vector_store if vector_store is not None else PgVectorStore(pg_database),
             pg=pg_database,
         )
@@ -194,6 +202,8 @@ def _build_persistence(settings: Settings, vector_store: VectorStore | None) -> 
         stats=InMemoryStatsRepository(
             documents=documents, chunks=chunks, query_logs=query_logs
         ),
+        # 不创建默认账号:内存模式下由调用方显式传入种子夹具(ADR-0020)
+        principals=InMemoryPrincipalRepository(),
         store=vector_store if vector_store is not None else _build_vector_store(settings),
     )
 
@@ -207,11 +217,13 @@ def create_app(
     query_planner: QueryPlanner | None = None,
     reranker: Reranker | None = None,
     vector_store: VectorStore | None = None,
+    principal_repository: PrincipalRepository | None = None,
 ) -> FastAPI:
     """建应用;embedder、生成器与高级检索协作对象可注入替身(测试),缺省走真实实现。
 
     embedder 与文档仓储、切片仓储、向量库、关键词索引一起注入服务层;
     生成器在问答服务处替换。真实上游与假替身在主接缝处互换,其余装配零改动。
+    ``principal_repository`` 供测试注入内存种子夹具;服务启动从不自动建号。
     """
     settings = settings or get_settings()
     configure_logging(settings)
@@ -234,6 +246,15 @@ def create_app(
         else _build_answer_generator(settings, llm_client)
     )
     persistence = _build_persistence(settings, vector_store)
+    # 显式注入优先:测试用内存种子夹具;未注入时随持久化模式取主体仓储
+    effective_principal_repository = (
+        principal_repository if principal_repository is not None else persistence.principals
+    )
+    token_service = TokenService.from_settings(settings)
+    auth_service = AuthService(
+        principal_repository=effective_principal_repository,
+        token_service=token_service,
+    )
     document_repository = persistence.documents
     chunk_repository = persistence.chunks
     effective_vector_store = persistence.store
@@ -330,6 +351,9 @@ def create_app(
     )
     app.state.settings = settings
     app.state.llm_client = llm_client
+    app.state.principal_repository = effective_principal_repository
+    app.state.token_service = token_service
+    app.state.auth_service = auth_service
     app.state.ingestion_service = ingestion_service
     app.state.chunking_service = chunking_service
     app.state.embedding_service = embedding_service
@@ -349,13 +373,19 @@ def create_app(
 
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)
+    # 公共面只有存活探针与登录;其余端点一律先过真实鉴权(ADR-0020)
     app.include_router(health_router)
-    app.include_router(documents_router)
-    app.include_router(chunks_router)
-    app.include_router(embeddings_router)
-    app.include_router(search_router)
-    app.include_router(chat_router)
-    app.include_router(query_logs_router)
-    app.include_router(feedback_router)
-    app.include_router(stats_router)
+    app.include_router(auth_router)
+    protected_routers = (
+        documents_router,
+        chunks_router,
+        embeddings_router,
+        search_router,
+        chat_router,
+        query_logs_router,
+        feedback_router,
+        stats_router,
+    )
+    for router in protected_routers:
+        app.include_router(router, dependencies=[Depends(require_principal)])
     return app

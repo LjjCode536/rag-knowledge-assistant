@@ -35,6 +35,9 @@ class ErrorCode(StrEnum):
     DOCUMENT_SUPERSEDE_FAILED = "DOCUMENT_SUPERSEDE_FAILED"
     DOCUMENT_DELETE_FAILED = "DOCUMENT_DELETE_FAILED"
 
+    # 身份(ADR-0020):未认证 / 凭证失效。稳定错误码,新增只追加。
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+
 
 class AppError(Exception):
     """所有可预期异常的基类。"""

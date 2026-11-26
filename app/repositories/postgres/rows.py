@@ -25,6 +25,7 @@ from app.domain.documents import (
     ParsedDocument,
 )
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.identity import Principal, PrincipalAccount, PrincipalKind, Role
 from app.domain.qa import (
     GenerationUsage,
     GeneratorKind,
@@ -72,6 +73,32 @@ class _DocumentRow(_RowModel):
     def _null_warnings_are_empty(cls, value: Any) -> Any:
         """库里 chunk_warnings 可能是 NULL:按空告警列表处理。"""
         return [] if value is None else value
+
+
+class _PrincipalRow(_RowModel):
+    principal_id: str
+    username: str | None = None
+    kind: PrincipalKind = PrincipalKind.USER
+    tenant: str
+    role: Role
+    department: str | None = None
+    display_name: str | None = None
+    password_hash: str | None = None
+
+
+def principal_from_row(row: Mapping[str, Any]) -> PrincipalAccount:
+    """principals 行 → 主体账号(哈希只留在仓储边界内)。"""
+    mapped = _PrincipalRow.model_validate(dict(row))
+    principal = Principal(
+        id=mapped.principal_id,
+        kind=mapped.kind,
+        tenant=mapped.tenant,
+        role=mapped.role,
+        department=mapped.department,
+        username=mapped.username,
+        display_name=mapped.display_name,
+    )
+    return PrincipalAccount(principal=principal, password_hash=mapped.password_hash)
 
 
 class _ChunkRow(_RowModel):

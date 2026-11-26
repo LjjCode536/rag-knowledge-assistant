@@ -23,6 +23,7 @@ from app.repositories.postgres import (
     PgQueryLogRepository,
     PgStatsRepository,
 )
+from tests.support import authorized_client
 
 STATS_URL = "/api/v1/stats"
 
@@ -194,13 +195,12 @@ def test_pg_stats_counts_documents_and_chunks(test_pg_database):
 
 def test_pg_stats_survives_application_restart(settings, test_pg_database):
     """统计来自持久化数据:重开应用(等效重启容器)统计仍在。"""
-    from fastapi.testclient import TestClient
 
     pg_settings = settings.model_copy(
         update={"vector_store": "pgvector", "database_url": test_pg_database.dsn}
     )
 
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:
@@ -229,7 +229,7 @@ def test_pg_stats_survives_application_restart(settings, test_pg_database):
     assert before["qa"]["query_count"] == 1
 
     # "重启容器":全新应用实例挂同库,内存态俱已清零,统计必须仍在
-    with TestClient(
+    with authorized_client(
         create_app(pg_settings, embedder=DeterministicEmbedder()),
         raise_server_exceptions=False,
     ) as client:

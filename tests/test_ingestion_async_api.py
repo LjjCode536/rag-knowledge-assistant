@@ -14,7 +14,7 @@ from app.core.errors import UpstreamTimeoutError
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from tests.fake_pdf import build_pdf
-from tests.support import json_log_entries
+from tests.support import authorized_client, json_log_entries
 
 DOCUMENTS_URL = "/api/v1/documents"
 SEARCH_URL = "/api/v1/search"
@@ -45,7 +45,7 @@ def async_client(settings):
         settings.model_copy(update={"ingestion_async": True}),
         embedder=DeterministicEmbedder(),
     )
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+    with authorized_client(app, raise_server_exceptions=False) as test_client:
         yield test_client
 
 
@@ -125,7 +125,7 @@ def test_upstream_embed_failure_keeps_document_chunked_and_manual_retry_indexes(
     app = create_app(
         settings.model_copy(update={"ingestion_async": True}), embedder=FlakyEmbedder()
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         body = _upload(client, name="hr.txt", content=ALPHA_TEXT.encode())
         document_id = body["data"]["id"]
 
@@ -178,7 +178,7 @@ def test_async_and_sync_paths_land_same_state_and_same_search_results(settings):
     )
 
     def run_pipeline(client: TestClient, *, async_mode: bool) -> tuple[dict, list]:
-        with TestClient(client, raise_server_exceptions=False) as in_pipeline_client:
+        with authorized_client(client, raise_server_exceptions=False) as in_pipeline_client:
             body = _upload(
                 in_pipeline_client,
                 name="hr.txt",
@@ -248,7 +248,7 @@ def test_delete_during_pipeline_wins_and_pipeline_yields(settings):
         embedder_ref := app.state.embedding_service._documents,
         app.state.lifecycle_service,
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         body = _upload(client, name="hr.txt", content=ALPHA_TEXT.encode())
         document_id = body["data"]["id"]
         assert document_id == next(iter(embedder_ref._records))

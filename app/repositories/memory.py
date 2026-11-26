@@ -10,6 +10,7 @@ from app.domain.chunks import Chunk
 from app.domain.documents import DocumentFilter, DocumentRecord, DocumentStatus
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.identity import PrincipalAccount
 from app.domain.qa import QueryLog
 from app.domain.stats import (
     BucketAggregate,
@@ -337,6 +338,48 @@ def _match_documents(
             continue
         matched.append(record)
     return matched
+
+
+class InMemoryPrincipalRepository:
+    """主体账号的内存实现:测试夹具与无库开发用,重启即失忆。
+
+    仓储本身不创建任何默认账号 —— 种子账号由调用方显式传入;生产形态由
+    ``scripts/seed_principals.py`` 显式写入 PostgreSQL(ADR-0020)。
+    """
+
+    def __init__(self, accounts: Sequence[PrincipalAccount] = ()) -> None:
+        self._by_id: dict[str, PrincipalAccount] = {}
+        self._by_username: dict[str, PrincipalAccount] = {}
+        self._lock = threading.Lock()
+        for account in accounts:
+            self.upsert(account)
+
+    def find_by_username(self, username: str) -> PrincipalAccount | None:
+        with self._lock:
+            return self._by_username.get(username)
+
+    def get(self, principal_id: str) -> PrincipalAccount | None:
+        with self._lock:
+            return self._by_id.get(principal_id)
+
+    def upsert(self, account: PrincipalAccount) -> None:
+        with self._lock:
+            username = account.principal.username
+            if username is not None:
+                owner = self._by_username.get(username)
+                if owner is not None and owner.principal.id != account.principal.id:
+                    # 与 principals.username 唯一约束同语义:登录名不得歧义
+                    raise ValueError(f"登录名已被其他主体占用:{username}")
+            existing = self._by_id.get(account.principal.id)
+            if existing is not None and existing.principal.username is not None:
+                self._by_username.pop(existing.principal.username, None)
+            self._by_id[account.principal.id] = account
+            if username is not None:
+                self._by_username[username] = account
+
+    def list(self) -> list[PrincipalAccount]:
+        with self._lock:
+            return sorted(self._by_id.values(), key=lambda item: item.principal.id)
 
 
 def _in_range(

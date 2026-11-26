@@ -89,10 +89,8 @@ export interface DocumentList {
   items: DocumentView[]
 }
 
-/** 文档清单的查询参数:与端点契约一一对应。 */
+/** 文档清单的查询参数:与端点契约一一对应;租户由登录身份决定。 */
 export interface DocumentListParams {
-  /** 按租户精确匹配。 */
-  tenant?: string
   /** 按状态精确匹配。 */
   status?: DocumentStatus
   /** 按文件名子串匹配(大小写不敏感)。 */

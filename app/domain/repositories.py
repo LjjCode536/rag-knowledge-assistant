@@ -10,6 +10,7 @@ from app.domain.chunks import Chunk
 from app.domain.documents import DocumentFilter, DocumentRecord
 from app.domain.evaluation import EvaluationReport
 from app.domain.feedback import FeedbackRecord, FeedbackVerdict
+from app.domain.identity import PrincipalAccount
 from app.domain.qa import QueryLog
 from app.domain.stats import BucketAggregate, StatsBucketKind, TokenUsageSummary
 
@@ -63,6 +64,32 @@ class DocumentRepository(Protocol):
         与 :meth:`list` 同一套筛选条件(分页除外),故 ``total`` 与清单口径
         必然一致。
         """
+        ...
+
+
+class PrincipalRepository(Protocol):
+    """主体账号的存取契约(ADR-0020)。
+
+    内存实现供开发与测试夹具使用,生产形态落 PostgreSQL 的 ``principals``
+    表;两种实现的行为一致:按用户名或 id 取账号、按主体 id 幂等写入。
+    重复登录名在两种实现都按程序错误拒绝(异常类型随存储而异:PG 唯一约束 /
+    内存 ValueError)。服务启动不自动建号,种子账号由显式脚本创建。
+    """
+
+    def find_by_username(self, username: str) -> PrincipalAccount | None:
+        """按登录名取账号;不存在返回 None。"""
+        ...
+
+    def get(self, principal_id: str) -> PrincipalAccount | None:
+        """按主体 id 取账号;不存在返回 None。"""
+        ...
+
+    def upsert(self, account: PrincipalAccount) -> None:
+        """按主体 id 幂等写入:已存在则整条覆盖(种子脚本可重复执行)。"""
+        ...
+
+    def list(self) -> list[PrincipalAccount]:
+        """列出全部账号(测试与运维脚本用)。"""
         ...
 
 

@@ -13,6 +13,7 @@
  *   返回带 BOM 的裸 CSV,该端点**不走**本文件的信封拆解,由
  *   `requestRaw` 单独处理。
  */
+import { getAuthToken, notifyUnauthorized } from '@/auth/session'
 import type { ApiEnvelope } from '@/types/envelope'
 
 import { ApiError } from './errors'
@@ -75,6 +76,7 @@ export async function request<DataT>(
   const url = `${path}${buildQuery(options.query)}`
   const method = options.method ?? (options.body === undefined ? 'GET' : 'POST')
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const token = getAuthToken()
 
   let response: Response
   try {
@@ -82,6 +84,8 @@ export async function request<DataT>(
       method,
       headers: {
         Accept: 'application/json',
+        // 统一注入凭证:页面只调 api/ 层函数,不各自拼 Authorization
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(isFormData || options.body === undefined
           ? {}
           : { 'Content-Type': 'application/json' }),
@@ -106,7 +110,18 @@ export async function request<DataT>(
     })
   }
 
+  handleExpiredSession(response)
   return parseEnvelope<DataT>(response)
+}
+
+/**
+ * 401 会话失效:原本带着 token 的请求被拒才清理;登录失败(本来没 token)
+ * 不清也不跳转。客户端层只负责清凭证与通知,回登录页由应用外壳决定。
+ */
+function handleExpiredSession(response: Response): void {
+  if (response.status === 401 && getAuthToken()) {
+    notifyUnauthorized()
+  }
 }
 
 /** 解析响应信封:按 `code` 判成败,失败抛 `ApiError`(带上 trace_id)。 */
@@ -152,9 +167,14 @@ export async function requestRaw(
 ): Promise<string> {
   const url = `${path}${buildQuery(options.query)}`
   const method = options.method ?? 'GET'
+  const token = getAuthToken()
   const response = await fetch(url, {
     method,
-    headers: { Accept: 'text/csv, */*', ...options.headers },
+    headers: {
+      Accept: 'text/csv, */*',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
     body:
       options.body === undefined
         ? undefined
@@ -162,6 +182,7 @@ export async function requestRaw(
     signal: options.signal,
   })
   if (!response.ok) {
+    handleExpiredSession(response)
     throw new ApiError({
       code: `HTTP_${response.status}`,
       message: `导出失败(HTTP ${response.status})`,

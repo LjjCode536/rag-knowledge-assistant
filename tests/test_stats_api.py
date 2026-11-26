@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
+from tests.support import authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 CHAT_URL = "/api/v1/chat"
@@ -57,7 +58,7 @@ def _chat(client: TestClient, question: str) -> dict:
 def indexed_client(settings, upload_dir) -> Iterator[TestClient]:
     """注入假向量替身,预置一份已入库的员工手册。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client, "employee.md", HANDBOOK, tenant="acme")
         yield client
 
@@ -160,7 +161,7 @@ def test_cost_endpoint_prices_tokens_with_configured_rates(settings, upload_dir)
         embedder=DeterministicEmbedder(),
         answer_generator=_UsageGenerator(),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client, "employee.md", HANDBOOK, tenant="acme")
         _chat(client, LEAVE_QUESTION)
 
@@ -259,7 +260,7 @@ def test_cost_excludes_cached_answers_from_token_usage(settings, upload_dir):
         embedder=DeterministicEmbedder(),
         answer_generator=_UsageGenerator(),
     )
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         _index(client, "employee.md", HANDBOOK, tenant="acme")
 
         first = client.post(CHAT_URL, json={"question": LEAVE_QUESTION})

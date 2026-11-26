@@ -12,17 +12,12 @@ import { search } from '@/api'
 import ErrorDetails from '@/components/ErrorDetails.vue'
 import { describeEffectiveFilters } from '@/components/filterDimensions'
 import { useFilterDimensions } from '@/composables/useFilterDimensions'
-import { useTenantStore } from '@/stores/tenant'
 import type { SearchHit } from '@/types/qa'
-
-const tenantStore = useTenantStore()
 
 const query = ref('')
 const topK = ref(5)
 /** 过滤维度:部门 / 文档类型 / 版本 / 文档 id(与问答页同一套口径)。 */
-const { dimensions, filters } = useFilterDimensions(() =>
-  tenantStore.filter ? { tenant: tenantStore.filter } : {},
-)
+const { dimensions, filters } = useFilterDimensions()
 
 const searchMutation = useMutation({
   mutationFn: () =>
@@ -114,7 +109,7 @@ type HitRow = SearchHit
         </el-form-item>
       </el-form>
       <p class="page-hint">
-        当前租户:<strong>{{ tenantStore.currentLabel }}</strong>。过滤发生在检索之前,被过滤掉的切片不参与打分与排名。
+        租户来自登录身份;过滤发生在检索之前,被过滤掉的切片不参与打分与排名。
       </p>
     </el-card>
 

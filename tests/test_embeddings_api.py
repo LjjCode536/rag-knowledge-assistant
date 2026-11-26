@@ -17,7 +17,7 @@ from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.services.chunking import ChunkingService
 from app.services.embedding import EmbeddingService
-from tests.support import json_log_entries
+from tests.support import authorized_client, json_log_entries
 
 DOCUMENTS_URL = "/api/v1/documents"
 SEARCH_URL = "/api/v1/search"
@@ -58,7 +58,7 @@ def _index(client: TestClient, name: str, content: str, **form: str) -> dict:
 def fake_client(settings, upload_dir) -> Iterator[TestClient]:
     """注入确定性假向量替身的应用,向量全程本地产生。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+    with authorized_client(app, raise_server_exceptions=False) as test_client:
         yield test_client
 
 
@@ -139,7 +139,7 @@ def test_embed_upstream_failure_leaves_document_indexable_again(
     upload_dir, settings, capsys
 ):
     app = create_app(settings, embedder=TimeoutEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         document_id = _upload(client, "hr.txt", ALPHA_TEXT)["data"]["id"]
         _chunk(client, document_id)
 
@@ -166,7 +166,7 @@ def test_rechunk_during_embedding_rejects_stale_vectors(settings, upload_dir):
     断言全部走 HTTP 公共接缝与检索接口。
     """
     app = create_app(settings, embedder=DeterministicEmbedder())
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with authorized_client(app, raise_server_exceptions=False) as client:
         document_id = _upload(client, "hr.txt", ALPHA_TEXT)["data"]["id"]
         _chunk(client, document_id)
 

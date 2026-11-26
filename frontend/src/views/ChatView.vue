@@ -23,18 +23,13 @@ import { answerViewOfChat, answerViewOfQueryLog, type AnswerView } from '@/compo
 import { splitAnswerSegments } from '@/components/answerSegments'
 import { describeEffectiveFilters } from '@/components/filterDimensions'
 import { useFilterDimensions } from '@/composables/useFilterDimensions'
-import { useTenantStore } from '@/stores/tenant'
-
-const tenantStore = useTenantStore()
 
 /** 问题输入。 */
 const question = ref('')
 /** top_k:检索返回的切片数上限。 */
 const topK = ref(5)
-/** 过滤维度:与后端 `ChunkFilter` 同名(部门 / 文档类型 / 版本 / 文档 id)。 */
-const { dimensions, filters } = useFilterDimensions(() =>
-  tenantStore.filter ? { tenant: tenantStore.filter } : {},
-)
+/** 过滤维度:部门 / 文档类型 / 版本 / 文档 id(租户由 token 决定)。 */
+const { dimensions, filters } = useFilterDimensions()
 /** 当前展示的回答(本次提问或回看历史,归一后的形状)。 */
 const answer = ref<AnswerView | null>(null)
 /** 假流式的已展示长度(打字机动画)。 */
@@ -429,8 +424,7 @@ onBeforeUnmount(stopTyping)
           </el-form-item>
         </el-form>
         <p class="page-hint">
-          提问时带上租户筛选:当前租户
-          <strong>{{ tenantStore.currentLabel }}</strong>。租户是筛选维度,不是权限控制。
+          租户、角色与部门来自登录身份;检索只在服务端构造的授权范围内发生。
         </p>
       </el-card>
 
