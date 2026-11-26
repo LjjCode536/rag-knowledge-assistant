@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import structlog
 from fastapi import Depends, FastAPI
 
-from app.api.dependencies import require_principal
+from app.api.dependencies import reject_tenant_parameter, require_principal
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.chunks import router as chunks_router
@@ -391,5 +391,8 @@ def create_app(
         stats_router,
     )
     for router in protected_routers:
-        app.include_router(router, dependencies=[Depends(require_principal)])
+        app.include_router(
+            router,
+            dependencies=[Depends(require_principal), Depends(reject_tenant_parameter)],
+        )
     return app

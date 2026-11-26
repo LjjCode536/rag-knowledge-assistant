@@ -14,7 +14,7 @@ from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.repositories.memory import InMemoryDocumentRepository
 from app.repositories.postgres import PgDatabase, PgDocumentRepository
-from tests.support import authorized_client
+from tests.support import OTHER_TENANT, authorized_client
 
 DOCUMENTS_URL = "/api/v1/documents"
 
@@ -254,3 +254,46 @@ def test_document_list_endpoint_over_pgvector(settings, test_pg_database):
         listed = client.get(DOCUMENTS_URL).json()["data"]
         assert listed["total"] == 1
         assert listed["items"][0]["id"] == document_id
+
+
+def test_document_reads_over_pgvector_follow_principal_scope(
+    settings, test_pg_database
+):
+    """pgvector 装配下对象读路径与内存口径一致:跨租户 404,本租户可读。"""
+    pg_settings = settings.model_copy(
+        update={"vector_store": "pgvector", "database_url": test_pg_database.dsn}
+    )
+    app = create_app(pg_settings, embedder=DeterministicEmbedder())
+
+    with (
+        authorized_client(app, raise_server_exceptions=False) as default_client,
+        authorized_client(
+            app, OTHER_TENANT.principal, raise_server_exceptions=False
+        ) as other_client,
+    ):
+        mine = default_client.post(
+            DOCUMENTS_URL,
+            files={"file": ("mine.md", "# 我的文档\n\n正文。\n".encode(), "text/markdown")},
+        )
+        assert mine.status_code == 201, mine.text
+        mine_id = mine.json()["data"]["id"]
+
+        theirs = other_client.post(
+            DOCUMENTS_URL,
+            files={"file": ("theirs.md", "# 别家文档\n\n正文。\n".encode(), "text/markdown")},
+            data={"tenant": "other"},
+        )
+        assert theirs.status_code == 201, theirs.text
+        theirs_id = theirs.json()["data"]["id"]
+
+        for suffix in ("", "/elements", "/chunks"):
+            assert (
+                default_client.get(f"{DOCUMENTS_URL}/{mine_id}{suffix}").status_code
+                == 200
+            )
+            blocked = default_client.get(f"{DOCUMENTS_URL}/{theirs_id}{suffix}")
+            assert blocked.status_code == 404, blocked.text
+            assert blocked.json()["code"] == "NOT_FOUND"
+
+            own = other_client.get(f"{DOCUMENTS_URL}/{theirs_id}{suffix}")
+            assert own.status_code == 200, own.text

@@ -35,7 +35,7 @@ def golden_dataset():
     return load_golden_dataset(DATASET_PATH)
 
 
-async def _run_evaluation(settings, dataset, *, k: int = 3):
+async def _run_evaluation(settings, dataset, *, k: int = 3, dataset_dir=None):
     app = create_app(settings, embedder=DeterministicEmbedder(dim=EVALUATION_DIM))
     transport = httpx.ASGITransport(app=app)
     config = EvaluationConfig(
@@ -52,7 +52,7 @@ async def _run_evaluation(settings, dataset, *, k: int = 3):
         service = EvaluationService(
             client=client,
             dataset=dataset,
-            dataset_dir=DATASET_PATH.parent,
+            dataset_dir=dataset_dir or DATASET_PATH.parent,
             config=config,
             headers_for_tenant=lambda tenant: auth_header_for_tenant(app, tenant),
         )
@@ -200,3 +200,63 @@ async def test_dataset_anchor_without_a_match_fails_loudly(settings, tmp_path) -
         )
         with pytest.raises(EvaluationDatasetError, match="命中 0 个切片"):
             await service.run()
+
+
+async def test_filterless_case_resolves_tenant_from_single_tenant_corpus(
+    settings, tmp_path
+) -> None:
+    """未声明 filters 的单租户(非 default)语料:按语料租户解析,不落空。"""
+    corpus = tmp_path / "handbook.md"
+    corpus.write_text(
+        "# 员工手册\n\n入职满一年可以申请年假。\n", encoding="utf-8"
+    )
+    dataset = GoldenDataset(
+        name="filterless-acme",
+        version=1,
+        corpus=[CorpusDocument(path="handbook.md", tenant="acme")],
+        cases=[
+            GoldenCase(
+                id="leave_without_filters",
+                question="入职多久可以申请年假?",
+                category=EvaluationCategory.LEAVE,
+                expected_chunks=[
+                    ExpectedChunk(document="handbook.md", anchor="入职满一年")
+                ],
+            )
+        ],
+    )
+
+    report = await _run_evaluation(settings, dataset, dataset_dir=tmp_path)
+
+    result = report.case_results[0]
+    assert result.filters == {"tenant": "acme"}
+    assert result.recall_at_k == pytest.approx(1.0)
+    assert result.hit_rate == pytest.approx(1.0)
+
+
+async def test_filterless_case_spanning_tenants_fails_loudly(
+    settings, tmp_path
+) -> None:
+    """引用跨租户文档却未声明 filters:大声失败,不静默猜一个租户。"""
+    (tmp_path / "mine.md").write_text("# 我方手册\n\n年假制度。\n", encoding="utf-8")
+    (tmp_path / "theirs.md").write_text("# 别家手册\n\n年假制度。\n", encoding="utf-8")
+    dataset = GoldenDataset(
+        name="filterless-span",
+        version=1,
+        corpus=[
+            CorpusDocument(path="mine.md", tenant="acme"),
+            CorpusDocument(path="theirs.md", tenant="globex"),
+        ],
+        cases=[
+            GoldenCase(
+                id="span_tenants",
+                question="年假制度是什么?",
+                category=EvaluationCategory.LEAVE,
+                expected_chunks=[ExpectedChunk(document="mine.md", anchor="年假制度")],
+                forbidden_documents=["theirs.md"],
+            )
+        ],
+    )
+
+    with pytest.raises(EvaluationDatasetError, match="跨租户"):
+        await _run_evaluation(settings, dataset, dataset_dir=tmp_path)

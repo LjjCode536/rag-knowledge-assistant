@@ -261,8 +261,9 @@ class EvaluationService:
         )
 
     async def _evaluate_case(self, case: GoldenCase, index: _CorpusIndex) -> CaseResult:
+        scope = self._resolve_scope(case)
         expected = [self._resolve_expected(case, item, index) for item in case.expected_chunks]
-        hits = await self._search(case.question, case.filters, tenant=case.filters.tenant)
+        hits = await self._search(case.question, scope)
         retrieved = _retrieved(hits, index)
         expected_ids = [item.chunk_id for item in expected]
         retrieved_ids = [item.chunk_id for item in retrieved]
@@ -281,7 +282,7 @@ class EvaluationService:
 
         # 生成链路评估:同一条问答链路(检索 → 阈值 → 生成/拒答)驱动一次 /chat,
         # 拒答正确率于是可以双向判定(应答被误拒 / 应拒答被乱答都会被记下)。
-        chat = await self._chat(case)
+        chat = await self._chat(case, scope)
         refused = bool(chat["refused"])
         citation_refs: list[ChunkLocator] = []
         cited_texts: list[str] = []
@@ -315,10 +316,11 @@ class EvaluationService:
                 for chunk in index.chunks_of(document)
             }
             permission_ok = not any(item.chunk_id in forbidden_ids for item in retrieved)
-            # 无过滤对照:用禁读文档所属租户的真实 token 搜索,证明诱饵本会命中;
+            # 无收窄对照:用禁读文档所属租户的真实 token 搜索,证明诱饵本会命中;
             # 权限通过不是因为诱饵与问题无关,也没有任何 HTTP 鉴权豁免。
+            forbidden_tenant = self._corpus_tenants[case.forbidden_documents[0]]
             control_hits = await self._search(
-                case.question, None, tenant=self._forbidden_tenant(case)
+                case.question, Scope(tenant=forbidden_tenant)
             )
             forbidden_best_rank = next(
                 (
@@ -335,7 +337,7 @@ class EvaluationService:
             category=case.category,
             difficulty=case.difficulty,
             should_refuse=case.should_refuse,
-            filters=case.filters.effective(),
+            filters=scope.effective(),
             expected=expected,
             retrieved=retrieved,
             recall_at_k=_round(recall),
@@ -355,15 +357,15 @@ class EvaluationService:
             notes=case.notes,
         )
 
-    async def _chat(self, case: GoldenCase) -> dict[str, Any]:
+    async def _chat(self, case: GoldenCase, scope: Scope) -> dict[str, Any]:
         """走一次问答主缝;top_k 与检索口径一致,拒答由应用配置阈值决定。"""
         chat = await self._post(
             "/api/v1/chat",
-            tenant=case.filters.tenant,
+            tenant=scope.tenant,
             json={
                 "question": case.question,
                 "top_k": self._top_k,
-                "filters": _narrowing_payload(case.filters),
+                "filters": _narrowing_payload(scope),
             },
         )
         # 报告写观测到的生成器种类(rule_based / llm),而非配置推断
@@ -393,27 +395,42 @@ class EvaluationService:
             title=chunk.get("title"),
         )
 
-    async def _search(
-        self, question: str, filters: Scope | None, *, tenant: str
-    ) -> list[dict[str, Any]]:
+    def _resolve_scope(self, case: GoldenCase) -> Scope:
+        """用例的生效授权范围:显式 filters 优先,否则从引用文档 / 语料租户解析。
+
+        不静默退回 ``default``:单租户语料自动取该租户;引用跨租户文档却未
+        声明 filters 时大声失败,避免把"查不到"误报成检索指标下降。
+        """
+        if case.filters is not None:
+            return case.filters
+        referenced = [item.document for item in case.expected_chunks]
+        referenced.extend(case.forbidden_documents)
+        tenants = {self._corpus_tenants[document] for document in referenced}
+        if len(tenants) > 1:
+            raise EvaluationDatasetError(
+                f"用例 {case.id} 引用了跨租户文档({', '.join(sorted(tenants))}),"
+                "必须显式声明 filters.tenant"
+            )
+        if tenants:
+            return Scope(tenant=tenants.pop())
+        corpus_tenants = set(self._corpus_tenants.values())
+        if len(corpus_tenants) == 1:
+            return Scope(tenant=corpus_tenants.pop())
+        raise EvaluationDatasetError(
+            f"用例 {case.id} 未声明 filters,且无法从引用文档或语料唯一确定租户"
+        )
+
+    async def _search(self, question: str, scope: Scope) -> list[dict[str, Any]]:
         data = await self._post(
             "/api/v1/search",
-            tenant=tenant,
+            tenant=scope.tenant,
             json={
                 "query": question,
                 "top_k": self._top_k,
-                "filters": _narrowing_payload(filters) if filters is not None else None,
+                "filters": _narrowing_payload(scope),
             },
         )
         return list(data["hits"])
-
-    def _forbidden_tenant(self, case: GoldenCase) -> str:
-        """禁读文档所属租户;语料清单里找不到时退回用例租户(对照仍可运行)。"""
-        for document in case.forbidden_documents:
-            tenant = self._corpus_tenants.get(document)
-            if tenant:
-                return tenant
-        return case.filters.tenant
 
     async def _post(
         self, url: str, *, tenant: str | None = None, **kwargs: Any

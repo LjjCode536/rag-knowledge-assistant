@@ -80,7 +80,8 @@ class GoldenCase(BaseModel):
     forbidden_documents: list[str] = Field(default_factory=list)
     # 评估输入沿用「用例声明的租户 + 收窄条件」;租户只用于选真实 token,
     # HTTP 请求体会剥离 tenant,由服务端按主体补上(ADR-0020)。
-    filters: Scope = Field(default_factory=lambda: Scope(tenant="default"))
+    # 未声明时不静默退回 ``default``:由评估器按引用文档 / 语料租户解析。
+    filters: Scope | None = None
     difficulty: EvaluationDifficulty = EvaluationDifficulty.EASY
     should_refuse: bool = False
     notes: str = ""

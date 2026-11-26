@@ -83,6 +83,23 @@ def test_list_rejects_tenant_query_parameter(tenant_clients, tenant: str) -> Non
     assert body["details"]["errors"][0]["loc"] == ["query", "tenant"]
 
 
+@pytest.mark.parametrize("suffix", ["", "/elements", "/chunks"])
+def test_document_read_rejects_tenant_query_parameter(
+    tenant_clients, suffix: str
+) -> None:
+    member, _, _ = tenant_clients
+    mine = _upload(member, "mine.md")
+
+    response = member.get(
+        f"{DOCUMENTS_URL}/{mine['id']}{suffix}", params={"tenant": "other"}
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert body["details"]["errors"][0]["loc"] == ["query", "tenant"]
+
+
 # ===== 对象级读路径:跨租户 404,与不存在同口径 =====
 
 

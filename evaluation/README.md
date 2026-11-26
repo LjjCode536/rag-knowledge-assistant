@@ -102,7 +102,7 @@ uv run python scripts/evaluate.py --min-score 0.07 --check \
 | `expected_chunks` | 预期切片列表;每条用「文档名 + 文内唯一锚点」定位 |
 | `expected_answer_keywords` | 答案应该覆盖的关键词(评估报告以此展示,规则法忠实度不依赖它) |
 | `forbidden_documents` | 权限边界用例的禁读文档(另一租户或超出主体授权范围);评估器会跑无过滤对照 |
-| `filters` | 检索前元数据过滤,如 `{tenant: acme}`(目标态:租户由主体携带,用例只声明收窄条件) |
+| `filters` | 授权范围声明(租户 + 可选收窄条件),如 `{tenant: acme}`;未声明时由引用文档或唯一语料租户解析,跨租户引用必须显式声明 |
 | `should_refuse` | 知识库没有答案时为 `true`;此类用例不参与 Recall / MRR / NDCG 均值 |
 | `notes` | 来源或边界说明 |
 

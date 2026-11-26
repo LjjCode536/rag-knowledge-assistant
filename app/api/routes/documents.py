@@ -20,12 +20,11 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, UploadFile
 from pydantic import BaseModel
 
-from app.api.dependencies import reject_tenant_parameter, require_principal
+from app.api.dependencies import require_document_in_scope, require_scope
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
 from app.domain.documents import DocumentFormat, DocumentRecord, DocumentStatus, ElementType
-from app.domain.identity import Principal
-from app.services.access import AccessService
+from app.domain.retrieval import Scope
 from app.services.document_catalog import DocumentCatalogService
 from app.services.ingestion import IngestionService
 from app.services.lifecycle import DocumentLifecycleService
@@ -173,14 +172,13 @@ def upload_document(
     "",
     response_model=ApiEnvelope[DocumentListView],
     summary="知识库文档清单(按创建时间倒序,支持筛选与分页)",
-    dependencies=[Depends(reject_tenant_parameter)],
 )
 def list_documents(
     request: Request,
-    principal: Annotated[Principal, Depends(require_principal)],
+    scope: Annotated[Scope, Depends(require_scope)],
     status: Annotated[DocumentStatus | None, Query(description="按状态精确匹配")] = None,
     keyword: Annotated[
-        str | None, Query(description="按文件名子串匹配(大小写不敏感)")
+        str | None, Query(description="按文档名子串匹配(大小写不敏感)")
     ] = None,
     department: Annotated[str | None, Query(description="按部门精确匹配")] = None,
     doc_type: Annotated[str | None, Query(description="按文档类型精确匹配")] = None,
@@ -203,13 +201,11 @@ def list_documents(
     确定,不依赖存储实现的偶然顺序。
 
     筛选条件按"与"组合:状态 / 关键字 / 部门 / 文档类型;关键字命中
-    文件名子串且大小写不敏感。
+    文档名子串且大小写不敏感。
 
     分页越界(偏移超出总数)返回空清单与正确总数,不报错。
     """
     service: DocumentCatalogService = request.app.state.document_catalog_service
-    access: AccessService = request.app.state.access_service
-    scope = access.scope_for(principal, None)
     page = service.list_documents(
         scope=scope,
         status=status,
@@ -232,12 +228,8 @@ def list_documents(
 @router.get("/{document_id}", response_model=ApiEnvelope[DocumentView], summary="查询文档状态")
 def get_document(
     request: Request,
-    document_id: str,
-    principal: Annotated[Principal, Depends(require_principal)],
+    record: Annotated[DocumentRecord, Depends(require_document_in_scope)],
 ) -> ApiEnvelope[DocumentView]:
-    access: AccessService = request.app.state.access_service
-    scope = access.scope_for(principal, None)
-    record = access.require_document(scope=scope, document_id=document_id)
     return success_envelope(DocumentView.of(record), trace_id=trace_id_of(request))
 
 
@@ -248,14 +240,12 @@ def get_document(
 )
 def get_document_elements(
     request: Request,
-    document_id: str,
-    principal: Annotated[Principal, Depends(require_principal)],
+    record: Annotated[DocumentRecord, Depends(require_document_in_scope)],
 ) -> ApiEnvelope[ElementsView]:
-    access: AccessService = request.app.state.access_service
-    scope = access.scope_for(principal, None)
-    record = access.require_document(scope=scope, document_id=document_id)
     service: IngestionService = request.app.state.ingestion_service
-    views = [ElementView(**element.model_dump()) for element in service.get_elements(document_id)]
+    views = [
+        ElementView(**element.model_dump()) for element in service.get_elements(record.id)
+    ]
     data = ElementsView(document_id=record.id, page_count=record.page_count, elements=views)
     return success_envelope(data, trace_id=trace_id_of(request))
 
