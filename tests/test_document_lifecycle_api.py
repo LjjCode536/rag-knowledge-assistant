@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
 from app.repositories.vector_memory import InMemoryVectorStore
-from tests.support import authorized_client, json_log_entries
+from tests.support import OTHER_TENANT, authorized_client, json_log_entries
 from tests.test_embeddings_api import _chunk, _embed, _index
 
 DOCUMENTS_URL = "/api/v1/documents"
@@ -134,17 +134,24 @@ def test_hybrid_keyword_channel_also_faces_latest_version(settings):
 
 
 def test_same_file_name_in_different_tenants_do_not_supersede(fake_app):
-    with authorized_client(fake_app, raise_server_exceptions=False) as client:
-        acme = _index(client, "hr.txt", OLD_TEXT, tenant="acme")["document_id"]
-        beta = _index(client, "hr.txt", NEW_TEXT, tenant="beta")["document_id"]
+    with (
+        authorized_client(fake_app, raise_server_exceptions=False) as client,
+        authorized_client(
+            fake_app, OTHER_TENANT.principal, raise_server_exceptions=False
+        ) as other_client,
+    ):
+        mine = _index(client, "hr.txt", OLD_TEXT, tenant="default")["document_id"]
+        theirs = _index(other_client, "hr.txt", NEW_TEXT, tenant="other")["document_id"]
 
-        assert _fetch(client, acme)["is_latest"] is True
-        assert _fetch(client, beta)["is_latest"] is True
-        # 两份同名不同租户的文档互不退位、各自可检索
+        assert _fetch(client, mine)["is_latest"] is True
+        assert _fetch(client, theirs)["is_latest"] is True
+        # 两份同名不同租户的文档互不退位、各自只能在自己的授权范围内检索
         old_hits = _search(client, OLD_VOCAB_QUERY)
-        assert any(hit["chunk"]["document_id"] == acme for hit in old_hits["hits"])
-        new_hits = _search(client, NEW_VOCAB_QUERY)
-        assert any(hit["chunk"]["document_id"] == beta for hit in new_hits["hits"])
+        assert any(hit["chunk"]["document_id"] == mine for hit in old_hits["hits"])
+        assert all(hit["chunk"]["document_id"] != theirs for hit in old_hits["hits"])
+        new_hits = _search(other_client, NEW_VOCAB_QUERY)
+        assert any(hit["chunk"]["document_id"] == theirs for hit in new_hits["hits"])
+        assert all(hit["chunk"]["document_id"] != mine for hit in new_hits["hits"])
 
 
 # ===== 删除:切片与向量连带清理,检索无该文档任何切片 =====

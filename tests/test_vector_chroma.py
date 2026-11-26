@@ -13,8 +13,8 @@ import pytest
 
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddingRef,
+    Scope,
     build_embedded_chunks,
 )
 from app.repositories.vector_memory import InMemoryVectorStore
@@ -71,7 +71,7 @@ def test_search_ranks_by_cosine_similarity_desc(chroma_store):
     )
 
     hits = chroma_store.search(
-        [1.0, 0.5], top_k=3, filters=ChunkFilter(), embedding=_ref()
+        [1.0, 0.5], top_k=3, scope=Scope(tenant="acme"), embedding=_ref()
     )
 
     assert [hit.chunk.content for hit in hits] == ["丙", "甲", "乙"]
@@ -101,10 +101,10 @@ def test_scores_and_order_match_memory_baseline(chroma_store):
 
     for query in ([1.0, 0.5], [0.1, 1.0], [-0.3, 0.8]):
         memory_hits = memory.search(
-            query, top_k=10, filters=ChunkFilter(), embedding=_ref()
+            query, top_k=10, scope=Scope(tenant="acme"), embedding=_ref()
         )
         chroma_hits = chroma_store.search(
-            query, top_k=10, filters=ChunkFilter(), embedding=_ref()
+            query, top_k=10, scope=Scope(tenant="acme"), embedding=_ref()
         )
         assert [h.chunk.content for h in chroma_hits] == [h.chunk.content for h in memory_hits]
         for c, m in zip(chroma_hits, memory_hits, strict=True):
@@ -128,7 +128,7 @@ def test_metadata_filter_applies_before_similarity_ranking(chroma_store):
     hits = chroma_store.search(
         [1.0, 0.5],
         top_k=2,
-        filters=ChunkFilter(tenant="acme"),
+        scope=Scope(tenant="acme"),
         embedding=_ref(),
     )
 
@@ -155,13 +155,13 @@ def test_filter_matches_all_set_fields_and_leaves_unset_fields_open(chroma_store
     hits = chroma_store.search(
         [1.0, 0.0],
         top_k=10,
-        filters=ChunkFilter(tenant="acme", department="人力"),
+        scope=Scope(tenant="acme", department="人力"),
         embedding=_ref(),
     )
     assert [hit.chunk.content for hit in hits] == ["甲"]
 
     hits = chroma_store.search(
-        [1.0, 0.0], top_k=10, filters=ChunkFilter(tenant="acme"), embedding=_ref()
+        [1.0, 0.0], top_k=10, scope=Scope(tenant="acme"), embedding=_ref()
     )
     assert [hit.chunk.content for hit in hits] == ["甲", "乙", "丙"]
 
@@ -171,7 +171,7 @@ def test_filter_matches_all_set_fields_and_leaves_unset_fields_open(chroma_store
     hits = chroma_store.search(
         [1.0, 0.0],
         top_k=10,
-        filters=ChunkFilter(document_id="doc-2"),
+        scope=Scope(tenant="acme", document_id="doc-2"),
         embedding=_ref(),
     )
     assert [hit.chunk.content for hit in hits] == ["丁"]
@@ -193,7 +193,7 @@ def test_replace_is_full_swap_for_one_document(chroma_store):
 
     chroma_store.replace("doc-1", _embedded([_chunk("新一")], [[0.0, 1.0]]))
 
-    hits = chroma_store.search([1.0, 1.0], top_k=10, filters=ChunkFilter(), embedding=_ref())
+    hits = chroma_store.search([1.0, 1.0], top_k=10, scope=Scope(tenant="acme"), embedding=_ref())
     # 旧切片(旧一 / 旧二)整批作废;doc-2 的条目不受影响
     assert [hit.chunk.content for hit in hits] == ["另册", "新一"]
 
@@ -216,7 +216,7 @@ def test_full_metadata_roundtrip(chroma_store):
     chroma_store.replace("doc-1", _embedded([chunk], [[1.0, 0.0, 0.0]], ref=_ref(3)))
 
     hits = chroma_store.search(
-        [1.0, 0.0, 0.0], top_k=5, filters=ChunkFilter(), embedding=_ref(3)
+        [1.0, 0.0, 0.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref(3)
     )
 
     assert len(hits) == 1
@@ -231,11 +231,11 @@ def test_vector_of_missing_returns_none(chroma_store):
 
 def test_top_k_larger_than_candidates_and_empty_store(chroma_store):
     assert (
-        chroma_store.search([1.0], top_k=5, filters=ChunkFilter(), embedding=_ref(1)) == []
+        chroma_store.search([1.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref(1)) == []
     )
 
     chroma_store.replace("doc-1", _embedded([_chunk("唯一")], [[1.0]], ref=_ref(1)))
-    hits = chroma_store.search([1.0], top_k=5, filters=ChunkFilter(), embedding=_ref(1))
+    hits = chroma_store.search([1.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref(1))
     assert [hit.chunk.content for hit in hits] == ["唯一"]
 
 
@@ -243,7 +243,7 @@ def test_zero_vector_scores_zero_without_crashing(chroma_store):
     chroma_store.replace("doc-1", _embedded([_chunk("零向量")], [[0.0, 0.0]]))
 
     hits = chroma_store.search(
-        [1.0, 1.0], top_k=5, filters=ChunkFilter(), embedding=_ref()
+        [1.0, 1.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref()
     )
     assert len(hits) == 1
     assert hits[0].score == 0.0
@@ -254,7 +254,7 @@ def test_delete_is_idempotent_across_stores(chroma_store):
     chroma_store.delete("doc-1")
 
     assert (
-        chroma_store.search([1.0, 0.0], top_k=5, filters=ChunkFilter(), embedding=_ref())
+        chroma_store.search([1.0, 0.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref())
         == []
     )
     chroma_store.delete("doc-1")  # 未入库幂等
@@ -264,7 +264,7 @@ def test_delete_is_idempotent_across_stores(chroma_store):
     chroma_store.replace(
         "doc-2", _embedded([_chunk("留存", document_id="doc-2")], [[1.0, 0.0]])
     )
-    hits = chroma_store.search([1.0, 0.0], top_k=5, filters=ChunkFilter(), embedding=_ref())
+    hits = chroma_store.search([1.0, 0.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref())
     assert [hit.chunk.content for hit in hits] == ["留存"]
 
 
@@ -280,7 +280,7 @@ def test_reopening_same_persist_dir_sees_same_data(tmp_path: Path):
         second = ChromaVectorStore(persist_dir=persist_dir)
         try:
             hits = second.search(
-                [1.0, 0.0], top_k=5, filters=ChunkFilter(), embedding=_ref()
+                [1.0, 0.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref()
             )
             assert [hit.chunk.content for hit in hits] == ["存档"]
         finally:
@@ -299,13 +299,13 @@ def test_other_identity_is_invisible_not_scored_zero(chroma_store):
     )
 
     assert (
-        chroma_store.search([1.0, 0.0], top_k=5, filters=ChunkFilter(), embedding=_ref())
+        chroma_store.search([1.0, 0.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref())
         == []
     )
     hits = chroma_store.search(
         [1.0, 0.0],
         top_k=5,
-        filters=ChunkFilter(),
+        scope=Scope(tenant="acme"),
         embedding=_ref(2, model="old-model"),
     )
     assert [hit.chunk.content for hit in hits] == ["旧模型"]
@@ -331,6 +331,6 @@ def test_dimension_change_returns_empty_instead_of_crashing(chroma_store):
     chroma_store.replace("doc-1", _embedded([_chunk("两维")], [[1.0, 1.0]]))
 
     hits = chroma_store.search(
-        [1.0, 1.0, 1.0], top_k=5, filters=ChunkFilter(), embedding=_ref(3)
+        [1.0, 1.0, 1.0], top_k=5, scope=Scope(tenant="acme"), embedding=_ref(3)
     )
     assert hits == []

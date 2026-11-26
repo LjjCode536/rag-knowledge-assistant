@@ -25,7 +25,7 @@ from app.services.evaluation import (
     render_json,
     render_markdown,
 )
-from tests.support import PLATFORM_OPERATOR, auth_header
+from tests.support import auth_header_for_tenant
 
 DATASET_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "golden_dataset.yaml"
 
@@ -48,13 +48,13 @@ async def _run_evaluation(settings, dataset, *, k: int = 3):
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://evaluation",
-        headers=auth_header(app, PLATFORM_OPERATOR.principal),
     ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,
             dataset_dir=DATASET_PATH.parent,
             config=config,
+            headers_for_tenant=lambda tenant: auth_header_for_tenant(app, tenant),
         )
         return await service.run()
 
@@ -190,13 +190,13 @@ async def test_dataset_anchor_without_a_match_fails_loudly(settings, tmp_path) -
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://evaluation",
-        headers=auth_header(app, PLATFORM_OPERATOR.principal),
     ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,
             dataset_dir=tmp_path,
             config=EvaluationConfig(k=3, min_score=settings.qa_min_score),
+            headers_for_tenant=lambda tenant: auth_header_for_tenant(app, tenant),
         )
         with pytest.raises(EvaluationDatasetError, match="命中 0 个切片"):
             await service.run()

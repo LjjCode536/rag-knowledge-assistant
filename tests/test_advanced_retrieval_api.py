@@ -24,7 +24,7 @@ def _index_alpha(client: TestClient) -> dict:
         client,
         "hr.txt",
         ALPHA_TEXT,
-        tenant="acme",
+        tenant="default",
         department="人力部",
         doc_type="政策",
         version="v2",

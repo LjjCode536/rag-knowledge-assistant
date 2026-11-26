@@ -11,28 +11,31 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.errors import DimensionMismatchError
 from app.domain.chunks import Chunk
 
 
-class ChunkFilter(BaseModel):
-    """检索前切片元数据过滤条件:权限维度(租户 / 部门)在此生效。
+class Scope(BaseModel):
+    """授权范围:服务端依主体构造的检索前过滤条件,必填且不可缺租户。
 
-    未给的字段(None)一律放行;给定字段必须与切片元数据完全相等。
-    字段名与 :class:`~app.domain.chunks.Chunk` 的切片元数据字段保持同名,
-    过滤端按名匹配,改名须两边同步。
+    ``tenant`` 是硬边界,没有"不限制"的形态:漏传是程序错误,不是查全库。
+    其余字段是调用方可选的收窄条件;未给的字段(None)一律放行,给定字段
+    必须与切片元数据完全相等。字段名与 :class:`~app.domain.chunks.Chunk`
+    的同名字段保持同名,过滤端按名匹配,改名须两边同步。
     """
 
-    tenant: str | None = None
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tenant: str = Field(min_length=1)
     department: str | None = None
     doc_type: str | None = None
     version: str | None = None
     document_id: str | None = None
 
     def effective(self) -> dict[str, str]:
-        """生效的过滤条件:剔除未给字段后的字段值对,可直接用于过滤与日志回显。"""
+        """生效的授权范围:剔除未给字段后的字段值对,可直接用于过滤与日志回显。"""
         return self.model_dump(exclude_none=True)
 
 
@@ -158,10 +161,10 @@ class VectorStore(Protocol):
         vector: Sequence[float],
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
         embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """按相似度降序返回至多 top_k 个切片;过滤与身份隔离在打分之前完成。"""
+        """按相似度降序返回至多 top_k 个切片;授权范围与身份隔离在打分之前完成。"""
         ...
 
     def identity_counts(self) -> dict[EmbeddingRef | None, int]:
@@ -193,9 +196,9 @@ class KeywordIndex(Protocol):
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
     ) -> list[ScoredChunk]:
-        """按词法相关性降序返回至多 top_k 个切片;过滤在打分之前完成。"""
+        """按词法相关性降序返回至多 top_k 个切片;授权范围过滤在打分之前完成。"""
         ...
 
     def delete(self, document_id: str) -> None:
@@ -203,7 +206,7 @@ class KeywordIndex(Protocol):
         ...
 
 
-def matches_chunk_filter(chunk: Chunk, constraints: dict[str, str]) -> bool:
+def matches_scope(chunk: Chunk, constraints: dict[str, str]) -> bool:
     """切片元数据逐字段等值匹配:向量库与关键词库共用的检索前过滤实现。"""
     return all(getattr(chunk, field) == value for field, value in constraints.items())
 

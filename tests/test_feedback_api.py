@@ -63,7 +63,7 @@ def indexed_client(settings, upload_dir) -> Iterator[TestClient]:
     """注入假向量替身,预置一份已入库的员工手册。"""
     app = create_app(settings, embedder=DeterministicEmbedder())
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="acme")
+        _index(client, "employee.md", HANDBOOK, tenant="default")
         yield client
 
 

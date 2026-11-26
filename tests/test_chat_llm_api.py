@@ -57,7 +57,7 @@ def _index(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/documents",
         files={"file": ("employee.md", payload, "text/plain")},
-        data={"tenant": "acme"},
+        data={"tenant": "default"},
     )
     assert response.status_code == 201, response.text
     document_id = response.json()["data"]["id"]

@@ -75,17 +75,22 @@ class AnswerCache:
         question: str,
         top_k: int,
         min_score: float,
-        filters: dict[str, str],
+        scope: dict[str, str],
+        principal_id: str,
         generator: str,
     ) -> str:
-        """缓存键:对答案有影响的过程口径全部入键,换来键宽有限(定长摘要)。"""
+        """缓存键:问题、主体与对答案有影响的过程口径全部入键(定长摘要)。
+
+        授权范围与主体身份必须入键:答档只在"同一主体、同一有效范围"内复用。
+        """
         canonical = json.dumps(
             {
                 "question": self.normalize_question(question),
+                "principal_id": principal_id,
                 "top_k": top_k,
                 "min_score": min_score,
                 "generator": generator,
-                "filters": dict(sorted(filters.items())),
+                "scope": dict(sorted(scope.items())),
             },
             ensure_ascii=False,
             sort_keys=True,

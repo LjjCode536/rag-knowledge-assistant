@@ -32,7 +32,12 @@ def _cache(**overrides: object) -> AnswerCache:
 
 def _key(cache: AnswerCache, name: str = "年假怎么算?") -> str:
     return cache.make_key(
-        question=name, top_k=3, min_score=0.35, filters={}, generator="rule"
+        question=name,
+        top_k=3,
+        min_score=0.35,
+        scope={"tenant": "default"},
+        principal_id="usr_member",
+        generator="rule",
     )
 
 
@@ -44,15 +49,22 @@ def test_normalize_question_collapses_whitespace_and_case():
 
 def test_key_varies_with_every_process_dimension():
     cache = _cache()
-    base = dict(top_k=3, min_score=0.35, filters={}, generator="rule_based")
-    same = dict(base, top_k=3, min_score=0.35, filters={}, generator="rule_based")
+    base = dict(
+        top_k=3,
+        min_score=0.35,
+        scope={"tenant": "default"},
+        principal_id="usr_member",
+        generator="rule_based",
+    )
+    same = dict(base)
 
     key_default = cache.make_key(question="年假怎么算?", **base)  # type: ignore[arg-type]
     assert cache.make_key(question="年假怎么算?", **same) == key_default  # type: ignore[arg-type] # 同口径同键
     assert cache.make_key(question="病假怎么算?", **base) != key_default  # type: ignore[arg-type]
-    # 同题不同过程口径(过滤 / top_k / 阈值 / 生成器)都不共享答档
+    # 同题不同过程口径(授权范围 / 主体 / top_k / 阈值 / 生成器)都不共享答档
     variants = [
-        dict(base, filters={"tenant": "acme"}),
+        dict(base, scope={"tenant": "acme"}),
+        dict(base, principal_id="usr_admin"),
         dict(base, top_k=5),
         dict(base, min_score=0.5),
         dict(base, generator="llm"),

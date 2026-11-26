@@ -16,7 +16,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from app.domain.lexical import text_tokens
-from app.domain.retrieval import ChunkFilter
+from app.domain.retrieval import Scope
 
 
 class EvaluationCategory(StrEnum):
@@ -78,7 +78,9 @@ class GoldenCase(BaseModel):
     expected_chunks: list[ExpectedChunk] = Field(default_factory=list)
     expected_answer_keywords: list[str] = Field(default_factory=list)
     forbidden_documents: list[str] = Field(default_factory=list)
-    filters: ChunkFilter = Field(default_factory=ChunkFilter)
+    # 评估输入沿用「用例声明的租户 + 收窄条件」;租户只用于选真实 token,
+    # HTTP 请求体会剥离 tenant,由服务端按主体补上(ADR-0020)。
+    filters: Scope = Field(default_factory=lambda: Scope(tenant="default"))
     difficulty: EvaluationDifficulty = EvaluationDifficulty.EASY
     should_refuse: bool = False
     notes: str = ""

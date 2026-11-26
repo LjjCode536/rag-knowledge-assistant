@@ -14,9 +14,9 @@ from rank_bm25 import BM25Plus
 from app.domain.chunks import Chunk
 from app.domain.lexical import text_tokens
 from app.domain.retrieval import (
-    ChunkFilter,
+    Scope,
     ScoredChunk,
-    matches_chunk_filter,
+    matches_scope,
 )
 
 
@@ -46,10 +46,10 @@ class InMemoryKeywordIndex:
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
     ) -> list[ScoredChunk]:
-        """过滤在打分之前:先取满足条件的候选,再用 BM25 打分排序。"""
-        constraints = (filters or ChunkFilter()).effective()
+        """过滤在打分之前:先取满足授权范围的候选,再用 BM25 打分排序。"""
+        constraints = scope.effective()
         query_tokens = text_tokens(query)
         if not query_tokens:
             return []
@@ -58,7 +58,7 @@ class InMemoryKeywordIndex:
                 chunk
                 for entries in self._chunks.values()
                 for chunk in entries
-                if matches_chunk_filter(chunk, constraints)
+                if matches_scope(chunk, constraints)
             ]
         if not candidates:
             return []

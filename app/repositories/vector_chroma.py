@@ -30,9 +30,9 @@ import structlog
 
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddedChunk,
     EmbeddingRef,
+    Scope,
     ScoredChunk,
     consistent_embedding_ref,
     cosine_similarity,
@@ -108,11 +108,11 @@ class ChromaVectorStore:
         vector: Sequence[float],
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
         embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """过滤在相似度计算之前:身份 + 元数据 where 条件下推,被过滤的不进候选。"""
-        constraints: dict[str, Any] = dict((filters or ChunkFilter()).effective())
+        """过滤在相似度计算之前:身份 + 授权范围 where 条件下推,越界的不进候选。"""
+        constraints: dict[str, Any] = dict(scope.effective())
         constraints.update(
             {
                 "embedding_model": embedding.model,

@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -452,13 +453,13 @@ async def _run(
                 transport=transport,
                 base_url="http://evaluation",
                 timeout=120.0,
-                headers=_evaluation_auth_headers(app),
             ) as client:
                 service = EvaluationService(
                     client=client,
                     dataset=dataset,
                     dataset_dir=args.dataset.resolve().parent,
                     config=config,
+                    headers_for_tenant=_tenant_auth_headers(app),
                 )
                 return await service.run()
         finally:
@@ -518,20 +519,25 @@ async def _run_ablation(
     return runs, skipped
 
 
-def _evaluation_auth_headers(app) -> dict[str, str]:
-    """进程内评估用的真实 token(平台管理员主体)。
+def _tenant_auth_headers(app) -> Callable[[str], dict[str, str]]:
+    """进程内评估按租户签发真实 token 的取头函数。
 
-    评估器不经过 HTTP 鉴权豁免(ADR-0020 禁止 ``EVAL_BYPASS``);它和普通
-    调用方一样出示凭证,只是主体由评估进程显式构造。
+    评估器不经过 HTTP 鉴权豁免(ADR-0020 禁止 ``EVAL_BYPASS``):入库用
+    语料租户的主体、检索 / 问答用用例租户的主体,权限对照用禁读文档
+    所属租户的主体。没有任何请求能绕过授权范围。
     """
-    principal = Principal(
-        id="svc_evaluation",
-        kind=PrincipalKind.SERVICE,
-        tenant="default",
-        role=Role.MEMBER,
-    )
-    issued = app.state.token_service.issue(principal)
-    return {"Authorization": f"Bearer {issued.access_token}"}
+
+    def headers_for(tenant: str) -> dict[str, str]:
+        principal = Principal(
+            id="svc_evaluation",
+            kind=PrincipalKind.SERVICE,
+            tenant=tenant,
+            role=Role.MEMBER,
+        )
+        issued = app.state.token_service.issue(principal)
+        return {"Authorization": f"Bearer {issued.access_token}"}
+
+    return headers_for
 
 
 async def _run_combo(
@@ -560,13 +566,13 @@ async def _run_combo(
                 transport=transport,
                 base_url="http://evaluation",
                 timeout=120.0,
-                headers=_evaluation_auth_headers(app),
             ) as client:
                 service = EvaluationService(
                     client=client,
                     dataset=dataset,
                     dataset_dir=dataset_dir,
                     config=config,
+                    headers_for_tenant=_tenant_auth_headers(app),
                 )
                 return await service.run()
         finally:

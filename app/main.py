@@ -50,6 +50,7 @@ from app.repositories.memory import (
     InMemoryStatsRepository,
 )
 from app.repositories.vector_memory import InMemoryVectorStore
+from app.services.access import AccessService
 from app.services.answering import AnswerService
 from app.services.auth import AuthService, TokenService
 from app.services.chunking import ChunkingService
@@ -256,6 +257,8 @@ def create_app(
         token_service=token_service,
     )
     document_repository = persistence.documents
+    # 授权范围与对象级可见性只此一处构造:路由只解析主体(ADR-0020)
+    access_service = AccessService(document_repository=document_repository)
     chunk_repository = persistence.chunks
     effective_vector_store = persistence.store
     effective_keyword_index = keyword_index if keyword_index is not None else InMemoryKeywordIndex()
@@ -354,6 +357,7 @@ def create_app(
     app.state.principal_repository = effective_principal_repository
     app.state.token_service = token_service
     app.state.auth_service = auth_service
+    app.state.access_service = access_service
     app.state.ingestion_service = ingestion_service
     app.state.chunking_service = chunking_service
     app.state.embedding_service = embedding_service

@@ -10,13 +10,13 @@ import threading
 from collections.abc import Sequence
 
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddedChunk,
     EmbeddingRef,
+    Scope,
     ScoredChunk,
     consistent_embedding_ref,
     cosine_similarity,
-    matches_chunk_filter,
+    matches_scope,
 )
 
 
@@ -49,18 +49,18 @@ class InMemoryVectorStore:
         vector: Sequence[float],
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
         embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """身份与元数据过滤都在相似度计算之前:不同模型 / 版本的向量不进候选。"""
-        constraints = (filters or ChunkFilter()).effective()
+        """身份与授权范围过滤都在相似度计算之前:越界向量不进候选。"""
+        constraints = scope.effective()
         with self._lock:
             candidates = [
                 entry
                 for entries in self._entries.values()
                 for entry in entries
                 if entry.embedding == embedding
-                and matches_chunk_filter(entry.chunk, constraints)
+                and matches_scope(entry.chunk, constraints)
             ]
         scored = [
             ScoredChunk(chunk=entry.chunk, score=cosine_similarity(vector, entry.vector))

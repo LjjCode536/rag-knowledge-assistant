@@ -78,6 +78,17 @@ def auth_header(app, principal: Principal = MEMBER.principal) -> dict[str, str]:
     return {"Authorization": f"Bearer {issued.access_token}"}
 
 
+def auth_header_for_tenant(app, tenant: str) -> dict[str, str]:
+    """评估器专用:按语料 / 用例租户签发服务账号的真实 token。"""
+    principal = Principal(
+        id="svc_evaluation",
+        kind=PrincipalKind.SERVICE,
+        tenant=tenant,
+        role=Role.MEMBER,
+    )
+    return auth_header(app, principal)
+
+
 def authorized_client(
     app,
     principal: Principal = MEMBER.principal,

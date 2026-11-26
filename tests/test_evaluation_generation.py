@@ -22,7 +22,7 @@ from app.domain.evaluation import (
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
 from app.services.evaluation import EvaluationConfig, EvaluationService
-from tests.support import PLATFORM_OPERATOR, auth_header
+from tests.support import auth_header_for_tenant
 
 CORPUS = """# 售后服务制度
 
@@ -70,13 +70,13 @@ async def _run(settings, dataset: GoldenDataset, tmp_path: Path):
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://evaluation",
-        headers=auth_header(app, PLATFORM_OPERATOR.principal),
     ) as client:
         service = EvaluationService(
             client=client,
             dataset=dataset,
             dataset_dir=tmp_path,
             config=EvaluationConfig(k=3, min_score=settings.qa_min_score),
+            headers_for_tenant=lambda tenant: auth_header_for_tenant(app, tenant),
         )
         return await service.run()
 

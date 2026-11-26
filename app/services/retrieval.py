@@ -20,12 +20,12 @@ from app.core.config import Settings
 from app.core.errors import DimensionMismatchError
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddingRef,
     KeywordIndex,
     QueryPlan,
     QueryPlanner,
     Reranker,
+    Scope,
     ScoredChunk,
     VectorStore,
     cosine_similarity,
@@ -147,17 +147,17 @@ class RetrievalService:
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None = None,
+        scope: Scope,
     ) -> list[ScoredChunk]:
         """返回按最终分数降序的切片,附完整切片元数据。"""
-        return (await self.retrieve(query, top_k=top_k, filters=filters)).hits
+        return (await self.retrieve(query, top_k=top_k, scope=scope)).hits
 
     async def retrieve(
         self,
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None = None,
+        scope: Scope,
     ) -> RetrievalOutcome:
         """检索的主入口:返回命中与实际生效的改写 / 扩展查询口径。"""
         started = datetime.now(UTC)
@@ -169,10 +169,10 @@ class RetrievalService:
             or settings.use_mmr
             or settings.use_rerank
         ):
-            return await self._legacy_search(query, top_k=top_k, filters=filters)
+            return await self._legacy_search(query, top_k=top_k, scope=scope)
 
-        outcome = await self._advanced_search(query, top_k=top_k, filters=filters)
-        self._log_completed(query, top_k, filters, outcome.hits, started)
+        outcome = await self._advanced_search(query, top_k=top_k, scope=scope)
+        self._log_completed(query, top_k, scope, outcome.hits, started)
         return outcome
 
     # ===== 基线路径(全关,分数与时序与 T06 完全一致)=====
@@ -182,7 +182,7 @@ class RetrievalService:
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
     ) -> RetrievalOutcome:
         started = datetime.now(UTC)
         embedded_query = await self._embedder.embed([query])
@@ -190,15 +190,15 @@ class RetrievalService:
         hits = self._vectors.search(
             query_vector,
             top_k=top_k,
-            filters=filters,
+            scope=scope,
             embedding=self._checked_embedding(query_vector),
         )
-        effective_filters = (filters or ChunkFilter()).effective()
+        effective_scope = scope.effective()
         logger.info(
             "retrieval_completed",
             query_chars=len(query),
             top_k=top_k,
-            filters=effective_filters,
+            filters=effective_scope,
             hits=len(hits),
             best_score=hits[0].score if hits else None,
             embed_latency_ms=embedded_query.latency_ms,
@@ -215,7 +215,7 @@ class RetrievalService:
         query: str,
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
     ) -> RetrievalOutcome:
         settings = self._settings
         plan = QueryPlan(original=query)
@@ -238,7 +238,7 @@ class RetrievalService:
             embedded_queries.vectors,
             embedding=self._checked_embedding(embedded_queries.vectors[0]),
             primary_query=primary,
-            filters=filters,
+            scope=scope,
             candidate_k=candidate_k,
         )
 
@@ -275,7 +275,7 @@ class RetrievalService:
         *,
         embedding: EmbeddingRef,
         primary_query: str,
-        filters: ChunkFilter | None,
+        scope: Scope,
         candidate_k: int,
     ) -> list[ScoredChunk]:
         """双通道召回 + 归一融合去重;通道各自维持检索前过滤契约。
@@ -291,7 +291,7 @@ class RetrievalService:
             for hit in self._vectors.search(
                 query_vector,
                 top_k=candidate_k,
-                filters=filters,
+                scope=scope,
                 embedding=embedding,
             ):
                 best = vector_hits.get(hit.chunk.chunk_id)
@@ -315,7 +315,7 @@ class RetrievalService:
 
         if keyword_weight > 0.0 and self._keyword_index is not None:
             keyword_hits = self._keyword_index.search(
-                primary_query, top_k=candidate_k, filters=filters
+                primary_query, top_k=candidate_k, scope=scope
             )
             if keyword_hits:
                 keyword_ns = _minmax([hit.score for hit in keyword_hits])
@@ -381,7 +381,7 @@ class RetrievalService:
         self,
         query: str,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
         hits: list[ScoredChunk],
         started: datetime,
     ) -> None:
@@ -390,7 +390,7 @@ class RetrievalService:
             "retrieval_completed",
             query_chars=len(query),
             top_k=top_k,
-            filters=(filters or ChunkFilter()).effective(),
+            filters=scope.effective(),
             hits=len(hits),
             best_score=hits[0].score if hits else None,
             embed_latency_ms=None,

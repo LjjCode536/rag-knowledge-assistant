@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from app.domain.chunks import Chunk
 from app.domain.lexical import text_tokens
-from app.domain.retrieval import ChunkFilter, ScoredChunk
+from app.domain.retrieval import Scope, ScoredChunk
 from app.repositories.keyword_memory import InMemoryKeywordIndex
 
 
@@ -50,7 +50,7 @@ def test_keyword_search_returns_only_lexically_overlapping_chunks() -> None:
     index.replace("alpha", [_chunk("alpha", 0, "年假如何累计与清零")])
     index.replace("beta", [_chunk("beta", 0, "订单尚未发货时,支持全额退款")])
 
-    hits = index.search("没发货可以退款吗", top_k=5, filters=None)
+    hits = index.search("没发货可以退款吗", top_k=5, scope=Scope(tenant="acme"))
 
     assert [hit.chunk.chunk_id for hit in hits] == ["beta#0"]
 
@@ -67,7 +67,7 @@ def test_keyword_search_ranks_by_bm25_score_descending() -> None:
         ],
     )
 
-    hits = index.search("未发货退款", top_k=3, filters=None)
+    hits = index.search("未发货退款", top_k=3, scope=Scope(tenant="acme"))
 
     scores = [hit.score for hit in hits]
     assert scores == sorted(scores, reverse=True)
@@ -86,7 +86,7 @@ def test_keyword_channel_permission_filter_is_pre_retrieval() -> None:
         "beta_doc", [_chunk("beta_doc", 0, "未发货退款政策(同题禁读)", tenant="beta")]
     )
 
-    hits = index.search("未发货退款", top_k=1, filters=ChunkFilter(tenant="acme"))
+    hits = index.search("未发货退款", top_k=1, scope=Scope(tenant="acme"))
 
     assert [hit.chunk.tenant for hit in hits] == ["acme"]
     assert len(hits) == 1
@@ -97,18 +97,17 @@ def test_replace_is_whole_group_swap_per_document() -> None:
     index.replace("alpha", [_chunk("alpha", 0, "旧内容:年终奖发放时间")])
     index.replace("alpha", [_chunk("alpha", 0, "新内容:年假制度修订")])
 
-    assert index.search("年终奖", top_k=5, filters=None) == []
-    assert [hit.chunk.content for hit in index.search("年假制度", top_k=5, filters=None)] == [
-        "新内容:年假制度修订"
-    ]
+    assert index.search("年终奖", top_k=5, scope=Scope(tenant="acme")) == []
+    hits = index.search("年假制度", top_k=5, scope=Scope(tenant="acme"))
+    assert [hit.chunk.content for hit in hits] == ["新内容:年假制度修订"]
 
 
 def test_blank_or_foreign_query_returns_empty() -> None:
     index = InMemoryKeywordIndex()
     index.replace("alpha", [_chunk("alpha", 0, "年假制度")])
 
-    assert index.search("", top_k=3, filters=None) == []
-    assert index.search("养猫指南", top_k=3, filters=None) == []
+    assert index.search("", top_k=3, scope=Scope(tenant="acme")) == []
+    assert index.search("养猫指南", top_k=3, scope=Scope(tenant="acme")) == []
 
 
 def test_search_respects_top_k() -> None:
@@ -122,7 +121,7 @@ def test_search_respects_top_k() -> None:
         ],
     )
 
-    assert len(index.search("退款", top_k=2, filters=None)) == 2
+    assert len(index.search("退款", top_k=2, scope=Scope(tenant="acme"))) == 2
 
 
 def test_chunk_counts_misaligned_never_possible_but_empty_group_is_allowed() -> None:
@@ -131,4 +130,4 @@ def test_chunk_counts_misaligned_never_possible_but_empty_group_is_allowed() -> 
     index.replace("alpha", [_chunk("alpha", 0, "退款政策")])
     index.replace("alpha", [])
 
-    assert index.search("退款", top_k=3, filters=None) == []
+    assert index.search("退款", top_k=3, scope=Scope(tenant="acme")) == []

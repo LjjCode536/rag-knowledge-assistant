@@ -37,6 +37,8 @@ class ErrorCode(StrEnum):
 
     # 身份(ADR-0020):未认证 / 凭证失效。稳定错误码,新增只追加。
     UNAUTHENTICATED = "UNAUTHENTICATED"
+    # 授权范围(ADR-0020):请求的收窄条件超出主体授权范围,不静默裁剪。
+    SCOPE_VIOLATION = "SCOPE_VIOLATION"
 
 
 class AppError(Exception):
@@ -69,6 +71,14 @@ class NotFoundError(AppError):
     code = ErrorCode.NOT_FOUND
     status_code = 404
     default_message = "资源不存在"
+
+
+class ScopeViolationError(AppError):
+    """请求的收窄条件超出主体授权范围;403,不静默裁剪。"""
+
+    code = ErrorCode.SCOPE_VIOLATION
+    status_code = 403
+    default_message = "请求超出授权范围"
 
 
 class BadRequestError(AppError):

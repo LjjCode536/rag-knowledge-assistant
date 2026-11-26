@@ -45,6 +45,20 @@ class Principal(BaseModel):
     display_name: str | None = None
 
 
+class ScopeNarrowing(BaseModel):
+    """HTTP 请求可声明的收窄条件:只有非权限字段,不含租户。
+
+    租户来自主体,由服务端补上;请求体里出现 ``tenant`` 即 422。
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str | None = None
+    doc_type: str | None = None
+    version: str | None = None
+    document_id: str | None = None
+
+
 class PrincipalAccount(BaseModel):
     """主体仓储里的一条账号记录:主体 + 口令哈希。
 

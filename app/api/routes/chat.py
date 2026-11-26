@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field, field_validator
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.api.dependencies import require_principal
 from app.core.envelope import ApiEnvelope, success_envelope
 from app.core.tracing import trace_id_of
+from app.domain.identity import Principal, ScopeNarrowing
 from app.domain.qa import Citation, GenerationUsage, GeneratorKind, RefusalReason
-from app.domain.retrieval import ChunkFilter
+from app.services.access import AccessService
 from app.services.answering import AnswerRunResult, AnswerService
 
 router = APIRouter(prefix="/api/v1", tags=["qa"])
 
 
 class ChatRequest(BaseModel):
-    """问答请求:问题 + 可选 top-k 与检索前元数据过滤(权限维度)。"""
+    """问答请求:问题 + 可选 top-k 与授权范围内的收窄条件。
+
+    租户不由调用方声明(携带即 422);服务端从主体构造授权范围。
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1)
     top_k: int | None = Field(default=None, ge=1, le=50)
-    filters: ChunkFilter | None = None
+    filters: ScopeNarrowing | None = None
 
     @field_validator("question")
     @classmethod
@@ -88,14 +97,21 @@ class ChatView(BaseModel):
 
 
 @router.post("/chat", response_model=ApiEnvelope[ChatView], summary="有据回答 + 引用")
-async def chat(request: Request, body: ChatRequest) -> ApiEnvelope[ChatView]:
+async def chat(
+    request: Request,
+    body: ChatRequest,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> ApiEnvelope[ChatView]:
     """基于知识库资料回答;检索低分或无命中时统一拒答并记录查询日志。"""
     service: AnswerService = request.app.state.answer_service
+    access: AccessService = request.app.state.access_service
+    scope = access.scope_for(principal, body.filters)
     trace_id = trace_id_of(request)
     result = await service.ask(
         body.question,
+        scope=scope,
+        principal_id=principal.id,
         top_k=body.top_k,
-        filters=body.filters,
         trace_id=trace_id,
     )
     return success_envelope(ChatView.of(result), trace_id=trace_id)

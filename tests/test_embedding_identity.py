@@ -14,8 +14,8 @@ from app.core.errors import DimensionMismatchError
 from app.domain.chunks import Chunk
 from app.domain.documents import DocumentRecord, DocumentStatus
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddingRef,
+    Scope,
     build_embedded_chunks,
 )
 from app.integrations.llm.client import EmbedResult, TokenUsage
@@ -151,7 +151,7 @@ async def test_retrieval_rejects_query_vector_of_wrong_dimension() -> None:
     )
 
     with pytest.raises(DimensionMismatchError):
-        await service.search("任意问题", top_k=1)
+        await service.search("任意问题", top_k=1, scope=Scope(tenant="acme"))
 
 
 async def test_retrieval_never_sees_rows_from_another_identity() -> None:
@@ -183,7 +183,7 @@ async def test_retrieval_never_sees_rows_from_another_identity() -> None:
         settings=settings,
     )
 
-    assert await service.search("任意问题", top_k=5) == []
+    assert await service.search("任意问题", top_k=5, scope=Scope(tenant="acme")) == []
 
 
 def test_startup_warns_about_stale_identity(settings, capsys) -> None:
@@ -230,7 +230,7 @@ def test_filter_is_identity_scoped_too() -> None:
         store.search(
             [1.0, 0.0, 0.0, 0.0],
             top_k=5,
-            filters=ChunkFilter(tenant="acme"),
+            scope=Scope(tenant="acme"),
             embedding=_REF,
         )
         == []

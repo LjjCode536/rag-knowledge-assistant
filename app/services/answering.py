@@ -26,7 +26,7 @@ from app.domain.qa import (
     RefusalReason,
 )
 from app.domain.repositories import DocumentRepository, QueryLogRepository
-from app.domain.retrieval import ChunkFilter, ScoredChunk
+from app.domain.retrieval import Scope, ScoredChunk
 from app.services.generation import AnswerGenerator
 from app.services.qa_cache import AnswerCache, CacheEntry
 from app.services.retrieval import RetrievalService
@@ -72,21 +72,23 @@ class AnswerService:
         self,
         question: str,
         *,
+        scope: Scope,
+        principal_id: str,
         top_k: int | None = None,
-        filters: ChunkFilter | None = None,
         trace_id: str,
     ) -> AnswerRunResult:
         """问答一次:top-k 检索、低分拒答、编号上下文与引用,全程留痕。"""
         effective_top_k = top_k if top_k is not None else self._settings.qa_top_k
         min_score = self._settings.qa_min_score
-        filters_effective = (filters or ChunkFilter()).effective()
+        scope_effective = scope.effective()
         started = time.perf_counter()
 
         cache_key = self._cache_key(
             question=question,
             top_k=effective_top_k,
             min_score=min_score,
-            filters_effective=filters_effective,
+            scope_effective=scope_effective,
+            principal_id=principal_id,
         )
         if cache_key is not None:
             entry = self._cache.get(cache_key)
@@ -106,7 +108,7 @@ class AnswerService:
                 )
 
         outcome = await self._retrieval.retrieve(
-            question, top_k=effective_top_k, filters=filters
+            question, top_k=effective_top_k, scope=scope
         )
         hits = outcome.hits
         accepted = [hit for hit in hits if hit.score >= min_score]
@@ -143,7 +145,7 @@ class AnswerService:
             refused=refused,
             refusal_reason=reason,
             hits=_query_hits(hits, used=used),
-            filters=filters_effective,
+            filters=scope_effective,
             top_k=effective_top_k,
             min_score=min_score,
             latency_ms=latency_ms,
@@ -226,16 +228,22 @@ class AnswerService:
         question: str,
         top_k: int,
         min_score: float,
-        filters_effective: dict[str, str],
+        scope_effective: dict[str, str],
+        principal_id: str,
     ) -> str | None:
-        """缓存键=None 表示缓存未启用;键覆盖归一化问题与全部过程口径。"""
+        """缓存键=None 表示缓存未启用;键覆盖问题、主体与全部过程口径。
+
+        主体 id 与有效授权范围都入键:同题不同主体、同题不同租户都不得
+        互相命中答档,权限变化后也不会复用旧答案。
+        """
         if self._cache is None:
             return None
         return self._cache.make_key(
             question=question,
             top_k=top_k,
             min_score=min_score,
-            filters=filters_effective,
+            scope=scope_effective,
+            principal_id=principal_id,
             generator=self._generator.kind.value,
         )
 

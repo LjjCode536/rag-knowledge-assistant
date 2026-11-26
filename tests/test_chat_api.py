@@ -99,7 +99,7 @@ def indexed_client(settings, upload_dir) -> Iterator[tuple[TestClient, dict]]:
             client,
             "employee.md",
             HANDBOOK,
-            tenant="acme",
+            tenant="default",
             department="人力部",
             doc_type="制度",
             version="v1",
@@ -179,7 +179,7 @@ def test_query_logs_record_question_hits_and_latency(indexed_client):
     assert answered_log["latency_ms"] >= 0
     assert answered_log["top_k"] == 3
     assert answered_log["min_score"] == 0.35
-    assert answered_log["filters"] == {}
+    assert answered_log["filters"] == {"tenant": "default"}
     assert answered_log["generator"] == "rule_based"
     assert answered_log["token_usage"] == {
         "prompt_tokens": 0,
@@ -223,7 +223,7 @@ def test_injected_generator_receives_numbered_context(settings, upload_dir):
             client,
             "employee.md",
             HANDBOOK,
-            tenant="acme",
+            tenant="default",
             department="人力部",
             doc_type="制度",
             version="v1",
@@ -263,7 +263,7 @@ def test_chat_citation_includes_pdf_page_number(settings, upload_dir):
             client,
             "handbook.pdf",
             build_pdf(["Annual leave policy: employees may apply after one year."]),
-            tenant="acme",
+            tenant="default",
         )
 
         data = _chat(client, "annual leave policy")
@@ -305,7 +305,7 @@ def test_generator_refusal_leaves_no_citations_or_used_hits(settings, upload_dir
         answer_generator=RefusingGenerator(),
     )
     with authorized_client(app, raise_server_exceptions=False) as client:
-        _index(client, "employee.md", HANDBOOK, tenant="acme")
+        _index(client, "employee.md", HANDBOOK, tenant="default")
 
         data = _chat(client, LEAVE_QUESTION)
         log = client.get(f"{QUERY_LOGS_URL}/{data['query_id']}").json()["data"]

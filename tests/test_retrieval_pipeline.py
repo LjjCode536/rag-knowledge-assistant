@@ -17,9 +17,9 @@ import pytest
 from app.core.config import Settings
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddingRef,
     QueryPlan,
+    Scope,
     ScoredChunk,
     build_embedded_chunks,
 )
@@ -152,7 +152,7 @@ async def test_all_toggles_off_reproduces_single_vector_search() -> None:
         _settings(), vector_store=store, embedder=embedder
     )
 
-    hits = await service.search("押金退款", top_k=2)
+    hits = await service.search("押金退款", top_k=2, scope=Scope(tenant="acme"))
 
     assert embedder.embedded_batches == [["押金退款"]]
     assert [hit.chunk.chunk_id for hit in hits] == [chunk_b.chunk_id, chunk_a.chunk_id]
@@ -175,7 +175,7 @@ async def test_minmax_degenerate_channel_keeps_raw_scores() -> None:
         keyword_index=keyword_index,
     )
 
-    hits = await service.search("押金退款", top_k=3)
+    hits = await service.search("押金退款", top_k=3, scope=Scope(tenant="acme"))
 
     assert [hit.chunk.chunk_id for hit in hits] == [chunk_a.chunk_id]
     assert all(hit.score == pytest.approx(0.6) for hit in hits)
@@ -222,7 +222,7 @@ async def test_hybrid_fuses_channels_with_dedup() -> None:
         keyword_index=keyword_index,
     )
 
-    hits = await service.search("押金退款", top_k=2)
+    hits = await service.search("押金退款", top_k=2, scope=Scope(tenant="acme"))
 
     ids = [hit.chunk.chunk_id for hit in hits]
     assert ids.count(chunk_a.chunk_id) == 1  # 双通道都命中 A:融合去重
@@ -253,7 +253,7 @@ async def test_hybrid_permission_filter_still_pre_retrieval() -> None:
         keyword_index=keyword_index,
     )
 
-    hits = await service.search("押金退款", top_k=1, filters=ChunkFilter(tenant="acme"))
+    hits = await service.search("押金退款", top_k=1, scope=Scope(tenant="acme"))
 
     assert all(hit.chunk.tenant == "acme" for hit in hits)
     assert all(hit.chunk.chunk_id != chunk_beta.chunk_id for hit in hits)
@@ -275,7 +275,7 @@ async def test_query_rewrite_embeds_rewritten_query_single_batch() -> None:
         query_planner=planner,
     )
 
-    hits = await service.search("没发货可以退钱吗", top_k=3)
+    hits = await service.search("没发货可以退钱吗", top_k=3, scope=Scope(tenant="acme"))
 
     assert embedder.embedded_batches == [["未发货订单退款流程"]]
     assert [hit.chunk.chunk_id for hit in hits] == [chunk_a.chunk_id]
@@ -294,7 +294,7 @@ async def test_planner_returns_no_rewrite_falls_back_to_original_query() -> None
         query_planner=FakeQueryPlanner(),  # rewritten=None → 回退原查询
     )
 
-    hits = await service.search("原查询", top_k=3)
+    hits = await service.search("原查询", top_k=3, scope=Scope(tenant="acme"))
 
     assert embedder.embedded_batches == [["原查询"]]
     assert [hit.chunk.chunk_id for hit in hits] == [chunk_a.chunk_id]
@@ -324,7 +324,7 @@ async def test_multi_query_expands_and_merges_with_dedup() -> None:
         query_planner=FakeQueryPlanner(variants=["变体一", "变体二"]),
     )
 
-    hits = await service.search("原始查询", top_k=5)
+    hits = await service.search("原始查询", top_k=5, scope=Scope(tenant="acme"))
 
     assert embedder.embedded_batches == [["原始查询", "变体一", "变体二"]]
     ids = [hit.chunk.chunk_id for hit in hits]
@@ -355,7 +355,7 @@ async def test_multi_query_only_does_not_leak_planner_rewrite() -> None:
         query_planner=planner,
     )
 
-    hits = await service.search("原查询", top_k=5)
+    hits = await service.search("原查询", top_k=5, scope=Scope(tenant="acme"))
 
     # 改写没有生效:批量 embed 中只有「原查询 + 变体」,改写文本从未出现在任何通道
     assert embedder.embedded_batches == [["原查询", "变体一"]]
@@ -385,7 +385,7 @@ async def test_rerank_orders_final_hits_and_truncates_to_top_k() -> None:
         reranker=reranker,
     )
 
-    hits = await service.search("查询", top_k=2)
+    hits = await service.search("查询", top_k=2, scope=Scope(tenant="acme"))
 
     # FakeReranker 按内容长度降序:内容最长的候选排前
     assert [(query, seen, top_n) for query, seen, top_n in reranker.calls] == [("查询", 3, 2)]
@@ -419,7 +419,7 @@ async def test_mmr_replaces_duplicate_with_diverse_candidate() -> None:
         embedder=embedder,
     )
 
-    hits = await service.search("查询", top_k=2)
+    hits = await service.search("查询", top_k=2, scope=Scope(tenant="acme"))
 
     assert [hit.chunk.chunk_id for hit in hits] == [
         chunk_a.chunk_id,
@@ -451,7 +451,7 @@ async def test_rerank_runs_before_mmr_when_both_on() -> None:
         reranker=reranker,
     )
 
-    hits = await service.search("查询", top_k=2)
+    hits = await service.search("查询", top_k=2, scope=Scope(tenant="acme"))
 
     # 重排先跑,MMR 在重排产物上做多样性选择:候选池全量、top_n 保留全部候选
     query, seen, top_n = reranker.calls[0]

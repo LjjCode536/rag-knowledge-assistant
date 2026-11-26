@@ -29,9 +29,9 @@ from psycopg.rows import dict_row
 
 from app.domain.chunks import Chunk
 from app.domain.retrieval import (
-    ChunkFilter,
     EmbeddedChunk,
     EmbeddingRef,
+    Scope,
     ScoredChunk,
     consistent_embedding_ref,
     cosine_similarity,
@@ -45,11 +45,11 @@ _SEARCH_COLUMNS = (
 )
 
 # 过滤字段 → chunks / embeddings 列名:契约字段名同名直取。
-# 字段集由领域模型推导 —— 给 ChunkFilter 加字段时不会静默漏掉 SQL 条件
+# 字段集由领域模型推导 —— 给 Scope 加字段时不会静默漏掉 SQL 条件
 # (推导式会直接报出"无对应列"的程序错误,而不是运行时 KeyError)。
 _FILTER_COLUMNS = {
     field: field
-    for field in ChunkFilter.model_fields
+    for field in Scope.model_fields
     if field in {
         "tenant",
         "department",
@@ -59,10 +59,10 @@ _FILTER_COLUMNS = {
     }
 }
 # 领域模型里有、但 embeddings 表没有对应列的过滤字段:程序错误(装配期暴露)
-_UNMAPPED_FILTER_FIELDS = set(ChunkFilter.model_fields) - set(_FILTER_COLUMNS)
+_UNMAPPED_FILTER_FIELDS = set(Scope.model_fields) - set(_FILTER_COLUMNS)
 if _UNMAPPED_FILTER_FIELDS:
     raise RuntimeError(
-        "ChunkFilter 存在无对应列的过滤字段(embeddings 表缺列):"
+        "Scope 存在无对应列的过滤字段(embeddings 表缺列):"
         + ", ".join(sorted(_UNMAPPED_FILTER_FIELDS))
     )
 
@@ -83,9 +83,9 @@ def _as_vector(stored: str | None) -> list[float] | None:
     return [float(component) for component in stored.strip("[]").split(",") if component]
 
 
-def _where_of(filters: ChunkFilter) -> tuple[str, list[Any]]:
-    """生效过滤条件 → SQL WHERE 片段(AND 等值);空条件返回 (true, [])。"""
-    constraints = filters.effective()
+def _where_of(scope: Scope) -> tuple[str, list[Any]]:
+    """生效授权范围 → SQL WHERE 片段(AND 等值)。"""
+    constraints = scope.effective()
     clauses: list[str] = []
     params: list[Any] = []
     for field, value in constraints.items():
@@ -193,11 +193,11 @@ class PgVectorStore:
         vector: Sequence[float],
         *,
         top_k: int,
-        filters: ChunkFilter | None,
+        scope: Scope,
         embedding: EmbeddingRef,
     ) -> list[ScoredChunk]:
-        """身份与元数据过滤都在相似度计算之前:被过滤的切片不进 SQL 候选。"""
-        where, params = _where_of(filters or ChunkFilter())
+        """身份与授权范围过滤都在相似度计算之前:越界切片不进 SQL 候选。"""
+        where, params = _where_of(scope)
         identity, identity_params = _identity_of(embedding)
         query = (
             "SELECT " + _SEARCH_COLUMNS + f" FROM embeddings e WHERE {where} "

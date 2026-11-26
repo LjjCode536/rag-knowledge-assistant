@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -35,7 +36,7 @@ from app.domain.evaluation import (
     rule_based_citation_accuracy,
     rule_based_faithfulness,
 )
-from app.domain.retrieval import ChunkFilter
+from app.domain.retrieval import Scope
 
 # 成败判定与在线问答共用同一阈值口径;报告里会写明本次使用的值。
 SCHEMA_VERSION = 1
@@ -131,13 +132,19 @@ class EvaluationService:
         dataset: GoldenDataset,
         dataset_dir: Path,
         config: EvaluationConfig,
+        headers_for_tenant: Callable[[str], dict[str, str]] | None = None,
     ) -> None:
         self._client = client
         self._dataset = dataset
         self._dataset_dir = dataset_dir
         self._config = config
+        self._headers_for_tenant = headers_for_tenant
         self._top_k = config.top_k if config.top_k is not None else config.k
         self._generator: str | None = None
+        # 文档名 → 所属租户:权限对照要用禁读文档自己租户的真实 token
+        self._corpus_tenants = {
+            corpus.file_name: corpus.tenant for corpus in dataset.corpus
+        }
 
     async def run(self) -> EvaluationReport:
         """完整跑一轮:语料入库 → 逐用例检索与问答 → 汇总 → 报告。"""
@@ -203,6 +210,7 @@ class EvaluationService:
                 raise EvaluationDatasetError(f"语料文件不存在:{path}")
             document = await self._post(
                 "/api/v1/documents",
+                tenant=corpus.tenant,
                 files={"file": (path.name, path.read_bytes(), "text/markdown")},
                 data={
                     "tenant": corpus.tenant,
@@ -220,9 +228,13 @@ class EvaluationService:
             if self._config.chunk_overlap is not None:
                 chunk_request["chunk_overlap"] = self._config.chunk_overlap
             chunk_run = await self._post(
-                f"/api/v1/documents/{document_id}/chunks", json=chunk_request
+                f"/api/v1/documents/{document_id}/chunks",
+                tenant=corpus.tenant,
+                json=chunk_request,
             )
-            await self._post(f"/api/v1/documents/{document_id}/embeddings")
+            await self._post(
+                f"/api/v1/documents/{document_id}/embeddings", tenant=corpus.tenant
+            )
 
             effective = _effective_chunking(chunk_run)
             if chunk_strategy is None:
@@ -250,7 +262,7 @@ class EvaluationService:
 
     async def _evaluate_case(self, case: GoldenCase, index: _CorpusIndex) -> CaseResult:
         expected = [self._resolve_expected(case, item, index) for item in case.expected_chunks]
-        hits = await self._search(case.question, case.filters)
+        hits = await self._search(case.question, case.filters, tenant=case.filters.tenant)
         retrieved = _retrieved(hits, index)
         expected_ids = [item.chunk_id for item in expected]
         retrieved_ids = [item.chunk_id for item in retrieved]
@@ -303,8 +315,11 @@ class EvaluationService:
                 for chunk in index.chunks_of(document)
             }
             permission_ok = not any(item.chunk_id in forbidden_ids for item in retrieved)
-            # 无过滤对照:证明禁读文档确实会被检索到,权限通过不是因为语料无关
-            control_hits = await self._search(case.question, None)
+            # 无过滤对照:用禁读文档所属租户的真实 token 搜索,证明诱饵本会命中;
+            # 权限通过不是因为诱饵与问题无关,也没有任何 HTTP 鉴权豁免。
+            control_hits = await self._search(
+                case.question, None, tenant=self._forbidden_tenant(case)
+            )
             forbidden_best_rank = next(
                 (
                     rank
@@ -344,10 +359,11 @@ class EvaluationService:
         """走一次问答主缝;top_k 与检索口径一致,拒答由应用配置阈值决定。"""
         chat = await self._post(
             "/api/v1/chat",
+            tenant=case.filters.tenant,
             json={
                 "question": case.question,
                 "top_k": self._top_k,
-                "filters": case.filters.effective() or None,
+                "filters": _narrowing_payload(case.filters),
             },
         )
         # 报告写观测到的生成器种类(rule_based / llm),而非配置推断
@@ -378,20 +394,35 @@ class EvaluationService:
         )
 
     async def _search(
-        self, question: str, filters: ChunkFilter | None
+        self, question: str, filters: Scope | None, *, tenant: str
     ) -> list[dict[str, Any]]:
-        effective = filters.effective() if filters is not None else {}
         data = await self._post(
             "/api/v1/search",
+            tenant=tenant,
             json={
                 "query": question,
                 "top_k": self._top_k,
-                "filters": effective or None,
+                "filters": _narrowing_payload(filters) if filters is not None else None,
             },
         )
         return list(data["hits"])
 
-    async def _post(self, url: str, **kwargs: Any) -> dict[str, Any]:
+    def _forbidden_tenant(self, case: GoldenCase) -> str:
+        """禁读文档所属租户;语料清单里找不到时退回用例租户(对照仍可运行)。"""
+        for document in case.forbidden_documents:
+            tenant = self._corpus_tenants.get(document)
+            if tenant:
+                return tenant
+        return case.filters.tenant
+
+    async def _post(
+        self, url: str, *, tenant: str | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
+        headers = dict(kwargs.pop("headers", None) or {})
+        if tenant is not None and self._headers_for_tenant is not None:
+            headers.update(self._headers_for_tenant(tenant))
+        if headers:
+            kwargs["headers"] = headers
         response = await self._client.post(url, **kwargs)
         try:
             payload = response.json()
@@ -411,6 +442,14 @@ class EvaluationService:
         if data is None:
             raise EvaluationApiError(f"POST {url} 成功响应缺少 data 字段")
         return data
+
+
+def _narrowing_payload(scope: Scope) -> dict[str, str] | None:
+    """评估请求体只送收窄条件:租户由服务端按 token 主体补上,绝不透传。"""
+    narrowing = {
+        key: value for key, value in scope.effective().items() if key != "tenant"
+    }
+    return narrowing or None
 
 
 def _effective_chunking(chunk_run: dict[str, Any]) -> tuple[str, int, int]:
