@@ -15,6 +15,7 @@ from app.domain.evaluation import (
     GoldenCase,
     GoldenDataset,
 )
+from app.domain.retrieval import Scope
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
 from app.services.evaluation import (
@@ -115,6 +116,86 @@ async def test_permission_boundary_case_blocks_cross_tenant_chunk(
     assert any(ref.document == "employee_handbook.md" for ref in result.expected)
 
 
+async def test_evaluator_sends_real_tenant_tokens_and_never_declares_tenant(
+    settings, tmp_path
+) -> None:
+    """每个请求都带真实签名 JWT;请求体 / 查询参数不携带租户。
+
+    权限对照必须换用禁读文档所属租户的主体,否则「租户 A 查不到 B」无法证明
+    是授权范围生效,而不是 B 本来就不存在。
+    """
+    (tmp_path / "acme.md").write_text(
+        "# 年假\n\n入职满一年可以申请年假。\n", encoding="utf-8"
+    )
+    (tmp_path / "globex.md").write_text(
+        "# 年假\n\n入职满半年可以申请年假。\n", encoding="utf-8"
+    )
+    dataset = GoldenDataset(
+        name="subject-driven",
+        version=1,
+        corpus=[
+            CorpusDocument(path="acme.md", tenant="acme"),
+            CorpusDocument(path="globex.md", tenant="globex"),
+        ],
+        cases=[
+            GoldenCase(
+                id="tenant_isolation",
+                question="入职多久可以申请年假?",
+                category=EvaluationCategory.LEAVE,
+                expected_chunks=[
+                    ExpectedChunk(document="acme.md", anchor="入职满一年")
+                ],
+                forbidden_documents=["globex.md"],
+                filters=Scope(tenant="acme"),
+            )
+        ],
+    )
+    app = create_app(settings, embedder=DeterministicEmbedder(dim=EVALUATION_DIM))
+    transport = httpx.ASGITransport(app=app)
+    seen: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return await transport.handle_async_request(request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://evaluation",
+    ) as client:
+        service = EvaluationService(
+            client=client,
+            dataset=dataset,
+            dataset_dir=tmp_path,
+            config=EvaluationConfig(k=3, min_score=settings.qa_min_score),
+            headers_for_tenant=lambda tenant: auth_header_for_tenant(app, tenant),
+        )
+        report = await service.run()
+
+    assert seen, "评估必须真的发 HTTP 请求"
+    token_tenants: set[str] = set()
+    for request in seen:
+        authorization = request.headers.get("authorization", "")
+        assert authorization.startswith("Bearer "), request.url.path
+        token = authorization.removeprefix("Bearer ")
+        principal = app.state.token_service.decode(token)
+        assert principal.kind.value == "service"
+        assert principal.role.value == "admin"
+        token_tenants.add(principal.tenant)
+        assert "tenant" not in request.url.params
+        if request.content and request.headers.get("content-type", "").startswith(
+            "application/json"
+        ):
+            payload = json.loads(request.content)
+            assert "tenant" not in payload
+            assert "tenant" not in (payload.get("filters") or {})
+
+    # 主查询用 acme 主体,无过滤对照必须换成 globex 主体
+    assert token_tenants == {"acme", "globex"}
+    result = report.case_results[0]
+    assert result.permission_ok is True
+    assert result.forbidden_best_rank is not None
+
+
 async def test_markdown_report_is_traceable_and_reproducible(settings, golden_dataset) -> None:
     report = await _run_evaluation(settings, golden_dataset)
     markdown = render_markdown(report)
@@ -126,6 +207,10 @@ async def test_markdown_report_is_traceable_and_reproducible(settings, golden_da
     for case in golden_dataset.cases:
         assert case.id in markdown
     assert "无过滤对照" in markdown
+    assert "鉴权口径" in markdown
+    assert "signed-jwt-per-tenant" in markdown
+    assert "主体与授权范围" in markdown
+    assert "EVAL_BYPASS" in markdown
 
     # 同样的报告再次渲染必须逐字节一致,便于后续迭代做 diff
     assert render_markdown(report) == markdown

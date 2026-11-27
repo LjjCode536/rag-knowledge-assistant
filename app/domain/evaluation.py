@@ -243,6 +243,8 @@ class EvaluationReport(BaseModel):
     vector_store: str | None = None
     # M4 起记录高级检索开关快照(混合 / MMR / 重排等),保证组合可追溯
     retrieval_config: dict[str, Any] | None = None
+    # 鉴权口径(ADR-0020 修订):每租户真实签名 JWT;旧报告无此字段
+    auth_mode: str | None = None
     cases_total: int = Field(ge=0)
     summary: RetrievalMetrics
     categories: dict[str, RetrievalMetrics] = Field(default_factory=dict)

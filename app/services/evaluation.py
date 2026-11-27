@@ -2,7 +2,9 @@
 
 评估器不绕过 API:上传 / 切片 / 向量化 / 检索都走用户实际使用的端点。
 默认注入确定性向量替身,因而无密钥环境也能复现;真实上游模式只是换客户端。
-指标口径在 :mod:`app.domain.evaluation` 唯一定义,本模块只负责编排与报告。
+所有请求都携带真实签名 JWT:语料租户决定 token 主体,请求体只送收窄条件,
+**没有** EVAL_BYPASS 之类的 HTTP 免鉴权开关。指标口径在
+:mod:`app.domain.evaluation` 唯一定义,本模块只负责编排与报告。
 """
 
 from __future__ import annotations
@@ -42,6 +44,9 @@ from app.domain.retrieval import Scope
 SCHEMA_VERSION = 1
 DEFAULT_RUN_NAME = "T06 检索指标基线"
 DEFAULT_EMBEDDER_LABEL = "deterministic-lexical-1024d"
+# 评估的主体口径:每个语料租户一个服务账号,请求带该账号签发的真实 JWT;
+# 报表固定写出这一行,避免把「进程内直调」误读成鉴权豁免。
+DEFAULT_AUTH_MODE = "signed-jwt-per-tenant"
 
 # 高级检索开关清单(M4):CLI、报告快照与默认组合论证共用同一顺序
 RETRIEVAL_TOGGLE_FIELDS = (
@@ -79,6 +84,8 @@ class EvaluationConfig:
     run_name: str = DEFAULT_RUN_NAME
     # M4 高级检索开关快照(评估时点按名称记录,进入报告的「检索配置」行)
     retrieval_config: dict[str, Any] | None = None
+    # 鉴权口径:报告必须写明请求以什么主体发出,避免与「免鉴权直调」混淆
+    auth_mode: str = DEFAULT_AUTH_MODE
 
 
 @dataclass(slots=True)
@@ -132,12 +139,13 @@ class EvaluationService:
         dataset: GoldenDataset,
         dataset_dir: Path,
         config: EvaluationConfig,
-        headers_for_tenant: Callable[[str], dict[str, str]] | None = None,
+        headers_for_tenant: Callable[[str], dict[str, str]],
     ) -> None:
         self._client = client
         self._dataset = dataset
         self._dataset_dir = dataset_dir
         self._config = config
+        # 必填:评估没有匿名 / 免鉴权路径;每个租户都由调用方提供真实 token
         self._headers_for_tenant = headers_for_tenant
         self._top_k = config.top_k if config.top_k is not None else config.k
         self._generator: str | None = None
@@ -175,6 +183,7 @@ class EvaluationService:
             vector_store=self._config.vector_store,
             command=self._config.command,
             retrieval_config=self._config.retrieval_config,
+            auth_mode=self._config.auth_mode,
             cases_total=len(results),
             summary=summary,
             categories=categories,
@@ -435,7 +444,7 @@ class EvaluationService:
         self, url: str, *, tenant: str | None = None, **kwargs: Any
     ) -> dict[str, Any]:
         headers = dict(kwargs.pop("headers", None) or {})
-        if tenant is not None and self._headers_for_tenant is not None:
+        if tenant is not None:
             headers.update(self._headers_for_tenant(tenant))
         if headers:
             kwargs["headers"] = headers
@@ -562,6 +571,8 @@ def render_markdown(
         "",
         "> 由 `scripts/evaluate.py` 生成。检索指标只依赖切片编号与排序,不依赖生成模型;",
         "> 默认注入确定性向量替身,可在无密钥环境(CI)复现。",
+        "> 评估请求全部携带按租户签发的真实 JWT;请求体只送收窄条件,"
+        "租户由服务端按 token 主体补上,没有 HTTP 免鉴权开关。",
         "> 报告用「文档#index + 锚点」定位切片;随机 chunk_id 不写入报告,"
         "跨运行 diff 只反映指标变化。",
         "",
@@ -584,7 +595,16 @@ def render_markdown(
         f"| 运行模式 | `{report.mode}` |",
         f"| 回答生成器 | `{report.generator or '—'}` |",
         f"| 复现命令 | `{report.command}` |",
+        *( [f"| 鉴权口径 | `{report.auth_mode}` |"] if report.auth_mode else [] ),
         *(retrieval_config_rows(report.retrieval_config) if report.retrieval_config else []),
+        "",
+        "## 主体与授权范围",
+        "",
+        "- 入库与检索都以语料租户的服务账号发出真实签名 JWT;报告按 token 主体"
+        "(租户 + 角色)构造授权范围,请求体不声明租户。",
+        "- 权限边界用例以租户 A 的主体检索;评估模块内部的「无过滤对照」改用"
+        "禁读文档所属租户 B 的真实 token,证明诱饵本会命中而不是与问题无关。",
+        "- 不存在 `EVAL_BYPASS` / 免鉴权开关:去掉 token 的请求与普通用户一样返回 401。",
         "",
         "## 摘要",
         "",
@@ -849,6 +869,7 @@ def render_ablation_markdown(
         f"| K / 拒答阈值 | {k} / {config.min_score} |",
         f"| 向量来源 | `{config.embedder}` |",
         f"| 运行模式 | `{config.mode}`(各组合独立进程内重建) |",
+        f"| 鉴权口径 | `{config.auth_mode}`(每组合均按租户签发真实 JWT) |",
         "| 上游并发 | `serial`(逐用例串行) |",
         ablation_repro_line(config.command),
     ]
@@ -1164,6 +1185,7 @@ def _format_optional(value: float | None) -> str:
 
 
 __all__ = [
+    "DEFAULT_AUTH_MODE",
     "EvaluationApiError",
     "EvaluationConfig",
     "EvaluationDatasetError",

@@ -23,7 +23,7 @@ uv run python scripts/evaluate.py --iteration 0002 --slug t07-advanced-retrieval
   --run-name "T07 高级检索"
 ```
 
-连接真实服务(外部模式必须显式给出服务端 `min_score` 与 embedder 口径;建议对专用 / 重启后的服务跑,避免重复入库污染指标):
+连接真实服务(外部模式必须显式给出服务端 `min_score` 与 embedder 口径;建议对专用 / 重启后的服务跑,避免重复入库污染指标)。评估器会按语料租户签发真实 JWT,外部服务必须与本地共用 `AUTH_JWT_SECRET` / `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE`,否则请求以 401 明确失败、不会退化成免鉴权直调:
 
 ```bash
 uv run python scripts/evaluate.py --base-url http://127.0.0.1:8000 \
@@ -118,7 +118,7 @@ uv run python scripts/evaluate.py --min-score 0.07 --check \
   判"没有高分命中即正确拒答";T09 起 `/chat` 的实际拒答行为按双向口径判定
   (生成口径),两者并存于报告。
 - **权限边界用例**:除 `expected_chunks` 外声明 `forbidden_documents`。评估器检查 top-k 是否泄漏禁读文档,并额外跑一次无过滤检索,证明该文档确实会命中——权限通过不是因为语料无关。
-- **目标口径(ADR-0021,随文档授权切片生效)**:用例由主体驱动——以租户 A 的主体检索,语料里放租户 B 的同主题诱饵;评估器在进程内按语料租户构造授权范围,并用评估模块内部的「无过滤对照」证明诱饵本会命中。不提供 HTTP 层的免鉴权开关。
+- **主体口径(ADR-0020 / 0021)**:用例由主体驱动——以租户 A 的主体检索,语料里放租户 B 的同主题诱饵。入库、检索、问答与权限对照全部携带按租户签发的真实 JWT(服务账号,`role=admin`);请求体只送收窄条件,租户由服务端从 token 补上。「无过滤对照」用禁读文档所属租户 B 的真实 token 在评估模块内部执行,证明诱饵本会命中。**没有** HTTP 免鉴权开关或 `EVAL_BYPASS`;报告「评估配置」表会写明鉴权口径,并含「主体与授权范围」说明。
 
 ## 增加用例
 

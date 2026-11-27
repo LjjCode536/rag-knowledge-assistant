@@ -226,7 +226,7 @@ uv run python scripts/evaluate.py
 - 报告:`docs/iterations/0001-t06-retrieval-baseline.md`(人读)与同名 `.json`(CI / 后续对比);逐用例列出预期锚点、`文档#index`、top-k 命中与指标。
 - 默认在进程内启动应用并注入 1024 维确定性向量替身,**无密钥环境(CI)可跑**;报告会写明 `embedder=deterministic-lexical-1024d`。
 - 评估走 HTTP 主缝(上传 → 切片 → 向量化 → 检索),与真实用户路径一致;不用服务层内部捷径。
-- 连接真实服务:`uv run python scripts/evaluate.py --base-url http://127.0.0.1:8000 --min-score 0.35 --embedder-label BAAI/bge-m3`;外部模式必须显式给出服务端口径,且建议对专用 / 重启后的服务跑,避免重复入库污染指标。
+- 连接真实服务:`uv run python scripts/evaluate.py --base-url http://127.0.0.1:8000 --min-score 0.35 --embedder-label BAAI/bge-m3`;外部模式必须显式给出服务端口径,且建议对专用 / 重启后的服务跑,避免重复入库污染指标。评估器按租户签发真实 JWT,外部服务需与本地共用 `AUTH_JWT_SECRET` / issuer / audience,否则以 401 明确失败(没有 `EVAL_BYPASS`)。
 - 后续迭代用 `--iteration 0002 --slug t07-advanced-retrieval --run-name "T07 高级检索"` 生成新报告,不要覆盖基线。
 - 预期切片用「文档 + 文内唯一锚点」定位,评估时解析成真实 `chunk_id` 参与计算;报告中用稳定的 `文档#index` 定位,随机 uuid 不写进数据集与报告。
 

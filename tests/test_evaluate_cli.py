@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from app.core.config import Settings
-from scripts.evaluate import main
+from app.services.auth import TokenService
+from scripts.evaluate import _tenant_auth_headers, main
 
 DATASET_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "golden_dataset.yaml"
 
@@ -53,9 +54,12 @@ def test_cli_writes_reports_without_api_key(tmp_path: Path) -> None:
     text = report.read_text(encoding="utf-8")
     assert "# T06 测试基线" in text
     assert "Recall@3" in text
+    assert "鉴权口径" in text
+    assert "signed-jwt-per-tenant" in text
     payload = json.loads(json_report.read_text(encoding="utf-8"))
     assert payload["cases_total"] >= 20
     assert payload["summary"]["cases"] >= 20
+    assert payload["auth_mode"] == "signed-jwt-per-tenant"
 
 
 def test_cli_external_mode_requires_explicit_server_config(tmp_path: Path) -> None:
@@ -76,6 +80,25 @@ def test_cli_external_mode_requires_explicit_server_config(tmp_path: Path) -> No
 
 def test_cli_custom_run_name_cannot_silently_overwrite_baseline() -> None:
     assert main(["--run-name", "T07 高级检索"]) == 2
+
+
+def test_external_mode_tokens_are_real_signed_service_accounts() -> None:
+    """外部模式用与服务端相同的签名配置按租户签发 token,不走免鉴权直调。"""
+    token_service = TokenService.from_settings(
+        Settings(_env_file=None, auth_jwt_secret="evaluation-secret-" + "x" * 24)
+    )
+    headers = _tenant_auth_headers(token_service)
+
+    acme = headers("acme")
+    globex = headers("globex")
+
+    assert acme["Authorization"].startswith("Bearer ")
+    assert acme["Authorization"] != globex["Authorization"]
+    for tenant, values in (("acme", acme), ("globex", globex)):
+        principal = token_service.decode(values["Authorization"].removeprefix("Bearer "))
+        assert principal.tenant == tenant
+        assert principal.kind.value == "service"
+        assert principal.role.value == "admin"
 
 
 def _gate_args(tmp_path: Path) -> list[str]:

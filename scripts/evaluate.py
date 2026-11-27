@@ -43,6 +43,7 @@ from app.domain.evaluation import EvaluationReport, GenerationMetrics
 from app.domain.identity import Principal, PrincipalKind, Role
 from app.integrations.llm.deterministic import EVALUATION_DIM, DeterministicEmbedder
 from app.main import create_app
+from app.services.auth import TokenService
 from app.services.evaluation import (
     DEFAULT_EMBEDDER_LABEL,
     DEFAULT_RUN_NAME,
@@ -214,7 +215,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--base-url",
         default=None,
-        help="改为评估已在运行的服务(如 http://127.0.0.1:8000),不再进程内启动",
+        help="改为评估已在运行的服务(如 http://127.0.0.1:8000),不再进程内启动;"
+        "需与服务端共用 AUTH_JWT_SECRET / issuer / audience,评估器按租户签发真实 token",
     )
     parser.add_argument(
         "--verbose",
@@ -423,12 +425,17 @@ async def _run(
     settings_updates: dict[str, Any],
 ) -> EvaluationReport:
     if args.base_url:
+        # 外部模式也走真实鉴权:用与服务端相同的签名配置为每个语料租户签发
+        # 服务账号 token。服务端若换了 secret / issuer / audience,这里会以 401
+        # 明确失败,不会退化成本地免鉴权直调。
+        token_service = TokenService.from_settings(get_settings())
         async with httpx.AsyncClient(base_url=args.base_url, timeout=120.0) as client:
             service = EvaluationService(
                 client=client,
                 dataset=dataset,
                 dataset_dir=args.dataset.resolve().parent,
                 config=config,
+                headers_for_tenant=_tenant_auth_headers(token_service),
             )
             return await service.run()
 
@@ -459,7 +466,7 @@ async def _run(
                     dataset=dataset,
                     dataset_dir=args.dataset.resolve().parent,
                     config=config,
-                    headers_for_tenant=_tenant_auth_headers(app),
+                    headers_for_tenant=_tenant_auth_headers(app.state.token_service),
                 )
                 return await service.run()
         finally:
@@ -519,8 +526,8 @@ async def _run_ablation(
     return runs, skipped
 
 
-def _tenant_auth_headers(app) -> Callable[[str], dict[str, str]]:
-    """进程内评估按租户签发真实 token 的取头函数。
+def _tenant_auth_headers(token_service: TokenService) -> Callable[[str], dict[str, str]]:
+    """进程内 / 外部评估共用的取头函数:按租户签发真实服务账号 token。
 
     评估器不经过 HTTP 鉴权豁免(ADR-0020 禁止 ``EVAL_BYPASS``):入库用
     语料租户的主体、检索 / 问答用用例租户的主体,权限对照用禁读文档
@@ -534,7 +541,7 @@ def _tenant_auth_headers(app) -> Callable[[str], dict[str, str]]:
             tenant=tenant,
             role=Role.ADMIN,
         )
-        issued = app.state.token_service.issue(principal)
+        issued = token_service.issue(principal)
         return {"Authorization": f"Bearer {issued.access_token}"}
 
     return headers_for
@@ -572,7 +579,7 @@ async def _run_combo(
                     dataset=dataset,
                     dataset_dir=dataset_dir,
                     config=config,
-                    headers_for_tenant=_tenant_auth_headers(app),
+                    headers_for_tenant=_tenant_auth_headers(app.state.token_service),
                 )
                 return await service.run()
         finally:
