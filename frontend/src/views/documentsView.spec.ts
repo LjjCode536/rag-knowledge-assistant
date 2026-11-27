@@ -54,6 +54,7 @@ function documentView(overrides: Record<string, unknown> = {}): Record<string, u
     file_type: 'md',
     size_bytes: 128,
     tenant: 'default',
+    owner_id: 'usr_owner',
     department: null,
     doc_type: null,
     version: 'v1',
@@ -106,8 +107,22 @@ function elementView(overrides: Record<string, unknown> = {}): Record<string, un
   }
 }
 
+/** 一条文档授权。 */
+function grantView(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    grant_id: 'grant-1',
+    tenant: 'default',
+    file_name: '员工手册.md',
+    subject_type: 'user',
+    subject_id: 'usr_colleague',
+    granted_by: 'usr_owner',
+    created_at: '2026-10-31T08:10:00Z',
+    ...overrides,
+  }
+}
+
 /**
- * 按路径分派响应:清单 / 单份档案 / 切片 / 解析元素。
+ * 按路径分派响应:清单 / 单份档案 / 切片 / 解析元素 / 授权清单。
  *
  * 用 URL 判别而非调用次序 —— 调用次序是实现细节。
  */
@@ -116,6 +131,7 @@ function stubDocuments(routes: {
   document?: unknown
   chunks?: unknown
   elements?: unknown
+  grants?: unknown
   /** 上传端点的响应(任务句柄)。 */
   upload?: unknown
   listStatus?: number
@@ -133,6 +149,26 @@ function stubDocuments(routes: {
     // 上传:POST /api/v1/documents(不带路径参数)返回任务句柄
     if (init?.method === 'POST' && url === '/api/v1/documents') {
       return new Response(okEnvelope(routes.upload ?? documentView()), { status: 201 })
+    }
+    if (url.includes('/grants')) {
+      if (init?.method === 'POST') {
+        return new Response(okEnvelope(grantView({ grant_id: 'grant-new' })), {
+          status: 201,
+        })
+      }
+      if (init?.method === 'DELETE') {
+        return new Response(okEnvelope(grantView()), { status: 200 })
+      }
+      return new Response(
+        okEnvelope(
+          routes.grants ?? {
+            document_id: 'doc-1',
+            total: 0,
+            items: [],
+          },
+        ),
+        { status: 200 },
+      )
     }
     if (url.includes('/elements')) {
       return new Response(
@@ -813,6 +849,150 @@ describe('知识库文档页组件行为', () => {
 
       await vi.waitFor(() => {
         expect(wrapper.text()).toContain('acme')
+      })
+    })
+  })
+
+  describe('授权清单', () => {
+    it('所有者可在详情页查看、添加与撤销授权', async () => {
+      stubDocuments({
+        document: documentView({ owner_id: 'usr_owner' }),
+        grants: {
+          document_id: 'doc-1',
+          total: 1,
+          items: [grantView()],
+        },
+      })
+      const wrapper = mountView(DocumentsView)
+      useAuthStore().principal = {
+        id: 'usr_owner',
+        username: 'owner',
+        kind: 'user',
+        tenant: 'default',
+        role: 'member',
+        department: '研发部',
+        display_name: 'owner',
+      }
+      await waitForList(wrapper)
+
+      await wrapper.find('[data-testid="documents-detail-doc-1"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-grants"]').exists()).toBe(true)
+      })
+      // 授权清单说清「谁被授权」与「发布到租户」的语义
+      const grants = wrapper.find('[data-testid="documents-grants"]').text()
+      expect(grants).toContain('用户')
+      expect(grants).toContain('usr_colleague')
+
+      // 撤销:DELETE 到该授权的具体路径
+      await wrapper.find('[data-testid="documents-grant-remove-grant-1"]').trigger('click')
+      await vi.waitFor(() => {
+        const calls = vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([url, init]) => String(url).includes('/grants/grant-1') && init?.method === 'DELETE',
+          )
+        expect(calls).toHaveLength(1)
+      })
+
+      // 添加用户授权:提交给后端的是授权主体类型与标识
+      await wrapper.find('[data-testid="documents-grant-subject-id"]').setValue('usr_new')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-grant-add"]').attributes('disabled')).toBeUndefined()
+      })
+      await wrapper.find('[data-testid="documents-grant-add"]').trigger('click')
+      await vi.waitFor(() => {
+        const calls = vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([url, init]) =>
+              String(url).endsWith('/api/v1/documents/doc-1/grants') && init?.method === 'POST',
+          )
+        expect(calls).toHaveLength(1)
+      })
+      const addCall = vi
+        .mocked(fetch)
+        .mock.calls.find(
+          ([url, init]) =>
+            String(url).endsWith('/api/v1/documents/doc-1/grants') && init?.method === 'POST',
+        )
+      expect(JSON.parse(String(addCall?.[1]?.body))).toEqual({
+        subject_type: 'user',
+        subject_id: 'usr_new',
+      })
+    })
+
+    it('无权限的成员看不到授权清单元件,也不请求授权端点', async () => {
+      stubDocuments({
+        document: documentView({ owner_id: 'usr_owner' }),
+        grants: { document_id: 'doc-1', total: 1, items: [grantView()] },
+      })
+      const wrapper = mountView(DocumentsView)
+      useAuthStore().principal = {
+        id: 'usr_member',
+        username: 'member',
+        kind: 'user',
+        tenant: 'default',
+        role: 'member',
+        department: '研发部',
+        display_name: 'member',
+      }
+      await waitForList(wrapper)
+
+      await wrapper.find('[data-testid="documents-detail-doc-1"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-overview"]').exists()).toBe(true)
+      })
+
+      // 前端隐藏入口只是体验:服务端仍会独立判定权限
+      expect(wrapper.find('[data-testid="documents-grants"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="documents-grant-add"]').exists()).toBe(false)
+      const grantCalls = vi
+        .mocked(fetch)
+        .mock.calls.filter(([url]) => String(url).includes('/grants'))
+      expect(grantCalls).toHaveLength(0)
+    })
+
+    it('管理员可对他人文档发布到租户', async () => {
+      stubDocuments({
+        document: documentView({ owner_id: 'usr_owner' }),
+        grants: { document_id: 'doc-1', total: 0, items: [] },
+      })
+      const wrapper = mountView(DocumentsView)
+      useAuthStore().principal = {
+        id: 'usr_admin',
+        username: 'admin',
+        kind: 'user',
+        tenant: 'default',
+        role: 'admin',
+        department: '平台部',
+        display_name: 'admin',
+      }
+      await waitForList(wrapper)
+
+      await wrapper.find('[data-testid="documents-detail-doc-1"]').trigger('click')
+      await vi.waitFor(() => {
+        expect(wrapper.find('[data-testid="documents-grants-empty"]').exists()).toBe(true)
+      })
+
+      await wrapper.find('[data-testid="documents-grant-publish"]').trigger('click')
+      await vi.waitFor(() => {
+        const calls = vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([url, init]) =>
+              String(url).endsWith('/api/v1/documents/doc-1/grants') && init?.method === 'POST',
+          )
+        expect(calls).toHaveLength(1)
+      })
+      const publishCall = vi
+        .mocked(fetch)
+        .mock.calls.find(
+          ([url, init]) =>
+            String(url).endsWith('/api/v1/documents/doc-1/grants') && init?.method === 'POST',
+        )
+      expect(JSON.parse(String(publishCall?.[1]?.body))).toEqual({
+        subject_type: 'tenant',
       })
     })
   })

@@ -16,15 +16,17 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.audit import AuditEvent
 from app.domain.identity import Principal, PrincipalKind, Role
 from app.integrations.llm.deterministic import DeterministicEmbedder
 from app.main import create_app
-from tests.support import ADMIN, authorized_client
+from tests.support import ADMIN, MEMBER, authorized_client
 from tests.test_embeddings_api import ALPHA_TEXT, _index
 
 DOCUMENTS_URL = "/api/v1/documents"
 SEARCH_URL = "/api/v1/search"
 CHAT_URL = "/api/v1/chat"
+AUDIT_URL = "/api/v1/admin/audit-events"
 QUESTION = "休假 工资"
 
 COLLEAGUE = Principal(
@@ -46,6 +48,19 @@ MARKETING = Principal(
     username="marketing",
     display_name="市场同事",
 )
+
+
+class FailingAuditRepository:
+    """审计写入恒失败的替身:验证授权变更被阻断,不留半截状态。"""
+
+    def add(self, event: AuditEvent) -> None:
+        raise RuntimeError("audit-store-down")
+
+    def list(self, **kwargs) -> list[AuditEvent]:
+        return []
+
+    def count(self, **kwargs) -> int:
+        return 0
 
 
 @pytest.fixture
@@ -209,3 +224,86 @@ def test_owner_can_publish_and_colleague_keeps_existing_grant_on_admin_reupload(
     # 管理员代传同名新版本:逻辑文档不变,授权仍生效
     reuploaded = _index(admin, "hr.txt", ALPHA_TEXT)
     assert reuploaded["document_id"] in _hits(colleague)
+
+
+def test_grant_and_revoke_create_audit_events(grant_clients) -> None:
+    """授权与撤销都留下审计事件,细节足以回答"谁把文档给了谁"。"""
+    owner, _, _, admin = grant_clients
+    document = _index(owner, "hr.txt", ALPHA_TEXT)
+
+    granted = owner.post(
+        f"{DOCUMENTS_URL}/{document['document_id']}/grants",
+        json={"subject_type": "user", "subject_id": COLLEAGUE.id},
+        headers={"X-Request-ID": "trace-grant-0001"},
+    )
+    assert granted.status_code == 201, granted.text
+    grant_id = granted.json()["data"]["grant_id"]
+
+    revoked = owner.delete(
+        f"{DOCUMENTS_URL}/{document['document_id']}/grants/{grant_id}",
+        headers={"X-Request-ID": "trace-revoke-0001"},
+    )
+    assert revoked.status_code == 200, revoked.text
+
+    grant_events = admin.get(
+        AUDIT_URL, params={"action": "document.grant"}
+    ).json()["data"]["items"]
+    grant_event = next(
+        event for event in grant_events if event["trace_id"] == "trace-grant-0001"
+    )
+    assert grant_event["tenant"] == "default"
+    assert grant_event["principal_id"] == MEMBER.principal.id
+    assert grant_event["resource_id"] == document["document_id"]
+    assert grant_event["result"] == "success"
+    assert grant_event["details"] == {
+        "file_name": "hr.txt",
+        "subject_type": "user",
+        "subject_id": COLLEAGUE.id,
+    }
+
+    revoke_events = admin.get(
+        AUDIT_URL, params={"action": "document.revoke"}
+    ).json()["data"]["items"]
+    revoke_event = next(
+        event for event in revoke_events if event["trace_id"] == "trace-revoke-0001"
+    )
+    assert revoke_event["resource_id"] == document["document_id"]
+    assert revoke_event["result"] == "success"
+    assert revoke_event["details"]["grant_id"] == grant_id
+    assert revoke_event["details"]["subject_id"] == COLLEAGUE.id
+
+
+def test_audit_failure_blocks_grant(settings, upload_dir) -> None:
+    """审计写失败即请求失败,授权记录不落库。"""
+    app = create_app(
+        settings,
+        embedder=DeterministicEmbedder(),
+        audit_repository=FailingAuditRepository(),
+    )
+    with authorized_client(app) as owner:
+        document = _index(owner, "hr.txt", ALPHA_TEXT)
+
+        response = owner.post(
+            f"{DOCUMENTS_URL}/{document['document_id']}/grants",
+            json={"subject_type": "user", "subject_id": "usr_anyone"},
+        )
+
+        assert response.status_code == 500
+        assert response.json()["code"] == "AUDIT_WRITE_FAILED"
+        assert _grants(owner, document["document_id"]) == []
+
+
+def test_department_grant_uses_principal_department_not_document_field(
+    grant_clients,
+) -> None:
+    """部门授权比对主体的部门声明;文档的 ``department`` 只是元数据。"""
+    _, colleague, marketing, admin = grant_clients
+    document = _index(admin, "hr.txt", ALPHA_TEXT, department="市场部")
+    profile = admin.get(f"{DOCUMENTS_URL}/{document['document_id']}").json()["data"]
+    assert profile["department"] == "市场部"
+
+    _grant(admin, document["document_id"], "department", "研发部")
+
+    # 市场部同事虽然与文档的 department 一致,但没有得到部门授权
+    assert document["document_id"] in _hits(colleague)
+    assert document["document_id"] not in _hits(marketing)

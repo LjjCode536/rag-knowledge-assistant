@@ -4,10 +4,13 @@
  * 页面组件只调本层(或其它 `api/` 层模块)的函数,**不得直接发请求**。
  */
 import type {
+  DocumentGrant,
   DocumentList,
   DocumentListParams,
   DocumentView,
   ElementsView,
+  GrantCreateRequest,
+  GrantList,
 } from '@/types/documents'
 
 import { request } from './client'
@@ -37,6 +40,30 @@ export async function deleteDocument(documentId: string) {
   const result = await request<DocumentView>(`${DOCUMENTS_PATH}/${documentId}`, {
     method: 'DELETE',
   })
+  return result.data
+}
+
+/** 列出文档授权清单(仅所有者 / 管理员可读;其他主体 403)。 */
+export async function listDocumentGrants(documentId: string) {
+  const result = await request<GrantList>(`${DOCUMENTS_PATH}/${documentId}/grants`)
+  return result.data
+}
+
+/** 添加文档授权:用户 / 部门需给 `subject_id`;租户级授权即「发布到租户」。 */
+export async function addDocumentGrant(documentId: string, payload: GrantCreateRequest) {
+  const result = await request<DocumentGrant>(`${DOCUMENTS_PATH}/${documentId}/grants`, {
+    method: 'POST',
+    body: payload,
+  })
+  return result.data
+}
+
+/** 撤销一条文档授权:后端同刻失效答档缓存。 */
+export async function removeDocumentGrant(documentId: string, grantId: string) {
+  const result = await request<DocumentGrant>(
+    `${DOCUMENTS_PATH}/${documentId}/grants/${grantId}`,
+    { method: 'DELETE' },
+  )
   return result.data
 }
 

@@ -17,7 +17,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 
-import { getDocument, getDocumentElements, listChunks, retryEmbedding, uploadDocument } from '@/api'
+import {
+  addDocumentGrant,
+  getDocument,
+  getDocumentElements,
+  listChunks,
+  listDocumentGrants,
+  removeDocumentGrant,
+  retryEmbedding,
+  uploadDocument,
+} from '@/api'
 import ErrorDetails from '@/components/ErrorDetails.vue'
 import {
   SUPPORTED_EXTENSIONS,
@@ -31,7 +40,7 @@ import {
   statusTagType,
 } from '@/components/documentLogic'
 import { useAuthStore } from '@/stores/auth'
-import type { DocumentStatus } from '@/types/documents'
+import type { DocumentGrant, DocumentStatus, GrantSubjectType } from '@/types/documents'
 
 const props = defineProps<{
   /** 打开的文档 id;`null` 表示抽屉关闭。 */
@@ -188,6 +197,101 @@ const embedMutation = useMutation({
   onSuccess: () => {
     void queryClient.invalidateQueries({ queryKey: ['document'] })
     void queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+})
+
+/**
+ * 是否可管理文档授权:租户管理员,或这份文档的所有者。
+ *
+ * 前端隐藏入口只是体验,服务端仍会独立判定(ADR-0020);非所有者成员
+ * 连授权清单都读不到(端点 403),因此这里不做只读展示。
+ */
+const canManageGrants = computed<boolean>(() => {
+  const me = authStore.principal
+  const record = detailQuery.data.value
+  if (!me || !record) {
+    return false
+  }
+  return me.role === 'admin' || record.owner_id === me.id
+})
+
+/** 授权清单:只在有管理权限时查询,避免无权限者白打一个 403。 */
+const grantsQuery = useQuery({
+  queryKey: computed(() => ['document', props.documentId, 'grants'] as const),
+  queryFn: () => listDocumentGrants(props.documentId!),
+  enabled: computed(() => Boolean(props.documentId) && canManageGrants.value),
+  retry: false,
+})
+
+/** 授权主体三类的界面文案。 */
+const GRANT_SUBJECT_LABELS: Record<GrantSubjectType, string> = {
+  user: '用户',
+  department: '部门',
+  tenant: '整个租户',
+}
+
+/** 按主体添加授权的两类;「整个租户」是单独的「发布到租户」动作。 */
+const grantSubjectOptions: Array<{ value: Exclude<GrantSubjectType, 'tenant'>; label: string }> = [
+  { value: 'user', label: '用户' },
+  { value: 'department', label: '部门' },
+]
+
+/** 一条授权的可读主体描述;租户级授权就是「发布到租户」。 */
+function grantSubjectLabel(grant: DocumentGrant): string {
+  if (grant.subject_type === 'tenant') {
+    return '发布到租户'
+  }
+  return `${GRANT_SUBJECT_LABELS[grant.subject_type]}:${grant.subject_id ?? '—'}`
+}
+
+/** 添加授权表单:用户 / 部门必须给出主体标识。 */
+const grantSubjectType = ref<Exclude<GrantSubjectType, 'tenant'>>('user')
+const grantSubjectId = ref('')
+
+/** 关闭或切换文档时清空上一条表单,避免把授权误加到下一份文档。 */
+watch(
+  () => props.documentId,
+  () => {
+    grantSubjectType.value = 'user'
+    grantSubjectId.value = ''
+  },
+)
+
+const grantSubmitDisabled = computed(() => !grantSubjectId.value.trim())
+
+const grantMutation = useMutation({
+  mutationFn: (payload: { subject_type: GrantSubjectType; subject_id?: string }) =>
+    addDocumentGrant(props.documentId!, payload),
+  onSuccess: () => {
+    grantSubjectId.value = ''
+    void queryClient.invalidateQueries({
+      queryKey: ['document', props.documentId, 'grants'],
+    })
+  },
+})
+
+/** 添加用户 / 部门授权;同主体重复添加由后端按幂等处理。 */
+function onAddGrant(): void {
+  if (grantSubmitDisabled.value) {
+    return
+  }
+  grantMutation.mutate({
+    subject_type: grantSubjectType.value,
+    subject_id: grantSubjectId.value.trim(),
+  })
+}
+
+/** 发布到租户:后端把它存成一条租户级授权,不是全库放行。 */
+function onPublishToTenant(): void {
+  grantMutation.mutate({ subject_type: 'tenant' })
+}
+
+const revokeMutation = useMutation({
+  mutationFn: (grantId: string) => removeDocumentGrant(props.documentId!, grantId),
+  onSuccess: () => {
+    void queryClient.invalidateQueries({
+      queryKey: ['document', props.documentId, 'grants'],
+    })
   },
 })
 
@@ -502,6 +606,134 @@ async function copyDocumentId(id: string): Promise<void> {
       >
         暂无解析元素
       </p>
+
+      <!--
+        授权清单:只有文档所有者与租户管理员看得到。
+        非所有者成员连清单端点都读不到(403),所以这里不做只读展示。
+      -->
+      <template v-if="canManageGrants">
+        <el-divider content-position="left">
+          授权清单
+        </el-divider>
+        <p class="page-hint">
+          文档默认只有所有者与租户管理员可读;添加授权后,对应授权主体即可检索与引用它。撤销立即生效。
+        </p>
+        <ErrorDetails
+          v-if="grantsQuery.isError.value"
+          :error="grantsQuery.error.value"
+        />
+        <el-table
+          :data="grantsQuery.data.value?.items ?? []"
+          size="small"
+          style="width: 100%"
+          data-testid="documents-grants"
+        >
+          <el-table-column
+            label="授权主体"
+            min-width="160"
+          >
+            <template #default="{ row }: { row: DocumentGrant }">
+              <el-tag
+                size="small"
+                type="info"
+              >
+                {{ GRANT_SUBJECT_LABELS[row.subject_type] }}
+              </el-tag>
+              <span style="margin-left: 6px">{{ grantSubjectLabel(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="granted_by"
+            label="授予者"
+            width="110"
+          />
+          <el-table-column
+            label="授予时间"
+            width="150"
+          >
+            <template #default="{ row }: { row: DocumentGrant }">
+              {{ formatTime(row.created_at) }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="操作"
+            width="70"
+          >
+            <template #default="{ row }: { row: DocumentGrant }">
+              <el-button
+                size="small"
+                text
+                type="danger"
+                :data-testid="`documents-grant-remove-${row.grant_id}`"
+                :loading="revokeMutation.isPending.value"
+                @click="revokeMutation.mutate(row.grant_id)"
+              >
+                撤销
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <p
+          v-if="grantsQuery.data.value && grantsQuery.data.value.items.length === 0"
+          class="page-hint"
+          data-testid="documents-grants-empty"
+        >
+          暂无授权:文档目前只有所有者与租户管理员可读。
+        </p>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px">
+          <el-select
+            v-model="grantSubjectType"
+            size="small"
+            style="width: 110px"
+            data-testid="documents-grant-subject-type"
+          >
+            <el-option
+              v-for="option in grantSubjectOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-input
+            v-model="grantSubjectId"
+            size="small"
+            style="max-width: 190px"
+            :placeholder="grantSubjectType === 'user' ? '用户标识' : '部门名称'"
+            data-testid="documents-grant-subject-id"
+          />
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="grantSubmitDisabled"
+            :loading="grantMutation.isPending.value"
+            data-testid="documents-grant-add"
+            @click="onAddGrant"
+          >
+            添加授权
+          </el-button>
+          <el-button
+            size="small"
+            plain
+            :loading="grantMutation.isPending.value"
+            data-testid="documents-grant-publish"
+            @click="onPublishToTenant"
+          >
+            发布到租户
+          </el-button>
+        </div>
+        <p class="page-hint">
+          「发布到租户」是一条租户级授权:本租户成员都能检索到它,不是全库放行。
+        </p>
+        <ErrorDetails
+          v-if="grantMutation.isError.value"
+          :error="grantMutation.error.value"
+        />
+        <ErrorDetails
+          v-if="revokeMutation.isError.value"
+          :error="revokeMutation.error.value"
+        />
+      </template>
 
       <!-- 操作 -->
       <el-divider content-position="left">

@@ -9,10 +9,13 @@ export type { EnvelopeResult, RequestOptions } from './client'
 
 export { getCurrentPrincipal, login } from './auth'
 export {
+  addDocumentGrant,
   deleteDocument,
   getDocument,
   getDocumentElements,
+  listDocumentGrants,
   listDocuments,
+  removeDocumentGrant,
   uploadDocument,
 } from './documents'
 export { ask, listChunks, retryEmbedding, search } from './qa'

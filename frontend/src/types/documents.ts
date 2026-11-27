@@ -35,6 +35,8 @@ export interface DocumentView {
   file_type: DocumentFormat
   size_bytes: number
   tenant: string
+  /** 文档所有者主体 id;历史文档没有归属时为 `null`。 */
+  owner_id: string | null
   department: string | null
   doc_type: string | null
   version: string
@@ -87,6 +89,38 @@ export interface DocumentList {
   limit: number
   offset: number
   items: DocumentView[]
+}
+
+/**
+ * 文档授权主体:一名用户、一个部门或整个租户(ADR-0021)。
+ *
+ * 租户级授权就是「发布到租户」:它仍挂在某份逻辑文档上,不是全库放行。
+ */
+export type GrantSubjectType = 'user' | 'department' | 'tenant'
+
+/** 一条文档授权:以逻辑文档(租户 + 文档名)为键,版本退位后继续有效。 */
+export interface DocumentGrant {
+  grant_id: string
+  tenant: string
+  file_name: string
+  subject_type: GrantSubjectType
+  /** 租户级授权没有具体主体 id;用户 / 部门授权必有。 */
+  subject_id: string | null
+  granted_by: string
+  created_at: string
+}
+
+/** 文档授权清单。 */
+export interface GrantList {
+  document_id: string
+  total: number
+  items: DocumentGrant[]
+}
+
+/** 添加授权的请求体:租户级授权不需要 `subject_id`。 */
+export interface GrantCreateRequest {
+  subject_type: GrantSubjectType
+  subject_id?: string | null
 }
 
 /** 文档清单的查询参数:与端点契约一一对应;租户由登录身份决定。 */

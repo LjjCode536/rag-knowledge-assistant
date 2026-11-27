@@ -139,6 +139,7 @@ describe('知识库文档页纯逻辑', () => {
       file_type: 'md' as const,
       size_bytes: 128,
       tenant: 'default',
+      owner_id: 'usr_owner',
       department: null,
       doc_type: null,
       version: 'v1',
