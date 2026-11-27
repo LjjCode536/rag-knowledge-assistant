@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.errors import BadRequestError, ScopeViolationError
 from app.core.tracing import trace_id_of
@@ -20,7 +21,12 @@ from app.services.access import AccessService
 from app.services.audit import AuditService
 from app.services.auth import AuthService
 
-_BEARER_PREFIX = "bearer "
+# OpenAPI 的鉴权声明与真实校验同源:auto_error=False 让缺失 / 非 Bearer 凭证
+# 仍由本模块统一转成 401 UNAUTHENTICATED,而不是框架默认的 403。
+_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    description="登录端点签发的短期 JWT;租户、角色与部门均来自 token claims。",
+)
 
 
 def reject_tenant_parameter(request: Request) -> None:
@@ -71,17 +77,14 @@ async def reject_tenant_form_field(request: Request) -> None:
 
 def require_principal(
     request: Request,
-    authorization: Annotated[str | None, Header()] = None,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
+    ] = None,
 ) -> Principal:
     """解析 ``Authorization: Bearer <JWT>``;缺失 / 无效 / 过期一律 401。"""
-    if authorization is None or not authorization.strip():
+    if credentials is None or not credentials.credentials.strip():
         raise UnauthenticatedError("缺少访问凭证")
-    value = authorization.strip()
-    if not value.lower().startswith(_BEARER_PREFIX):
-        raise UnauthenticatedError("访问凭证格式不正确")
-    token = value[len(_BEARER_PREFIX) :].strip()
-    if not token:
-        raise UnauthenticatedError("缺少访问凭证")
+    token = credentials.credentials.strip()
     auth_service: AuthService = request.app.state.auth_service
     principal = auth_service.authenticate(token)
     # 路由与服务层从 request.state 取主体,不重复解析 token

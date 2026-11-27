@@ -147,6 +147,28 @@ def test_tampered_token_returns_401(anonymous_client):
     assert response.json()["code"] == "UNAUTHENTICATED"
 
 
+def test_non_bearer_scheme_returns_401(anonymous_client):
+    response = anonymous_client.get(
+        ME_URL,
+        headers={"Authorization": "Basic dXNlcjpwYXNz"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_openapi_declares_bearer_auth_only_on_protected_endpoints(client):
+    """契约与真实校验同步:受保护端点声明 HTTPBearer,登录页保持公开。"""
+    spec = client.app.openapi()
+
+    schemes = spec["components"]["securitySchemes"]
+    assert schemes["HTTPBearer"]["type"] == "http"
+    assert schemes["HTTPBearer"]["scheme"] == "bearer"
+    assert spec["paths"]["/api/v1/chat"]["post"]["security"] == [{"HTTPBearer": []}]
+    assert spec["paths"]["/api/v1/documents"]["get"]["security"] == [{"HTTPBearer": []}]
+    assert not spec["paths"]["/api/v1/auth/login"]["post"].get("security")
+
+
 def test_protected_endpoint_requires_authentication(anonymous_client):
     response = anonymous_client.get("/api/v1/documents")
 
