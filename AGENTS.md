@@ -12,7 +12,11 @@ uv run pytest                                  # 全量测试(不读 .env;不触
 uv run ruff check .                            # lint
 uv run python -m uvicorn app.asgi:app --reload # 本地启动
 uv run python scripts/evaluate.py              # 黄金数据集检索指标(默认无密钥)
+uv run python scripts/seed_principals.py --yes # 显式创建种子账号(仅 PG;口令从 SEED_*_PASSWORD 读取)
 ```
+
+登录换短期 JWT(POST /api/v1/auth/login),之后用 `Authorization: Bearer <token>`。
+服务启动不建号;内存模式没有账号,本地登录用 `VECTOR_STORE=pgvector` + 种子脚本。
 
 真实上游连通性检查需密钥且会计费:`uv run python scripts/check_upstream.py`。真实上游评估用
 `uv run python scripts/evaluate.py --embedder upstream`(或 `--base-url`),报告中会注明 embedder。
@@ -56,13 +60,11 @@ source、出处、分段、评价、点赞。
 
 ### 3. 前端呈现真实的安全边界
 
-**身份切片落地前**:后端没有用户、没有会话、没有鉴权,任何调用方都能传任意 `tenant`。
-界面上的租户切换只是筛选维度,前端不做假登录。
-
-**目标态(ADR-0020 落地后)**:登录换取 JWT,租户、角色与部门来自 token,租户切换器
-移除;文档授权清单是真实的权限变更,只有文档所有者与 `admin` 可操作。前端不做本地
-权限判断来代替服务端强制——隐藏按钮只是体验,不是边界。演示级 token 存储(内存 +
-`sessionStorage`)的局限见 ADR-0020,不假装它是生产级会话。
+登录换取短期 JWT,租户、角色与部门来自 token,租户切换器已移除;文档授权清单是真实
+的权限变更,只有文档所有者与 `admin` 可操作。前端不做本地权限判断来代替服务端强制
+—— 隐藏按钮只是体验,不是边界。演示级 token 存储(内存 + `sessionStorage`)的局限见
+ADR-0020,不假装它是生产级会话。普通端点携带 `tenant` 参数会被服务端拒绝(403),
+跨租户对象表现为 404。
 
 ### 4. 前端类型以契约为准且手写
 

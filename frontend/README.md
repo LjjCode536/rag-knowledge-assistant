@@ -5,12 +5,13 @@
 
 ## 这是什么
 
-一个**能跑起来的前端工程**:装上依赖、启动开发服务器、连上后端、六个页面
+一个**能跑起来的前端工程**:装上依赖、启动开发服务器、连上后端,登录后六个业务页
 可导航。这是后端能力的第一个可见外壳。
 
 **核心原则:前端是后端能力的真实视图。** 每个界面元素都能追溯到一个后端
-端点与一个既有领域概念;后端做不到的事(鉴权、流式、完整分页历史),界面不
-假装能做到。
+端点与一个既有领域概念;后端做不到的事(流式、完整分页历史),界面不
+假装能做到。登录、租户与文档级授权都来自服务端身份,前端不做本地权限判断
+来代替服务端强制。
 
 ## 命令
 
@@ -42,15 +43,19 @@ VITE_BACKEND_ORIGIN=http://127.0.0.1:9000 pnpm dev
 **生产期用同一域名反代同时服务静态产物与接口**(nginx / Caddy),后端仍然
 不需要 CORS。前端**不挂进 FastAPI**:后端保持"只提供 JSON API"的单一职责。
 
-本地开发要同时起两个进程:
+本地开发要同时起两个进程,并先准备好可登录的种子账号(见根目录 README
+「快速开始」:账号只落 PostgreSQL,内存模式不建号):
 
 ```bash
-# 终端 1:后端
-uv run python -m uvicorn app.asgi:app --reload
+# 终端 1:后端(先拉起数据库与种子账号;登录需要 PG)
+VECTOR_STORE=pgvector uv run python -m uvicorn app.asgi:app --reload
 
 # 终端 2:前端
 cd frontend && pnpm dev
 ```
+
+浏览器打开 `http://localhost:5173` 会先到登录页,用种子账号(如 `member`)
+登录;token 存内存 + `sessionStorage`,过期或服务端返回 401 时清理并回登录页。
 
 ## 技术栈
 
@@ -74,15 +79,16 @@ cd frontend && pnpm dev
 ```
 frontend/
 ├── src/
-│   ├── api/          # HTTP 调用收口层(全站唯一发请求处)
+│   ├── api/          # HTTP 调用收口层(全站唯一发请求处,统一注入 token)
+│   ├── auth/         # 凭证存取(sessionStorage)与会话失效通知
 │   ├── components/   # 跨页面复用组件
-│   ├── composables/  # 组合式函数(租户选项的取数)
-│   ├── router/       # 路由与侧边栏导航定义
-│   ├── stores/       # Pinia(当前租户等跨页面状态)
+│   ├── composables/  # 组合式函数(筛选维度等)
+│   ├── router/       # 路由、守卫与侧边栏导航定义
+│   ├── stores/       # Pinia(当前主体 / 登录态)
 │   ├── styles/       # 主题与基础样式
 │   ├── types/        # 手写的响应类型(以契约为准)
-│   ├── views/        # 六个页面
-│   ├── App.vue       # 应用外壳(侧边栏 + 标题栏 + 内容区)
+│   ├── views/        # 登录页 + 六个业务页
+│   ├── App.vue       # 应用外壳(侧边栏 + 标题栏 + 主体信息 + 内容区)
 │   └── main.ts       # 应用入口
 ├── index.html
 ├── vite.config.ts
@@ -93,12 +99,16 @@ frontend/
 
 | 路由 | 页面 | 消费的后端端点 |
 | --- | --- | --- |
+| `/login` | 登录 | `POST /api/v1/auth/login` |
 | `/` | 问答(默认首页) | `POST /api/v1/chat`、`GET /api/v1/feedback`、`POST /api/v1/feedback` |
-| `/documents` | 知识库文档 | `GET /api/v1/documents`、`POST /api/v1/documents`、`DELETE /api/v1/documents/{id}` |
+| `/documents` | 知识库文档 | `GET /api/v1/documents`、`POST /api/v1/documents`、`DELETE /api/v1/documents/{id}`、文档详情里的授权清单端点 |
 | `/search` | 检索 | `POST /api/v1/search` |
 | `/stats` | 运营统计 | `GET /api/v1/stats`、`GET /api/v1/stats/cost` |
 | `/query-logs` | 查询日志 | `GET /api/v1/query-logs` |
 | `/feedback` | 反馈 | `GET /api/v1/feedback`、`GET /api/v1/feedback/negative/candidates` |
+
+登录页之外的路由都经过守卫:没有 token 就回登录页;刷新后先用
+`GET /api/v1/auth/me` 恢复主体,401 时清理并回登录页。
 
 ## 两条硬纪律
 
@@ -129,7 +139,7 @@ frontend/
 | 状态 | 归属 |
 | --- | --- |
 | 服务端状态(查询、统计、文档档案、轮询) | TanStack Query |
-| 跨页面客户端状态(当前租户筛选) | Pinia |
+| 跨页面客户端状态(登录态、当前主体) | Pinia |
 | 组件局部状态 | `ref` / `reactive` |
 
 入库进度用 TanStack Query 的轮询能力表达,**不手写** `setInterval` 与
@@ -153,6 +163,12 @@ frontend/
 - **反馈按 `query_id` 查询时的 `total`** 是本次返回条数(0 或 1),不是全库计数。
 - **查询日志与反馈只有 `limit` 没有 `offset`**:界面取最近 100 条做前端分页,
   并明确标注该上限。
+- **租户不是请求参数**:普通端点携带 `tenant` 查询参数返回
+  `403 SCOPE_VIOLATION`;租户、角色与部门只来自登录身份,界面不提供切换。
+- **跨租户 / 无权限对象是 404**:别用 403 区分"存在但无权",界面统一按
+  "不存在或无权查看"呈现。
+- **授权清单只对所有者 / 管理员可写**:普通成员能看文档(有授权时)但看不到
+  管理按钮;按钮隐藏只是体验,服务端仍会拒绝越权写。
 
 ## 测试
 
@@ -160,24 +176,27 @@ frontend/
 行为不变,测试就不应改动。
 
 - **接缝 A:API 客户端层**(`src/api/client.spec.ts`)—— 断言信封拆解取到
-  数据、错误码映射到带 `trace_id` 的错误、CSV 端点返回原始文本、请求参数
-  与后端契约一致。
+  数据、错误码映射到带 `trace_id` 的错误、CSV 端点返回原始文本、token 注入
+  与 401 清理、请求参数与后端契约一致。
 - **接缝 B:组件行为**(`src/views/views.spec.ts`、`src/views/documentsView.spec.ts`、
-  `src/views/opsViews.spec.ts`)—— 用 `@vue/test-utils` 挂载组件,断言用户可见
-  的行为:有据回答渲染引用、拒答时**不渲染**引用列表、反馈状态回显、状态标签
-  按状态呈现、上传前格式校验、入库进度、检索过滤与统计区间实际传参、无样本
-  显示「无样本」、查询日志 / 差评候选字段、CSV 不走信封拆解、错误详情展示
-  可复制的 `trace_id`。
+  `src/views/opsViews.spec.ts`、`src/views/loginView.spec.ts`)—— 用
+  `@vue/test-utils` 挂载组件,断言用户可见的行为:登录表单、未登录跳转、
+  授权清单仅对所有者 / 管理员可见可操作、有据回答渲染引用、拒答时**不渲染**
+  引用列表、反馈状态回显、状态标签按状态呈现、上传前格式校验、入库进度、
+  检索过滤与统计区间实际传参、无样本显示「无样本」、查询日志 / 差评候选字段、
+  CSV 不走信封拆解、错误详情展示可复制的 `trace_id`。
 
 替身:组件测试不真打后端,用 `fetch` 拦截层注入固定的信封响应 —— 与后端
 "以假 LLM / 假向量库替身替换真实上游"是同一思路。
 
 端到端(Playwright)不在本次范围,另开迭代。
 
-## 边界(ADR-0015)
+## 边界(ADR-0015 / ADR-0020)
 
-- **不做登录与鉴权**:后端当前没有用户、没有会话、没有鉴权,任何调用方都能
-  传任意 `tenant`。前端如实呈现这一现状 —— 租户只是一个筛选维度,
-  **界面上的租户切换不是权限控制**。
+- **登录是演示级存储**:token 存内存 + `sessionStorage`,无 refresh token,
+  过期即重新登录。生产应换 OIDC 授权码 + PKCE 与 HttpOnly 会话;前端不把
+  这一实现当作生产级会话。
+- **前端不做权限判断代替服务端**:租户、角色与部门来自 token,界面隐藏按钮
+  只为体验;真正的边界在服务端(401 / 403 / 404 与审计)。
 - **不引入流式**:后端 `/chat` 是单次缓冲 JSON。第一版用"请求完成后前端打字机
   动画"的**假流式**;假流式不改善真实延迟,只改善观感。
